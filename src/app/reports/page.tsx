@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useStore, purchaseTotal, saleTotal } from "@/lib/store";
 import { Page, PageTitle, StatCard, Stagger, StaggerItem } from "@/components/ui";
 import { fmtMoney, fmtQty, monthKey, monthLabel } from "@/lib/format";
+import CreditDebit from "@/components/CreditDebit";
 
 type Row = {
   key: string; label: string;
@@ -75,7 +76,7 @@ export default function ReportsPage() {
     <Page>
       <PageTitle
         title="Reports"
-        sub="Monthly & yearly summaries for audit"
+        sub="A simple summary of every month and the whole year"
         action={
           <div className="flex gap-2">
             <button onClick={() => setTab("monthly")} className={tab === "monthly" ? "btn-primary" : "btn-ghost"}>Monthly</button>
@@ -84,19 +85,25 @@ export default function ReportsPage() {
         }
       />
       <Stagger className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StaggerItem><StatCard label={`Year ${year} revenue`} value={yearTotals.revenue} /></StaggerItem>
-        <StaggerItem><StatCard label="Yearly purchases" value={yearTotals.purchaseSpend} /></StaggerItem>
-        <StaggerItem><StatCard label="Yearly net profit" value={yearTotals.profit} /></StaggerItem>
-        <StaggerItem><StatCard label="Stock value (closing)" value={inventory.reduce((a, r) => a + r.stockValue, 0)} /></StaggerItem>
+        <StaggerItem><StatCard label={`Money in (${year})`} value={yearTotals.revenue} /></StaggerItem>
+        <StaggerItem><StatCard label="Spent on steel" value={-yearTotals.purchaseSpend} /></StaggerItem>
+        <StaggerItem><StatCard label="Profit left" value={yearTotals.profit} /></StaggerItem>
+        <StaggerItem><StatCard label="Stock in shop (worth)" value={inventory.reduce((a, r) => a + r.stockValue, 0)} /></StaggerItem>
       </Stagger>
+      <div className="mb-10">
+        <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mb-4">
+          Credit &amp; Debit — who owes who
+        </h2>
+        <CreditDebit />
+      </div>
       {tab === "monthly" ? (
         <div className="border border-neutral-200 overflow-x-auto">
           <table>
             <thead>
               <tr>
-                <th>Month</th><th className="num">Bought (t)</th><th className="num">Purchases</th>
-                <th className="num">Sold (t)</th><th className="num">Sales</th>
-                <th className="num">Expenses</th><th className="num">Net profit</th>
+                <th>Month</th><th className="num">Steel in (t)</th><th className="num">Spent</th>
+                <th className="num">Steel out (t)</th><th className="num">Money in</th>
+                <th className="num">Expenses</th><th className="num">Profit</th>
               </tr>
             </thead>
             <tbody>
@@ -128,14 +135,14 @@ export default function ReportsPage() {
           <table>
             <thead><tr><th>Summary — Year {year}</th><th className="num">Amount</th></tr></thead>
             <tbody>
-              <tr><td>Total steel purchased</td><td className="num">{fmtQty(yearTotals.purchasedQty)}</td></tr>
-              <tr><td>Total purchase spend (landed)</td><td className="num">{fmtMoney(yearTotals.purchaseSpend)}</td></tr>
-              <tr><td>Total steel sold</td><td className="num">{fmtQty(yearTotals.soldQty)}</td></tr>
-              <tr><td>Total sales revenue</td><td className="num">{fmtMoney(yearTotals.revenue)}</td></tr>
-              <tr><td>Operating expenses</td><td className="num">{fmtMoney(yearTotals.expenses)}</td></tr>
-              <tr className="font-medium"><td>Net profit (landed-cost basis)</td><td className="num">{fmtMoney(yearTotals.profit)}</td></tr>
-              <tr><td>Customer dues (receivable)</td><td className="num">{fmtMoney(receivable)}</td></tr>
-              <tr><td>Mill dues (payable)</td><td className="num">{fmtMoney(payable)}</td></tr>
+              <tr><td>Steel bought in the year</td><td className="num">{fmtQty(yearTotals.purchasedQty)} t</td></tr>
+              <tr><td>Money spent on steel (incl. transport)</td><td className="num">{fmtMoney(yearTotals.purchaseSpend)}</td></tr>
+              <tr><td>Steel sold in the year</td><td className="num">{fmtQty(yearTotals.soldQty)} t</td></tr>
+              <tr><td>Money received from sales</td><td className="num">{fmtMoney(yearTotals.revenue)}</td></tr>
+              <tr><td>Shop expenses</td><td className="num">{fmtMoney(yearTotals.expenses)}</td></tr>
+              <tr className="font-medium"><td>Profit left</td><td className="num">{fmtMoney(yearTotals.profit)}</td></tr>
+              <tr><td>Customers owe you</td><td className="num">{fmtMoney(receivable)}</td></tr>
+              <tr><td>You owe suppliers</td><td className="num">{fmtMoney(payable)}</td></tr>
             </tbody>
           </table>
         </div>

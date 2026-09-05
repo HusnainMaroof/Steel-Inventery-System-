@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(npm:*)",
+      "powershell",
+      "Shell(dir:*)",
+      "Shell(findstr:*)",
+      "Shell(npx next build 2>&1)",
+      "Shell(set NODE_ENV= && rmdir /s /q .next 2>nul & npx next build 2>&1)",
+      "Shell(set:*)",
+      "Shell(npx tsc --noEmit 2 >& 1)",
+      "Shell(npx next lint 2 >& 1)",
+      "Shell(npx eslint src 2 >& 1)",
+      "Shell(npx next start -p 3210 2 >& 1)",
+      "Shell(netstat:*)",
+      "Shell(npx next start -p 3210)",
+      "Shell(for:*)",
+      "Shell(/:*)",
+      "Shell(do:*)",
+      "Shell(curl -s http://localhost:3210/purchases)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

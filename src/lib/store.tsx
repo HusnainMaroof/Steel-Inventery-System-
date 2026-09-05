@@ -63,6 +63,7 @@ interface Store {
   addSale: (s: Omit<Sale, "id" | "invoiceNo">) => void;
   addPayment: (p: Omit<Payment, "id">) => void;
   addCustomer: (c: Omit<Customer, "id">) => string;
+  addSupplier: (s: Omit<Supplier, "id">) => void;
   addExpense: (e: Omit<Expense, "id">) => void;
   addProduct: (name: string) => void;
   addProductItem: (productId: string, name: string) => void;
@@ -78,7 +79,7 @@ let seq = 1000;
 const nextId = () => `x${seq++}`;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [suppliers] = useState<Supplier[]>(seed.suppliers);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(seed.suppliers);
   const [customers, setCustomers] = useState<Customer[]>(seed.customers);
   const [purchases, setPurchases] = useState<Purchase[]>(seed.purchases);
   const [sales, setSales] = useState<Sale[]>(seed.sales);
@@ -224,6 +225,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCustomers((prev) => [...prev, { ...c, id }]);
       return id;
     },
+    addSupplier: (s) => setSuppliers((prev) => [...prev, { ...s, id: nextId() }]),
     addExpense: (e) => setExpenses((prev) => [{ ...e, id: nextId() }, ...prev]),
     addProduct: (name) =>
       setProducts((prev) =>

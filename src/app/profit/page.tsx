@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useStore, saleTotal } from "@/lib/store";
-import { Page, PageTitle, BarChart } from "@/components/ui";
+import { Page, PageTitle, BarChart, StatCard, Stagger, StaggerItem } from "@/components/ui";
 import { fmtMoney, monthKey, monthLabel } from "@/lib/format";
+import CreditDebit from "@/components/CreditDebit";
 
 function Row({
   label,
@@ -79,7 +80,7 @@ export default function ProfitLossPage() {
     <Page>
       <PageTitle
         title="Profit & Loss"
-        sub="Based on actual landed cost — not just the mill price"
+        sub="How much money you made and what you spent"
         action={
           <div className="flex gap-2">
             <button
@@ -109,14 +110,22 @@ export default function ProfitLossPage() {
         }
       />
 
+      {/* the four big numbers, same style as the dashboard */}
+      <Stagger className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+        <StaggerItem><StatCard label="Money in (sales)" value={scoped.revenue} /></StaggerItem>
+        <StaggerItem><StatCard label="Steel cost (what you sold)" value={-scoped.cogs} /></StaggerItem>
+        <StaggerItem><StatCard label="Shop expenses" value={-scoped.totalExpenses} /></StaggerItem>
+        <StaggerItem><StatCard label="Profit left" value={scoped.net} /></StaggerItem>
+      </Stagger>
+
       <div className="grid md:grid-cols-2 gap-10">
         <div>
-          <Row label="Sales revenue" value={scoped.revenue} />
-          <Row label="Cost of goods sold (landed)" value={scoped.cogs} minus />
-          <Row label="Gross profit" value={scoped.grossProfit} strong />
-          <Row label="Operating expenses" value={scoped.totalExpenses} minus />
+          <Row label="Money in — from sales" value={scoped.revenue} />
+          <Row label="Less — cost of the steel you sold" value={scoped.cogs} minus />
+          <Row label="Profit from steel" value={scoped.grossProfit} strong />
+          <Row label="Less — shop expenses" value={scoped.totalExpenses} minus />
           <div className="flex justify-between py-4 mt-2 bg-black text-white px-4 -mx-4">
-            <span className="text-xs uppercase tracking-widest">Net profit</span>
+            <span className="text-xs uppercase tracking-widest">Profit left</span>
             <motion.span
               key={scoped.net}
               initial={{ opacity: 0, y: 6 }}
@@ -126,22 +135,30 @@ export default function ProfitLossPage() {
               {fmtMoney(scoped.net)}
             </motion.span>
           </div>
-          <p className="text-xs text-neutral-500 mt-4">
-            Margin: {scoped.revenue > 0 ? ((scoped.grossProfit / scoped.revenue) * 100).toFixed(1) : "0"}% gross ·
-            Total purchase spend in period: {fmtMoney(scoped.purchaseSpend)}
-          </p>
+          {scoped.revenue > 0 && (
+            <p className="text-xs text-neutral-500 mt-4">
+              On every ₨100 of sales you keep about ₨{((scoped.net / scoped.revenue) * 100).toFixed(0)} of profit.
+            </p>
+          )}
         </div>
+
+        {/* credit & debit — who owes who */}
         <div>
           <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mb-4">
-            Net profit by month
+            Credit &amp; Debit — who owes who
+          </h2>
+          <CreditDebit />
+
+          <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mt-10 mb-4">
+            Profit by month
           </h2>
           <BarChart data={months.map((m) => ({ label: monthLabel(m.label).slice(0, 3), value: Math.max(0, m.net) }))} />
           <table className="mt-6">
             <thead>
               <tr>
                 <th>Month</th>
-                <th className="num">Revenue</th>
-                <th className="num">Net</th>
+                <th className="num">Money in</th>
+                <th className="num">Profit</th>
               </tr>
             </thead>
             <tbody>

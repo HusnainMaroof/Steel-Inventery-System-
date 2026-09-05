@@ -13,7 +13,7 @@ export default function InvoicesPage() {
 
   return (
     <Page>
-      <PageTitle title="Invoices" sub="Printable / PDF-ready sales invoices" />
+      <PageTitle title="Invoices" sub="All sales invoices — click Open to view, print or save as PDF" />
       <div className="border border-neutral-200 overflow-x-auto">
         <table>
           <thead>
@@ -21,7 +21,7 @@ export default function InvoicesPage() {
               <th>Invoice</th>
               <th>Date</th>
               <th>Customer</th>
-              <th className="num">Total Amount</th>
+              <th className="num">Total</th>
               <th />
             </tr>
           </thead>

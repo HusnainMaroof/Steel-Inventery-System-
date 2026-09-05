@@ -2,12 +2,26 @@
 
 import { useState } from "react";
 import { useStore, saleTotal } from "@/lib/store";
-import { Page, PageTitle, Modal } from "@/components/ui";
+import { Page, PageTitle, Modal, useToggle } from "@/components/ui";
 import { fmtMoney, fmtDate } from "@/lib/format";
 
 export default function CustomersPage() {
-  const { customers, sales, payments, customerBalance } = useStore();
+  const { customers, sales, payments, customerBalance, addCustomer } = useStore();
   const [selected, setSelected] = useState<string | null>(null);
+  const { open, onOpen, onClose } = useToggle();
+  const [form, setForm] = useState({ name: "", shop: "", phone: "" });
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    addCustomer({
+      name: form.name.trim(),
+      shop: form.shop.trim(),
+      phone: form.phone.trim(),
+    });
+    setForm({ name: "", shop: "", phone: "" });
+    onClose();
+  };
 
   const cust = customers.find((c) => c.id === selected);
   const custSales = cust ? sales.filter((s) => s.customerId === cust.id) : [];
@@ -29,7 +43,12 @@ export default function CustomersPage() {
     <Page>
       <PageTitle
         title="Customers"
-        sub="Who owes you — and who paid in advance"
+        sub="Balances and payment history for every customer"
+        action={
+          <button className="btn-primary" onClick={onOpen}>
+            + New Customer
+          </button>
+        }
       />
       <div className="border border-neutral-200 overflow-x-auto">
         <table>
@@ -38,8 +57,8 @@ export default function CustomersPage() {
               <th>Customer</th>
               <th>Shop / Area</th>
               <th>Phone</th>
-              <th className="num">Total Sales</th>
-              <th className="num">Payments Received</th>
+              <th className="num">Sales</th>
+              <th className="num">Received</th>
               <th className="num">Balance</th>
               <th />
             </tr>
@@ -76,23 +95,23 @@ export default function CustomersPage() {
         </table>
       </div>
 
-      <Modal open={!!cust} onClose={() => setSelected(null)} title={cust ? `Customer · ${cust.name}` : "Customer"}>
+      <Modal open={!!cust} onClose={() => setSelected(null)} title={cust ? `${cust.name} · Ledger` : "Customer"} size="2xl">
         {cust && (
           <>
             <p className="text-xs text-neutral-500 mb-5">{cust.shop} · {cust.phone}</p>
 
-            {/* summary — same wording as the dashboard */}
+            {/* summary */}
             <div className="grid grid-cols-3 gap-3 mb-6">
               <div className="border border-neutral-200 p-3">
-                <span className="block text-xs uppercase tracking-widest text-neutral-500">Total Sales</span>
+                <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Sales</span>
                 <span className="block font-medium tabular-nums mt-1">{fmtMoney(custTotalSales)}</span>
               </div>
               <div className="border border-neutral-200 p-3">
-                <span className="block text-xs uppercase tracking-widest text-neutral-500">Payments Received</span>
+                <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Received</span>
                 <span className="block font-medium tabular-nums mt-1">{fmtMoney(custTotalReceived)}</span>
               </div>
               <div className="border border-neutral-800 bg-black text-white p-3">
-                <span className="block text-xs uppercase tracking-widest text-neutral-400">Balance</span>
+                <span className="block text-[11px] uppercase tracking-widest text-neutral-400">Balance</span>
                 <span className="block font-medium tabular-nums mt-1">
                   {(() => {
                     const b = customerBalance(cust.id);
@@ -112,12 +131,12 @@ export default function CustomersPage() {
                   <tr>
                     <th>Invoice</th>
                     <th>Date</th>
-                    <th className="num">Total Amount</th>
+                    <th className="num">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {custSales.length === 0 && (
-                    <tr><td colSpan={3} className="text-neutral-400">No sales yet.</td></tr>
+                    <tr><td colSpan={3} className="text-neutral-400">No invoices yet.</td></tr>
                   )}
                   {custSales.map((s) => (
                     <tr key={s.id}>
@@ -132,7 +151,7 @@ export default function CustomersPage() {
 
             {/* payments */}
             <h3 className="text-xs uppercase tracking-widest text-neutral-500 mb-2">
-              Payments Received ({custPayments.length})
+              Payments ({custPayments.length})
             </h3>
             <div className="border border-neutral-200 max-h-56 overflow-y-auto">
               <table>
@@ -157,12 +176,46 @@ export default function CustomersPage() {
                 </tbody>
               </table>
             </div>
-
-            <p className="text-xs text-neutral-500 mt-4">
-              Balance = Total Sales − Payments Received. A negative balance means the customer paid in advance.
-            </p>
           </>
         )}
+      </Modal>
+
+      {/* new customer popup */}
+      <Modal open={open} onClose={onClose} title="New Customer">
+        <form onSubmit={save} className="grid gap-4">
+          <div>
+            <label>Name *</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Ahmed Steel Mart"
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <label>Shop / Area</label>
+            <input
+              value={form.shop}
+              onChange={(e) => setForm({ ...form, shop: e.target.value })}
+              placeholder="e.g. Bilal Gunj, Lahore"
+            />
+          </div>
+          <div>
+            <label>Phone</label>
+            <input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              placeholder="e.g. 0300 1234567"
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn-primary" disabled={!form.name.trim()}>
+              Add Customer
+            </button>
+          </div>
+        </form>
       </Modal>
     </Page>
   );

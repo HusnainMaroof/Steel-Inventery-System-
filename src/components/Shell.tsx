@@ -94,8 +94,8 @@ function MobileNav({
             <path d="M2.5 5h15M2.5 10h15M2.5 15h15" />
           </svg>
         </button>
-        <Link href="/" className="text-base font-medium tracking-tight">
-          STEEL<span className="text-neutral-400">/LEDGER</span>
+        <Link href="/" className="text-sm font-medium tracking-tight whitespace-nowrap">
+          STEEL <span className="text-neutral-400">AND LEDGER</span>
         </Link>
         <span className="w-9" aria-hidden />
       </header>
@@ -124,7 +124,7 @@ function MobileNav({
                 <div>
                   <div className="flex items-center justify-between mb-8 min-h-8">
                     <div className="text-lg font-medium tracking-tight whitespace-nowrap">
-                      STEEL<span className="text-neutral-400">/LEDGER</span>
+                      STEEL <span className="text-neutral-400">AND LEDGER</span>
                     </div>
                     <button
                       onClick={() => setDrawerOpen(false)}
@@ -228,10 +228,10 @@ export default function Shell({ children }: { children: ReactNode }) {
                 ) : (
                   <>
                     <div className="text-lg font-medium tracking-tight whitespace-nowrap">
-                      STEEL<span className="text-neutral-400">/LEDGER</span>
+                      STEEL <span className="text-neutral-400">AND LEDGER</span>
                     </div>
                     <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 mt-1">
-                      Trade & Accounts
+                      Steel Factory
                     </div>
                   </>
                 )}

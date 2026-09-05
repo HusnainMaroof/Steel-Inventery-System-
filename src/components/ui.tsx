@@ -125,12 +125,15 @@ export function Modal({
   onClose,
   title,
   children,
+  size = "md",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  size?: "md" | "2xl" | "3xl";
 }) {
+  const maxW = size === "3xl" ? "max-w-3xl" : size === "2xl" ? "max-w-2xl" : "max-w-lg";
   return (
     <AnimatePresence>
       {open && (
@@ -145,7 +148,7 @@ export function Modal({
             onClick={onClose}
           />
           <motion.div
-            className="relative bg-white border border-neutral-900 w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+            className={`relative bg-white border border-neutral-900 w-full ${maxW} max-h-[92vh] overflow-y-auto p-4 sm:p-6`}
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
