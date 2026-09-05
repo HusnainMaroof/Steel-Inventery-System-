@@ -77,7 +77,7 @@ export default function CustomersPage() {
       {cust && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSelected(null)} />
-          <div className="relative bg-white border border-neutral-900 w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6">
+          <div className="relative bg-white border border-neutral-900 w-full max-w-2xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h2 className="text-lg">{cust.name}</h2>

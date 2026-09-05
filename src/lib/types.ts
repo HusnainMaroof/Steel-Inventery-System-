@@ -20,9 +20,14 @@ export interface Purchase {
   supplierId: string;
   item: string;
   qty: number; // tons
-  rate: number; // mill price per ton
+  rate: number; // buying price per ton
   transport: number;
   otherCost: number;
+  sellRate?: number; // your selling price per ton (planned)
+  paid?: number; // amount already paid to the supplier
+  lastPaidAt?: string; // date of the most recent payment (ISO yyyy-mm-dd)
+  lastPaidAmount?: number; // amount paid in that most recent payment
+  paymentHistory?: { date: string; amount: number }[]; // every payment, newest last
 }
 
 export interface SaleLine {

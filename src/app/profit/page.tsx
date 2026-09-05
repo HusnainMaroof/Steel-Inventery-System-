@@ -84,7 +84,7 @@ export default function ProfitLossPage() {
             </button>
             {mode === "month" && (
               <select
-                className="w-44"
+                className="w-40 sm:w-44"
                 value={month}
                 onChange={(e) => setMonth(e.target.value)}
               >

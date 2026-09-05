@@ -74,7 +74,7 @@ export default function SalesPage() {
                   <td className="font-medium">{s.invoiceNo}</td>
                   <td className="whitespace-nowrap">{fmtDate(s.date)}</td>
                   <td>{customerName(s.customerId)}</td>
-                  <td className="text-neutral-500 text-xs">
+                  <td className="text-neutral-500 text-xs whitespace-normal min-w-48">
                     {s.lines.map((l) => `${l.item} × ${l.qty}t @ ${fmtMoney(l.rate)}`).join(", ")}
                   </td>
                   <td className="num">{fmtQty(s.lines.reduce((a, l) => a + l.qty, 0))}</td>

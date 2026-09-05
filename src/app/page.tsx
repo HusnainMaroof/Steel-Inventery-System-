@@ -5,13 +5,38 @@ import { useStore, saleTotal } from "@/lib/store";
 import {
   Page,
   PageTitle,
-  StatCard,
   Stagger,
   StaggerItem,
 } from "@/components/ui";
-import { fmtMoney } from "@/lib/format";
+import { fmtMoney, fmtQty } from "@/lib/format";
 
 type Period = "today" | "monthly" | "yearly";
+
+// combined stat card: two related figures stacked in one box
+function StatBox({
+  rows,
+}: {
+  rows: { label: string; value: string; invert?: boolean }[];
+}) {
+  return (
+    <div className="border border-neutral-200 bg-white p-4 sm:p-5">
+      {rows.map((r, i) => (
+        <div key={r.label} className={i > 0 ? "mt-4 pt-4 border-t border-neutral-200" : ""}>
+          <p className="text-sm uppercase tracking-wider text-neutral-900 font-medium mb-1">
+            {r.label}
+          </p>
+          <p
+            className={`text-2xl font-medium tabular-nums ${
+              r.invert ? "inline-block bg-black text-white px-2 py-0.5" : ""
+            }`}
+          >
+            {r.value}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const PERIODS: { key: Period; label: string }[] = [
   { key: "today", label: "Today" },
@@ -47,9 +72,13 @@ export default function DashboardPage() {
 
     let revenue = 0;
     let cogs = 0;
+    let soldQty = 0;
     for (const sale of pSales) {
       revenue += saleTotal(sale);
-      for (const l of sale.lines) cogs += l.qty * (byItem[l.item] ?? 0);
+      for (const l of sale.lines) {
+        cogs += l.qty * (byItem[l.item] ?? 0);
+        soldQty += l.qty;
+      }
     }
     const totalExpenses = pExpenses.reduce((a, e) => a + e.amount, 0);
     const grossProfit = revenue - cogs;
@@ -71,6 +100,7 @@ export default function DashboardPage() {
     return {
       revenue, grossProfit, expenses: totalExpenses,
       netProfit: grossProfit - totalExpenses,
+      soldQty,
       customerDues, supplierDues,
     };
   }, [sales, payments, expenses, byItem, period]);
@@ -98,30 +128,31 @@ export default function DashboardPage() {
           </div>
         }
       />
-      <Stagger className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <Stagger className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StaggerItem>
-          <StatCard label="Stock on hand" value={stats.stockQty} money={false} />
+          <StatBox
+            rows={[
+              { label: "Stock Available", value: `${stats.stockQty} t` },
+              { label: "Stock Worth", value: fmtMoney(stats.stockValue) },
+            ]}
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="Stock value (landed)" value={stats.stockValue} />
+          <StatBox
+            rows={[
+              { label: "Total Sales", value: fmtMoney(periodStats.revenue) },
+              { label: "Steel Sold", value: `${fmtQty(periodStats.soldQty)}` },
+              { label: "Your Profit", value: fmtMoney(periodStats.netProfit), invert: true },
+            ]}
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="Revenue" value={periodStats.revenue} />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard label="Net profit" value={periodStats.netProfit} invert />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard label="Gross profit" value={periodStats.grossProfit} />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard label="Customer dues" value={periodStats.customerDues} />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard label="Mill dues" value={periodStats.supplierDues} />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard label="Expenses" value={periodStats.expenses} />
+          <StatBox
+            rows={[
+              { label: "Customer Payments Due", value: fmtMoney(periodStats.customerDues) },
+              { label: "Supplier Payments Due", value: fmtMoney(periodStats.supplierDues) },
+            ]}
+          />
         </StaggerItem>
       </Stagger>
 

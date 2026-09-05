@@ -1,8 +1,48 @@
 @import "tailwindcss";
 
-/* slightly larger type scale — everything rem-based scales up */
+/* slightly larger type scale — everything rem-based scales up.
+   Tiered root sizes: desktop 17px → tablet 16px → phone 15px,
+   so every rem-based Tailwind class scales down proportionally. */
 html {
   font-size: 17px;
+}
+
+/* tablets (≤1024px) */
+@media (max-width: 1024px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+/* phones (≤640px) */
+@media (max-width: 640px) {
+  html {
+    font-size: 15px;
+  }
+  th,
+  td {
+    padding: 8px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  th {
+    font-size: 10px;
+  }
+  /* 16px+ inputs prevent iOS Safari auto-zoom on focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+    padding: 10px 12px;
+  }
+  .btn-primary,
+  .btn-ghost {
+    padding: 9px 14px;
+    font-size: 12px;
+  }
+  label {
+    font-size: 12px;
+  }
 }
 
 :root {
@@ -19,7 +59,8 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-  font-size: 0.9375rem;
+  font-size: 1rem;
+  font-weight: 400;
 }
 
 /* marker highlight for important figures */
@@ -57,19 +98,33 @@ textarea {
   outline: none;
   background: #fff;
   transition: border-color 0.2s;
+  font-size: 15px;
+  font-weight: 500;
+  color: #0a0a0a;
 }
 input:focus,
 select:focus,
 textarea:focus {
   border-color: #0a0a0a;
 }
+/* hide number input spinners */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 label {
   display: block;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 13px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 4px;
+  color: #171717;
+  font-weight: 500;
+  margin-bottom: 5px;
 }
 
 /* interaction affordance — pointer everywhere clickable */
@@ -115,19 +170,26 @@ table {
   width: 100%;
   border-collapse: collapse;
 }
+/* table wrappers: smooth touch scrolling on phones/tablets */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
 th {
   text-align: left;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 400;
+  color: #404040;
+  font-weight: 500;
   padding: 10px 12px;
   border-bottom: 1px solid #0a0a0a;
 }
 td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
+  color: #171717;
+  font-weight: 450;
 }
 tbody tr {
   transition: background 0.15s ease;

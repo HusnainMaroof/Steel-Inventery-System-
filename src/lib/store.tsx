@@ -49,6 +49,8 @@ interface Store {
   supplierBalance: (id: string) => number; // + = we owe
   stats: DashboardStats;
   addPurchase: (p: Omit<Purchase, "id">) => void;
+  updatePurchase: (id: string, patch: Partial<Purchase>) => void;
+  deletePurchase: (id: string) => void;
   addSale: (s: Omit<Sale, "id" | "invoiceNo">) => void;
   addPayment: (p: Omit<Payment, "id">) => void;
   addExpense: (e: Omit<Expense, "id">) => void;
@@ -117,8 +119,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const supplierBalance = useMemo(() => {
     const map: Record<string, number> = {};
+    // dues are tracked per purchase: total cost minus what was already paid
     for (const p of purchases)
-      map[p.supplierId] = (map[p.supplierId] ?? 0) + purchaseTotal(p);
+      map[p.supplierId] =
+        (map[p.supplierId] ?? 0) + Math.max(0, purchaseTotal(p) - (p.paid ?? 0));
     for (const p of payments)
       if (p.type === "supplier")
         map[p.partyId] = (map[p.partyId] ?? 0) - p.amount;
@@ -171,6 +175,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     supplierBalance,
     stats,
     addPurchase: (p) => setPurchases((prev) => [{ ...p, id: nextId() }, ...prev]),
+    updatePurchase: (id, patch) =>
+      setPurchases((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      ),
+    deletePurchase: (id) =>
+      setPurchases((prev) => prev.filter((p) => p.id !== id)),
     addSale: (s) => {
       const invoiceNo = `INV-${String(sales.length + seed.sales.length + 1).padStart(3, "0")}`;
       setSales((prev) => [{ ...s, id: nextId(), invoiceNo }, ...prev]);

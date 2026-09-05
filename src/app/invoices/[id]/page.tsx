@@ -19,8 +19,8 @@ export default function InvoiceDetailPage() {
   const cogs = sale.lines.reduce((a, l) => a + l.qty * (byItem[l.item] ?? 0), 0);
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8 no-print">
+    <div className="p-4 sm:p-8">
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-6 sm:mb-8 no-print">
         <Link href="/invoices" className="text-sm underline underline-offset-2 hover:text-neutral-500">
           ← All invoices
         </Link>
@@ -30,18 +30,18 @@ export default function InvoiceDetailPage() {
       </div>
 
       <motion.div
-        className="print-area border border-neutral-900 p-10"
+        className="print-area border border-neutral-900 p-5 sm:p-10"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <div className="flex justify-between items-start border-b-2 border-black pb-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 border-b-2 border-black pb-6">
           <div>
-            <div className="text-2xl tracking-tight">STEEL<span className="text-neutral-400">/LEDGER</span></div>
+            <div className="text-xl sm:text-2xl tracking-tight">STEEL<span className="text-neutral-400">/LEDGER</span></div>
             <div className="text-xs text-neutral-500 mt-1">Steel Trading Co. · Lahore, Pakistan</div>
             <div className="text-xs text-neutral-500">Ph: 042-111-222-333</div>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right">
             <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">Invoice</div>
             <div className="text-xl font-medium mt-1">{sale.invoiceNo}</div>
             <div className="text-xs text-neutral-500 mt-1">{fmtDate(sale.date)}</div>
@@ -78,7 +78,7 @@ export default function InvoiceDetailPage() {
         </table>
 
         <div className="flex justify-end">
-          <div className="w-64">
+          <div className="w-full sm:w-64">
             <div className="flex justify-between py-2 border-b border-neutral-300">
               <span className="text-neutral-500 text-sm">Subtotal</span>
               <span className="tabular-nums">{fmtMoney(total)}</span>
@@ -94,7 +94,7 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
 
-        <div className="mt-10 pt-6 border-t border-neutral-300 text-xs text-neutral-500 flex justify-between">
+        <div className="mt-10 pt-6 border-t border-neutral-300 text-xs text-neutral-500 flex flex-col sm:flex-row gap-2 sm:justify-between">
           <span>Thank you for your business. Goods once sold are not returnable.</span>
           <span className="no-print">Internal landed cost: {fmtMoney(cogs)}</span>
         </div>

@@ -109,9 +109,9 @@ export function PageTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-end justify-between mb-6">
-      <div>
-        <h1 className="text-2xl tracking-tight">{title}</h1>
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-6">
+      <div className="min-w-0">
+        <h1 className="text-xl sm:text-2xl tracking-tight">{title}</h1>
         {sub && <p className="text-neutral-500 text-xs mt-1">{sub}</p>}
       </div>
       {action}
@@ -145,7 +145,7 @@ export function Modal({
             onClick={onClose}
           />
           <motion.div
-            className="relative bg-white border border-neutral-900 w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
+            className="relative bg-white border border-neutral-900 w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6"
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
@@ -185,14 +185,14 @@ export function StatCard({
     <motion.div
       whileHover={{ y: -3 }}
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
-      className={`border p-5 ${invert ? "bg-black text-white border-black" : "border-neutral-200"}`}
+      className={`border p-4 sm:p-5 ${invert ? "bg-black text-white border-black" : "border-neutral-200"}`}
     >
       <div
         className={`text-[11px] uppercase tracking-[0.15em] mb-2 ${invert ? "text-neutral-400" : "text-neutral-500"}`}
       >
         {label}
       </div>
-      <div className="text-2xl tabular-nums">
+      <div className="text-xl sm:text-2xl tabular-nums">
         {money ? (
           <CountUp value={value} prefix="₨ " compact />
         ) : (
@@ -211,7 +211,7 @@ export function BarChart({
 }) {
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
-    <div className="flex items-end gap-4 h-40">
+    <div className="flex items-end gap-3 sm:gap-4 h-36 sm:h-40">
       {data.map((d, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
           <div className="text-[11px] text-neutral-500 tabular-nums">

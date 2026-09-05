@@ -15,7 +15,7 @@ export default function InventoryPage() {
         title="Inventory"
         sub="Stock per item at weighted-average landed cost"
       />
-      <Stagger className="grid grid-cols-3 gap-4 mb-8">
+      <Stagger className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StaggerItem>
           <StatCard label="Total stock" value={totalStock} money={false} />
         </StaggerItem>

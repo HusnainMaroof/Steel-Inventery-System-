@@ -17,6 +17,16 @@ export const fmtDate = (iso: string) =>
     year: "numeric",
   });
 
+// for full ISO timestamps — shows date and clock time
+export const fmtDateTime = (iso: string) => {
+  const d = new Date(iso);
+  return (
+    d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) +
+    ", " +
+    d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+  );
+};
+
 export const monthKey = (iso: string) => iso.slice(0, 7);
 
 export const monthLabel = (key: string) =>

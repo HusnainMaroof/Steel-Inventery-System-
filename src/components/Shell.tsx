@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { ReactNode } from "react";
 
 /* minimal inline SVG icon set (stroke, 16px) */
@@ -53,101 +53,199 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Close the mobile drawer whenever the route changes
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll while the drawer is open,
+  // and auto-close the drawer if the viewport grows to tablet/desktop
+  useEffect(() => {
+    document.body.style.overflow = drawerOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [drawerOpen]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setDrawerOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   if (pathname?.startsWith("/invoices/")) return <>{children}</>;
 
-  return (
-    <div className="flex min-h-screen">
-      <motion.aside
-        animate={{ width: collapsed ? 68 : 248 }}
-        transition={{ type: "spring", stiffness: 260, damping: 30 }}
-        className="shrink-0 border-r border-neutral-200 flex flex-col justify-between py-6 px-4 sticky top-0 h-screen no-print overflow-hidden"
-      >
-        <div>
-          <div className="flex items-center justify-between mb-10 min-h-8">
-            <Link href="/" className="block leading-tight min-w-0">
-              {collapsed ? (
-                <span className="text-lg font-medium tracking-tight">S/L</span>
-              ) : (
-                <>
-                  <div className="text-lg font-medium tracking-tight whitespace-nowrap">
-                    STEEL<span className="text-neutral-400">/LEDGER</span>
-                  </div>
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 mt-1">
-                    Trade & Accounts
-                  </div>
-                </>
-              )}
-            </Link>
-            <button
-              onClick={() => setCollapsed((c) => !c)}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={collapsed ? "Expand" : "Collapse"}
-              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-sm text-neutral-400 hover:text-black hover:bg-neutral-100 transition-colors duration-150 active:scale-90"
+  const navLinks = (onNavigate?: () => void) => (
+    <nav className="flex flex-col gap-0.5">
+      {NAV.map((n) => {
+        const active =
+          n.href === "/"
+            ? pathname === "/"
+            : pathname?.startsWith(n.href);
+        return (
+          <Link
+            key={n.href}
+            href={n.href}
+            title={n.label}
+            onClick={onNavigate}
+            className={`group relative flex items-center gap-3 px-3 py-2.5 text-[15px] rounded-sm transition-colors duration-150 hover:bg-neutral-100 ${
+              collapsed ? "md:justify-center" : ""
+            }`}
+          >
+            {active && (
+              <motion.span
+                layoutId="nav-pill"
+                className="absolute inset-0 bg-black"
+                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              />
+            )}
+            <span
+              className={`relative shrink-0 ${active ? "text-white" : "text-neutral-500 group-hover:text-black"}`}
             >
-              <Chevron collapsed={collapsed} />
-            </button>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {ICONS[n.href]}
+              </svg>
+            </span>
+            {!collapsed && (
+              <motion.span
+                initial={false}
+                animate={{ opacity: 1 }}
+                className={`relative whitespace-nowrap ${
+                  active ? "text-white" : "text-neutral-700 group-hover:text-black"
+                }`}
+              >
+                {n.label}
+              </motion.span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
+  return (
+    <div className="min-h-screen">
+      {/* ===== Desktop / tablet sidebar (md and up) ===== */}
+      <div className="hidden md:flex">
+        <motion.aside
+          animate={{ width: collapsed ? 68 : 248 }}
+          transition={{ type: "spring", stiffness: 260, damping: 30 }}
+          className="shrink-0 border-r border-neutral-200 flex flex-col justify-between py-6 px-4 sticky top-0 h-screen no-print overflow-hidden"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-10 min-h-8">
+              <Link href="/" className="block leading-tight min-w-0">
+                {collapsed ? (
+                  <span className="text-lg font-medium tracking-tight">S/L</span>
+                ) : (
+                  <>
+                    <div className="text-lg font-medium tracking-tight whitespace-nowrap">
+                      STEEL<span className="text-neutral-400">/LEDGER</span>
+                    </div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 mt-1">
+                      Trade & Accounts
+                    </div>
+                  </>
+                )}
+              </Link>
+              <button
+                onClick={() => setCollapsed((c) => !c)}
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                title={collapsed ? "Expand" : "Collapse"}
+                className="shrink-0 w-7 h-7 flex items-center justify-center rounded-sm text-neutral-400 hover:text-black hover:bg-neutral-100 transition-colors duration-150 active:scale-90"
+              >
+                <Chevron collapsed={collapsed} />
+              </button>
+            </div>
+            {navLinks()}
           </div>
-          <nav className="flex flex-col gap-0.5">
-            {NAV.map((n) => {
-              const active =
-                n.href === "/"
-                  ? pathname === "/"
-                  : pathname?.startsWith(n.href);
-              return (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  title={n.label}
-                  className={`group relative flex items-center gap-3 px-3 py-2.5 text-[15px] rounded-sm transition-colors duration-150 hover:bg-neutral-100 ${
-                    collapsed ? "justify-center" : ""
-                  }`}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="nav-pill"
-                      className="absolute inset-0 bg-black"
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    />
-                  )}
-                  <span
-                    className={`relative shrink-0 ${active ? "text-white" : "text-neutral-500 group-hover:text-black"}`}
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      {ICONS[n.href]}
-                    </svg>
-                  </span>
-                  {!collapsed && (
-                    <motion.span
-                      initial={false}
-                      animate={{ opacity: 1 }}
-                      className={`relative whitespace-nowrap ${
-                        active ? "text-white" : "text-neutral-700 group-hover:text-black"
-                      }`}
-                    >
-                      {n.label}
-                    </motion.span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-        {!collapsed && (
-          <div className="text-[11px] text-neutral-400 uppercase tracking-widest whitespace-nowrap">
-            Mock data · FY 2026
-          </div>
-        )}
-      </motion.aside>
-      <main className="flex-1 p-8">{children}</main>
+          {!collapsed && (
+            <div className="text-[11px] text-neutral-400 uppercase tracking-widest whitespace-nowrap">
+              Mock data · FY 2026
+            </div>
+          )}
+        </motion.aside>
+        <main className="flex-1 min-w-0 p-6 lg:p-8">{children}</main>
+      </div>
+
+      {/* ===== Mobile layout (below md) ===== */}
+      <div className="md:hidden">
+        {/* top bar */}
+        <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-3 bg-white/95 backdrop-blur border-b border-neutral-200 no-print">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open menu"
+            className="-ml-1 w-9 h-9 flex items-center justify-center rounded-sm text-neutral-700 hover:bg-neutral-100 active:scale-90 transition"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M2.5 5h15M2.5 10h15M2.5 15h15" />
+            </svg>
+          </button>
+          <Link href="/" className="text-base font-medium tracking-tight">
+            STEEL<span className="text-neutral-400">/LEDGER</span>
+          </Link>
+          <span className="w-9" aria-hidden />
+        </header>
+
+        <main className="p-4">{children}</main>
+
+        {/* drawer + scrim */}
+        <AnimatePresence>
+          {drawerOpen && (
+            <>
+              <motion.div
+                className="fixed inset-0 z-50 bg-black/40"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setDrawerOpen(false)}
+              />
+              <motion.aside
+                className="fixed top-0 left-0 bottom-0 z-50 w-[80vw] max-w-[300px] bg-white border-r border-neutral-200 overflow-y-auto"
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", stiffness: 380, damping: 36 }}
+              >
+                <div className="flex flex-col justify-between min-h-full py-6 px-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-8 min-h-8">
+                      <div className="text-lg font-medium tracking-tight whitespace-nowrap">
+                        STEEL<span className="text-neutral-400">/LEDGER</span>
+                      </div>
+                      <button
+                        onClick={() => setDrawerOpen(false)}
+                        aria-label="Close menu"
+                        className="w-8 h-8 flex items-center justify-center rounded-sm text-neutral-400 hover:text-black hover:bg-neutral-100"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {navLinks(() => setDrawerOpen(false))}
+                  </div>
+                  <div className="text-[11px] text-neutral-400 uppercase tracking-widest whitespace-nowrap pt-6">
+                    Mock data · FY 2026
+                  </div>
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
