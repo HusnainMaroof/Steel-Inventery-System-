@@ -1,5 +1,21 @@
 export type PaymentType = "customer" | "supplier";
 
+export interface Product {
+  id: string;
+  name: string;
+}
+
+export interface ProductItem {
+  id: string;
+  productId: string;
+  name: string;
+}
+
+export interface Quality {
+  id: string;
+  name: string;
+}
+
 export interface Supplier {
   id: string;
   name: string;
@@ -18,9 +34,12 @@ export interface Purchase {
   id: string;
   date: string; // ISO yyyy-mm-dd
   supplierId: string;
-  item: string;
-  qty: number; // tons
-  rate: number; // buying price per ton
+  product?: string; // product name (e.g. "Rebar")
+  item: string; // product item name (e.g. "Rebar 10mm")
+  quality?: string; // quality name (e.g. "Grade A")
+  qty: number; // always stored in TONS internally (kg entries are divided by 1000)
+  unit?: "ton" | "kg"; // unit the user entered with; defaults to "ton"
+  rate: number; // buying price PER TON (kg entries are multiplied by 1000)
   transport: number;
   otherCost: number;
   sellRate?: number; // your selling price per ton (planned)
@@ -64,6 +83,9 @@ export interface Expense {
 
 export interface InventoryRow {
   item: string;
+  product?: string; // product category (e.g. Rebar)
+  quality?: string; // quality grade, if set on purchases
+  unit?: "ton" | "kg"; // display unit from the item's purchases
   purchasedQty: number;
   soldQty: number;
   stockQty: number;

@@ -1,13 +1,15 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { useStore, saleTotal } from "@/lib/store";
 import { Page, PageTitle } from "@/components/ui";
+import SaleDetailModal from "@/components/SaleDetailModal";
 import { fmtMoney, fmtDate } from "@/lib/format";
 
 export default function InvoicesPage() {
   const { sales, customers } = useStore();
+  const [viewId, setViewId] = useState<string | null>(null);
 
   return (
     <Page>
@@ -19,7 +21,7 @@ export default function InvoicesPage() {
               <th>Invoice</th>
               <th>Date</th>
               <th>Customer</th>
-              <th className="num">Amount</th>
+              <th className="num">Total Amount</th>
               <th />
             </tr>
           </thead>
@@ -36,18 +38,20 @@ export default function InvoicesPage() {
                 <td>{customers.find((c) => c.id === s.customerId)?.name}</td>
                 <td className="num font-medium">{fmtMoney(saleTotal(s))}</td>
                 <td className="num">
-                  <Link
-                    href={`/invoices/${s.id}`}
+                  <button
+                    onClick={() => setViewId(s.id)}
                     className="underline underline-offset-2 hover:text-neutral-500"
                   >
                     Open →
-                  </Link>
+                  </button>
                 </td>
               </motion.tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <SaleDetailModal saleId={viewId} onClose={() => setViewId(null)} />
     </Page>
   );
 }

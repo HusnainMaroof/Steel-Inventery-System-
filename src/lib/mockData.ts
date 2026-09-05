@@ -2,7 +2,10 @@ import type {
   Customer,
   Expense,
   Payment,
+  Product,
+  ProductItem,
   Purchase,
+  Quality,
   Sale,
   Supplier,
 } from "./types";
@@ -16,6 +19,29 @@ export const STEEL_ITEMS = [
   "Channel 4in",
   "MS Sheet 3mm",
   "GI Sheet 26g",
+];
+
+export const products: Product[] = [
+  { id: "pr1", name: "Rebar" },
+  { id: "pr2", name: "Structural" },
+  { id: "pr3", name: "Sheets" },
+];
+
+export const productItems: ProductItem[] = [
+  { id: "it1", productId: "pr1", name: "Rebar 10mm" },
+  { id: "it2", productId: "pr1", name: "Rebar 12mm" },
+  { id: "it3", productId: "pr1", name: "Rebar 16mm" },
+  { id: "it4", productId: "pr1", name: "TMT Grade 60" },
+  { id: "it5", productId: "pr2", name: "Angle Iron 40mm" },
+  { id: "it6", productId: "pr2", name: "Channel 4in" },
+  { id: "it7", productId: "pr3", name: "MS Sheet 3mm" },
+  { id: "it8", productId: "pr3", name: "GI Sheet 26g" },
+];
+
+export const qualities: Quality[] = [
+  { id: "q1", name: "Grade A (Mill Certified)" },
+  { id: "q2", name: "Grade B (Local)" },
+  { id: "q3", name: "Mill Second" },
 ];
 
 export const suppliers: Supplier[] = [

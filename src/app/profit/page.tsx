@@ -6,6 +6,32 @@ import { useStore, saleTotal } from "@/lib/store";
 import { Page, PageTitle, BarChart } from "@/components/ui";
 import { fmtMoney, monthKey, monthLabel } from "@/lib/format";
 
+function Row({
+  label,
+  value,
+  strong,
+  minus,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+  minus?: boolean;
+}) {
+  return (
+    <div className={`flex justify-between py-3 border-b border-neutral-200 ${strong ? "font-medium" : ""}`}>
+      <span className={strong ? "" : "text-neutral-600"}>{label}</span>
+      <motion.span
+        key={label + value}
+        initial={{ opacity: 0, x: 8 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="tabular-nums"
+      >
+        {minus ? "− " : ""}{fmtMoney(value)}
+      </motion.span>
+    </div>
+  );
+}
+
 export default function ProfitLossPage() {
   const { sales, byItem, expenses, purchases } = useStore();
   const [mode, setMode] = useState<"all" | "month">("all");
@@ -48,20 +74,6 @@ export default function ProfitLossPage() {
       return { label: k, revenue, net: revenue - cogs - exp };
     });
   }, [sales, expenses, byItem]);
-
-  const Row = ({ label, value, strong, minus }: { label: string; value: number; strong?: boolean; minus?: boolean }) => (
-    <div className={`flex justify-between py-3 border-b border-neutral-200 ${strong ? "font-medium" : ""}`}>
-      <span className={strong ? "" : "text-neutral-600"}>{label}</span>
-      <motion.span
-        key={label + value}
-        initial={{ opacity: 0, x: 8 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="tabular-nums"
-      >
-        {minus ? "− " : ""}{fmtMoney(value)}
-      </motion.span>
-    </div>
-  );
 
   return (
     <Page>

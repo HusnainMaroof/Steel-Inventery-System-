@@ -2,9 +2,9 @@
 
 import { use } from "react";
 import { motion } from "framer-motion";
-import { useStore, purchaseTotal } from "@/lib/store";
+import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
 import { Page, PageTitle } from "@/components/ui";
-import { fmtMoney, fmtQty, fmtDate } from "@/lib/format";
+import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate } from "@/lib/format";
 
 export default function PurchaseDetailPage({
   params,
@@ -29,24 +29,36 @@ export default function PurchaseDetailPage({
 
   const total = purchaseTotal(purchase);
   const costPerTon = purchase.qty > 0 ? total / purchase.qty : 0;
-  const sellPerTon = inv?.avgSellRate ?? 0;
-  const profitPerTon = sellPerTon - costPerTon;
+  const sellPerTon = purchase.sellRate ?? inv?.avgSellRate ?? 0;
+  const unitDiv = purchase.unit === "kg" ? 1000 : 1;
+  const perUnit = purchase.unit === "kg" ? " / kg" : " / ton";
+  const costPerUnit = costPerTon / unitDiv;
+  const profitPerUnit = (sellPerTon - costPerTon) / unitDiv;
+
+  const payable = steelAmount(purchase);
+  const paid = purchase.paid ?? 0;
+  const remaining = Math.max(0, payable - paid);
 
   const rows: { label: string; value: string; strong?: boolean; muted?: boolean }[] = [
     { label: "Purchase Date", value: fmtDate(purchase.date) },
     { label: "Supplier", value: supplier?.name ?? purchase.supplierId },
-    { label: "Steel Type", value: purchase.item },
-    { label: "Quantity", value: `${fmtQty(purchase.qty)} tons` },
-    { label: "Buying Price / Ton", value: fmtMoney(purchase.rate) },
-    { label: "Transport Cost", value: fmtMoney(purchase.transport) },
-    { label: "Other Expenses", value: fmtMoney(purchase.otherCost) },
-    { label: "Total Purchase Cost", value: fmtMoney(total), strong: true },
-    { label: "Actual Cost / Ton", value: fmtMoney(costPerTon) },
+    { label: "Product", value: purchase.product || "—" },
+    { label: "Product Item", value: purchase.item },
+    { label: "Quality", value: purchase.quality || "—" },
+    { label: "Quantity", value: fmtQtyWithUnit(purchase.qty, purchase.unit) },
+    { label: "Buying Price", value: fmtRateWithUnit(purchase.rate, purchase.unit) },
+    { label: "Transport Cost", value: fmtMoney(purchase.transport), muted: true },
+    { label: "Other Expenses", value: fmtMoney(purchase.otherCost), muted: true },
+    // ——— payment summary: what the mill gets ———
+    { label: "Total Payable to Mill", value: fmtMoney(payable), strong: true },
+    { label: "Already Paid", value: fmtMoney(paid), muted: true },
+    { label: "Remaining Due", value: fmtMoney(remaining), strong: remaining > 0, muted: remaining === 0 },
+    // ——— your costs & margins ———
+    { label: "Actual Cost" + perUnit, value: fmtMoney(costPerUnit), muted: true },
     ...(purchase.sellRate
-      ? [{ label: "Your Selling Price / Ton", value: fmtMoney(purchase.sellRate) }]
+      ? [{ label: "Your Selling Price", value: fmtRateWithUnit(purchase.sellRate, purchase.unit) }]
       : []),
-    { label: "Average Selling Price / Ton", value: fmtMoney(sellPerTon) },
-    { label: "Profit / Ton", value: fmtMoney(profitPerTon), strong: true },
+    { label: "Profit" + perUnit, value: fmtMoney(profitPerUnit), strong: true },
   ];
 
   return (
@@ -81,7 +93,7 @@ export default function PurchaseDetailPage({
       </motion.div>
 
       <p className="text-xs text-neutral-500 mt-4 max-w-xl">
-        Average selling price is based on what this item has sold for so far. Profit / ton = selling price − total cost per ton.
+        Profit = Your Selling Price − Actual Cost, shown per kg or per ton based on how this purchase was recorded.
       </p>
     </Page>
   );

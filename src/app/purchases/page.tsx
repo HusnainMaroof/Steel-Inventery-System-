@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useStore, purchaseTotal } from "@/lib/store";
-import { STEEL_ITEMS } from "@/lib/mockData";
+import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
 import { Page, PageTitle, Modal, useToggle } from "@/components/ui";
-import { fmtMoney, fmtQty, fmtDate, fmtDateTime } from "@/lib/format";
+import { fmtMoney, fmtQty, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtDateTime } from "@/lib/format";
 import type { Purchase } from "@/lib/types";
 
 export default function PurchasesPage() {
-  const { purchases, suppliers, inventory, addPurchase, updatePurchase, deletePurchase } = useStore();
+  const { purchases, suppliers, inventory, products, productItems, qualities, addPurchase, updatePurchase, deletePurchase } = useStore();
   const { open, onOpen, onClose } = useToggle();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | "dues">("all");
@@ -19,7 +18,10 @@ export default function PurchasesPage() {
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     supplierId: suppliers[0]?.id ?? "",
-    item: STEEL_ITEMS[0],
+    productId: products[0]?.id ?? "",
+    item: "",
+    quality: "",
+    unit: "ton" as "ton" | "kg",
     qty: 0,
     rate: 0,
     transport: 0,
@@ -28,19 +30,37 @@ export default function PurchasesPage() {
     paidNow: 0,
   });
 
-  const landedPerTon = form.qty > 0
-    ? (form.qty * form.rate + form.transport + form.otherCost) / form.qty
+  // entered quantity converted to tons so all math stays consistent
+  const qtyTons = form.unit === "kg" ? form.qty / 1000 : form.qty;
+  // entered rate converted to per-ton
+  const ratePerTon = form.unit === "kg" ? form.rate * 1000 : form.rate;
+
+  const landedPerTon = qtyTons > 0
+    ? (qtyTons * ratePerTon + form.transport + form.otherCost) / qtyTons
     : 0;
+
+  // summary figures follow the selected unit (kg shows per-kg, tons shows per-ton)
+  const unitLabel = form.unit === "kg" ? "kg" : "tons";
+  const perUnitLabel = form.unit === "kg" ? "/ kg" : "/ ton";
+  const totalSteel = form.qty * form.rate;
+  const totalCost = totalSteel + form.transport + form.otherCost;
+  const landedPerUnit = form.unit === "kg"
+    ? form.qty > 0 ? totalCost / form.qty : 0
+    : landedPerTon;
+  const marginPerUnit = form.sellRate > 0 ? form.sellRate - landedPerUnit : 0;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const { paidNow, ...rest } = form;
+    const { paidNow, unit, ...rest } = form;
     addPurchase({
       ...rest,
-      qty: Number(rest.qty),
-      rate: Number(rest.rate),
+      product: products.find((p) => p.id === form.productId)?.name ?? "",
+      unit,
+      qty: qtyTons, // stored in tons
+      rate: ratePerTon, // stored per ton
       transport: Number(rest.transport),
       otherCost: Number(rest.otherCost),
+      sellRate: Number(rest.sellRate) * (unit === "kg" ? 1000 : 1), // stored per ton
       paid: Number(paidNow) || 0,
       lastPaidAt: rest.date,
       lastPaidAmount: Number(paidNow) || 0,
@@ -50,6 +70,18 @@ export default function PurchasesPage() {
           : [],
     });
     onClose();
+    // reset the numeric fields so the next entry starts clean
+    setForm((f) => ({
+      ...f,
+      item: "",
+      quality: "",
+      qty: 0,
+      rate: 0,
+      transport: 0,
+      otherCost: 0,
+      sellRate: 0,
+      paidNow: 0,
+    }));
   };
 
   const supplierName = (id: string) =>
@@ -58,8 +90,9 @@ export default function PurchasesPage() {
   // show 0 values as an empty field instead of a literal "0"
   const numVal = (v: number) => (v === 0 ? "" : v);
 
+  // due to the MILL is the steel amount only (transport & other costs are on us)
   const remainingOf = (p: Purchase) =>
-    Math.max(0, purchaseTotal(p) - (p.paid ?? 0));
+    Math.max(0, steelAmount(p) - (p.paid ?? 0));
 
   const duePurchases = purchases.filter((p) => remainingOf(p) > 0);
   const totalDue = duePurchases.reduce((a, p) => a + remainingOf(p), 0);
@@ -77,7 +110,7 @@ export default function PurchasesPage() {
   };
 
   const selected = purchases.find((p) => p.id === selectedId) ?? null;
-  let detailRows: { label: string; value: string; strong?: boolean }[] = [];
+  let detailRows: { label: string; value: string; strong?: boolean; muted?: boolean }[] = [];
   if (selected) {
     const total = purchaseTotal(selected);
     const costPerTon = selected.qty > 0 ? total / selected.qty : 0;
@@ -85,27 +118,31 @@ export default function PurchasesPage() {
       inventory.find((r) => r.item === selected.item)?.avgSellRate ?? 0;
     // profit is based on YOUR selling price; average market rate is only a fallback
     const usedSell = selected.sellRate ?? avgSellPerTon;
-    const profitPerTon = usedSell - costPerTon;
+    const unitDiv = selected.unit === "kg" ? 1000 : 1;
+    const perUnit = selected.unit === "kg" ? " / kg" : " / ton";
+    const costPerUnit = costPerTon / unitDiv;
+    const profitPerUnit = (usedSell - costPerTon) / unitDiv;
+    const payable = steelAmount(selected);
+    const paid = selected.paid ?? 0;
+    const remaining = Math.max(0, payable - paid);
     detailRows = [
       { label: "Purchase Date", value: fmtDate(selected.date) },
       { label: "Supplier", value: supplierName(selected.supplierId) },
-      { label: "Steel Type", value: selected.item },
-      { label: "Quantity", value: `${fmtQty(selected.qty)} tons` },
-      { label: "Buying Price / Ton", value: fmtMoney(selected.rate) },
-      { label: "Transport Cost", value: fmtMoney(selected.transport) },
-      { label: "Other Expenses", value: fmtMoney(selected.otherCost) },
-      { label: "Paid to Supplier", value: fmtMoney(selected.paid ?? 0) },
-      {
-        label: "Remaining Due",
-        value: fmtMoney(Math.max(0, total - (selected.paid ?? 0))),
-        strong: Math.max(0, total - (selected.paid ?? 0)) > 0,
-      },
-      { label: "Actual Cost / Ton", value: fmtMoney(costPerTon) },
-      { label: "Your Selling Price / Ton", value: fmtMoney(selected.sellRate ?? avgSellPerTon) },
-      { label: "Profit / Ton", value: fmtMoney(profitPerTon), strong: true },
-      ...(selected.sellRate
-        ? [{ label: "Average Market Selling Price / Ton", value: fmtMoney(avgSellPerTon) }]
-        : []),
+      { label: "Product", value: selected.product || "—" },
+      { label: "Product Item", value: selected.item },
+      { label: "Quality", value: selected.quality || "—" },
+      { label: "Quantity", value: fmtQtyWithUnit(selected.qty, selected.unit) },
+      { label: "Buying Price", value: fmtRateWithUnit(selected.rate, selected.unit) },
+      { label: "Transport Cost", value: fmtMoney(selected.transport), muted: true },
+      { label: "Other Expenses", value: fmtMoney(selected.otherCost), muted: true },
+      { label: "Actual Cost" + perUnit, value: fmtMoney(costPerUnit), muted: true },
+      // ——— payment summary: what the mill gets ———
+      { label: "Total Payable to Mill", value: fmtMoney(payable) },
+      { label: "Already Paid", value: fmtMoney(paid), muted: true },
+      { label: "Remaining Due", value: fmtMoney(remaining), strong: remaining > 0, muted: remaining === 0 },
+      // ——— your margins ———
+      { label: "Your Selling Price", value: fmtRateWithUnit(usedSell, selected.unit) },
+      { label: "Profit" + perUnit, value: fmtMoney(profitPerUnit), strong: true },
     ];
   }
 
@@ -148,17 +185,16 @@ export default function PurchasesPage() {
             <tr>
               <th>Purchase Date</th>
               <th>Supplier</th>
-              <th>Steel Type</th>
+              <th>Product Type</th>
               <th className="num">Quantity</th>
-              <th className="num">Buying Price / Ton</th>
-              <th className="num">Your Selling Price / Ton</th>
+              <th className="num">Buying Price</th>
+              <th className="num">Your Selling Price</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             <AnimatePresence initial={false}>
               {purchases.map((p) => {
-                const rem = remainingOf(p);
                 return (
                 <motion.tr
                   key={p.id}
@@ -170,10 +206,10 @@ export default function PurchasesPage() {
                   <td className="whitespace-nowrap">{fmtDate(p.date)}</td>
                   <td>{supplierName(p.supplierId)}</td>
                   <td>{p.item}</td>
-                  <td className="num">{fmtQty(p.qty)}</td>
-                  <td className="num">{fmtMoney(p.rate)}</td>
+                  <td className="num">{fmtQtyWithUnit(p.qty, p.unit)}</td>
+                  <td className="num">{fmtRateWithUnit(p.rate, p.unit)}</td>
                   <td className={`num ${p.sellRate ? "" : "text-neutral-400"}`}>
-                    {p.sellRate ? fmtMoney(p.sellRate) : "—"}
+                    {p.sellRate ? fmtRateWithUnit(p.sellRate, p.unit) : "—"}
                   </td>
                   <td className="num whitespace-nowrap">
                     <button
@@ -218,8 +254,8 @@ export default function PurchasesPage() {
                   <tr>
                     <th>Purchase Date</th>
                     <th>Supplier</th>
-                    <th>Steel Type</th>
-                    <th className="num">Total Cost</th>
+                    <th>Product Type</th>
+                    <th className="num">Total Payable to Mill</th>
                     <th className="num">Paid</th>
                     <th className="num">Remaining</th>
                     <th className="num">Last Payment</th>
@@ -228,7 +264,7 @@ export default function PurchasesPage() {
                 </thead>
                 <tbody>
                   {duePurchases.map((p) => {
-                    const total = purchaseTotal(p);
+                    const total = steelAmount(p); // mill due = steel only
                     const paid = p.paid ?? 0;
                     const rem = remainingOf(p);
                     return (
@@ -283,20 +319,76 @@ export default function PurchasesPage() {
               ))}
             </select>
           </div>
-          <div className="col-span-2">
-            <label>Steel Type</label>
-            <select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })}>
-              {STEEL_ITEMS.map((i) => (
-                <option key={i}>{i}</option>
+          <div>
+            <label>Product</label>
+            <select
+              value={form.productId}
+              onChange={(e) => {
+                const v = e.target.value;
+                // auto-select the first item of the product to save a click
+                const firstItem = productItems.find((i) => i.productId === v)?.name ?? "";
+                setForm({ ...form, productId: v, item: firstItem });
+              }}
+            >
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>
           <div>
-            <label>Quantity (tons)</label>
-            <input type="number" min="0.1" step="0.1" placeholder="0" value={numVal(form.qty)} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} required />
+            <label>Product Item</label>
+            <select
+              value={form.item}
+              onChange={(e) => setForm({ ...form, item: e.target.value })}
+              required
+            >
+              <option value="" disabled>
+                Select item…
+              </option>
+              {productItems
+                .filter((i) => i.productId === form.productId)
+                .map((i) => (
+                  <option key={i.id} value={i.name}>{i.name}</option>
+                ))}
+            </select>
           </div>
           <div>
-            <label>Buying Price / Ton</label>
+            <label>Quality</label>
+            <select
+              value={form.quality}
+              onChange={(e) => setForm({ ...form, quality: e.target.value })}
+            >
+              <option value="">Not specified</option>
+              {qualities.map((q) => (
+                <option key={q.id} value={q.name}>{q.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label>Unit</label>
+            <div className="flex gap-2">
+              {(["ton", "kg"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setForm({ ...form, unit: u })}
+                  className={`flex-1 border px-3 py-2 text-sm uppercase tracking-wider transition-colors ${
+                    form.unit === u
+                      ? "bg-black text-white border-black"
+                      : "border-neutral-300 text-neutral-500 hover:border-neutral-500"
+                  }`}
+                >
+                  {u === "ton" ? "Ton" : "Kg"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label>Quantity ({unitLabel})</label>
+            <input type="number" min="0.1" step="any" placeholder="0" value={numVal(form.qty)} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} required />
+          </div>
+          <div>
+            <label>Buying Price ({perUnitLabel})</label>
             <input type="number" min="0" placeholder="0" value={numVal(form.rate)} onChange={(e) => setForm({ ...form, rate: Number(e.target.value) })} required />
           </div>
           <div>
@@ -307,41 +399,73 @@ export default function PurchasesPage() {
             <label>Other Expenses</label>
             <input type="number" min="0" placeholder="0" value={numVal(form.otherCost)} onChange={(e) => setForm({ ...form, otherCost: Number(e.target.value) })} />
           </div>
-          <div className="col-span-2">
-            <label>Your Selling Price / Ton</label>
-            <input type="number" min="0" placeholder="0" value={numVal(form.sellRate)} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} />
-          </div>
-          <div className="col-span-2">
-            <label>Paid Now (advance to supplier)</label>
-            <input type="number" min="0" placeholder="0" value={numVal(form.paidNow)} onChange={(e) => setForm({ ...form, paidNow: Number(e.target.value) })} />
-            <p className="text-xs text-neutral-500 mt-1">
-              Leave 0 if you haven't paid anything yet — the rest shows up under Payment Dues.
-            </p>
+          <div className="col-span-2 grid grid-cols-2 gap-4">
+            <div>
+              <label>Your Selling Price ({perUnitLabel})</label>
+              <input type="number" min="0" placeholder="0" value={numVal(form.sellRate)} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label>Paid Now (to supplier)</label>
+              <input type="number" min="0" placeholder="0" value={numVal(form.paidNow)} onChange={(e) => setForm({ ...form, paidNow: Number(e.target.value) })} />
+            </div>
           </div>
           <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
-            <span className="text-xs uppercase tracking-widest text-neutral-500">
-              Total Factory Amount
-            </span>
-            <span className="font-medium tabular-nums">
-              {fmtMoney(form.qty * form.rate)}
-              <span className="text-neutral-400 text-xs ml-2">
-                {fmtQty(form.qty)} × {fmtMoney(form.rate)}
+            <div>
+              <span className="block text-xs uppercase tracking-widest text-neutral-500">
+                Total Amount
               </span>
+              <span className="block text-xs text-neutral-400 mt-1">
+                {form.qty || 0} {unitLabel} × {fmtMoney(form.rate)}{perUnitLabel}
+              </span>
+            </div>
+            <span className="font-medium tabular-nums text-right shrink-0">
+              {fmtMoney(totalSteel).replace("₨ ", "")}
+              <span className="text-neutral-400 text-xs ml-1">₨</span>
             </span>
           </div>
+          {form.sellRate > 0 && (
+            <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
+              <div>
+                <span className="block text-xs uppercase tracking-widest text-neutral-500">
+                  Expected Profit ({perUnitLabel})
+                </span>
+                <span className="block text-xs text-neutral-400 mt-1">
+                  sell {fmtMoney(form.sellRate)}{perUnitLabel} − cost {fmtMoney(landedPerUnit)}{perUnitLabel}
+                </span>
+              </div>
+              <span className={`font-medium tabular-nums text-right shrink-0 ${marginPerUnit < 0 ? "text-red-600" : ""}`}>
+                {marginPerUnit < 0 ? "− " : ""}{fmtMoney(Math.abs(marginPerUnit)).replace("₨ ", "")}
+                <span className="text-neutral-400 text-xs ml-1">₨</span>
+              </span>
+            </div>
+          )}
           <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
-            <span className="text-xs uppercase tracking-widest text-neutral-500">
-              Total Purchase Cost
-            </span>
-            <span className="font-medium tabular-nums">
-              {fmtMoney(form.qty * form.rate + Number(form.transport) + Number(form.otherCost))}
+            <div>
+              <span className="block text-xs uppercase tracking-widest text-neutral-500">
+                Actual Cost ({perUnitLabel})
+              </span>
+              <span className="block text-xs text-neutral-400 mt-1">
+                product + transport + expenses, per {unitLabel === "kg" ? "kg" : "ton"}
+              </span>
+            </div>
+            <span className="font-medium tabular-nums text-right shrink-0">
+              {fmtMoney(landedPerUnit).replace("₨ ", "")}
+              <span className="text-neutral-400 text-xs ml-1">₨</span>
             </span>
           </div>
-          <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
-            <span className="text-xs uppercase tracking-widest text-neutral-500">
-              Actual Cost / Ton
+          <div className="col-span-2 border border-dashed border-neutral-800 p-3 flex justify-between items-center bg-black text-white">
+            <div>
+              <span className="block text-xs uppercase tracking-widest text-neutral-400">
+                Remaining Due to Supplier
+              </span>
+              <span className="block text-xs text-neutral-500 mt-1">
+                total {fmtMoney(totalSteel)} − paid {fmtMoney(Number(form.paidNow) || 0)}
+              </span>
+            </div>
+            <span className="font-medium tabular-nums text-right shrink-0">
+              {fmtMoney(Math.max(0, totalSteel - Number(form.paidNow || 0))).replace("₨ ", "")}
+              <span className="text-neutral-500 text-xs ml-1">₨</span>
             </span>
-            <span className="font-medium tabular-nums">{fmtMoney(landedPerTon)}</span>
           </div>
           <div className="col-span-2 flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
@@ -366,12 +490,16 @@ export default function PurchasesPage() {
             >
               <span
                 className={`text-xs uppercase tracking-widest ${
-                  r.strong ? "" : "text-neutral-500"
+                  r.muted ? "text-neutral-400" : r.strong ? "" : "text-neutral-500"
                 }`}
               >
                 {r.label}
               </span>
-              <span className="tabular-nums text-right shrink-0 font-medium">
+              <span
+                className={`tabular-nums text-right shrink-0 ${
+                  r.muted ? "text-neutral-400" : "font-medium"
+                }`}
+              >
                 {r.value}
               </span>
             </div>
@@ -380,7 +508,7 @@ export default function PurchasesPage() {
         {selected && (
           <div className="flex justify-between items-center mt-4">
             <p className="text-xs text-neutral-500">
-              Profit / Ton = Your Selling Price − Actual Cost / Ton (buying price + transport & other expenses, per ton).
+              Profit = Your Selling Price − Actual Cost, shown per kg or per ton based on how this purchase was recorded.
             </p>
             <button
               onClick={() => removePurchase(selected)}
@@ -401,7 +529,7 @@ export default function PurchasesPage() {
         {(() => {
           const p = purchases.find((x) => x.id === payId);
           if (!p) return null;
-          const total = purchaseTotal(p);
+          const total = steelAmount(p); // mill due = steel only
           const paid = p.paid ?? 0;
           const rem = Math.max(0, total - paid);
           const history =
@@ -430,7 +558,7 @@ export default function PurchasesPage() {
                   <span className="tabular-nums">{fmtDate(p.date)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-neutral-200 text-sm">
-                  <span className="text-neutral-500">Total Purchase Cost</span>
+                  <span className="text-neutral-500">Total Payable to Mill</span>
                   <span className="tabular-nums">{fmtMoney(total)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-neutral-200 text-sm">

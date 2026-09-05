@@ -10,6 +10,18 @@ export const fmtCompact = (n: number) => {
 export const fmtQty = (n: number) =>
   (Math.round(n * 100) / 100).toLocaleString("en-US") + " t";
 
+// quantity stored internally in tons, shown in the purchase's chosen unit
+export const fmtQtyWithUnit = (qtyTons: number, unit?: "ton" | "kg") =>
+  unit === "kg"
+    ? Math.round(qtyTons * 1000).toLocaleString("en-US") + " kg"
+    : fmtQty(qtyTons);
+
+// rate stored internally per ton, shown per the purchase's chosen unit
+export const fmtRateWithUnit = (ratePerTon: number, unit?: "ton" | "kg") =>
+  unit === "kg"
+    ? "₨ " + Math.round(ratePerTon / 1000).toLocaleString("en-US") + " / kg"
+    : fmtMoney(ratePerTon) + " / ton";
+
 export const fmtDate = (iso: string) =>
   new Date(iso + "T00:00:00").toLocaleDateString("en-GB", {
     day: "2-digit",

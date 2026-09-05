@@ -13,13 +13,19 @@ import type {
   Expense,
   InventoryRow,
   Payment,
+  Product,
+  ProductItem,
   Purchase,
+  Quality,
   Sale,
   Supplier,
 } from "./types";
 
 export const purchaseTotal = (p: Purchase) =>
   p.qty * p.rate + p.transport + p.otherCost;
+
+// what we owe the MILL: steel amount only — transport & other costs are on us
+export const steelAmount = (p: Purchase) => p.qty * p.rate;
 
 export const saleTotal = (s: Sale) =>
   s.lines.reduce((sum, l) => sum + l.qty * l.rate, 0);
@@ -43,6 +49,9 @@ interface Store {
   sales: Sale[];
   payments: Payment[];
   expenses: Expense[];
+  products: Product[];
+  productItems: ProductItem[];
+  qualities: Quality[];
   inventory: InventoryRow[];
   byItem: Record<string, number>; // item -> weighted avg landed cost
   customerBalance: (id: string) => number; // + = owes us, - = advance
@@ -53,7 +62,14 @@ interface Store {
   deletePurchase: (id: string) => void;
   addSale: (s: Omit<Sale, "id" | "invoiceNo">) => void;
   addPayment: (p: Omit<Payment, "id">) => void;
+  addCustomer: (c: Omit<Customer, "id">) => string;
   addExpense: (e: Omit<Expense, "id">) => void;
+  addProduct: (name: string) => void;
+  addProductItem: (productId: string, name: string) => void;
+  addQuality: (name: string) => void;
+  deleteProduct: (id: string) => void;
+  deleteProductItem: (id: string) => void;
+  deleteQuality: (id: string) => void;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -63,11 +79,14 @@ const nextId = () => `x${seq++}`;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [suppliers] = useState<Supplier[]>(seed.suppliers);
-  const [customers] = useState<Customer[]>(seed.customers);
+  const [customers, setCustomers] = useState<Customer[]>(seed.customers);
   const [purchases, setPurchases] = useState<Purchase[]>(seed.purchases);
   const [sales, setSales] = useState<Sale[]>(seed.sales);
   const [payments, setPayments] = useState<Payment[]>(seed.payments);
   const [expenses, setExpenses] = useState<Expense[]>(seed.expenses);
+  const [products, setProducts] = useState<Product[]>(seed.products);
+  const [productItems, setProductItems] = useState<ProductItem[]>(seed.productItems);
+  const [qualities, setQualities] = useState<Quality[]>(seed.qualities);
 
   const { inventory, byItem } = useMemo(() => {
     const map: Record<
@@ -88,11 +107,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     const rows: InventoryRow[] = [];
     const itemMap: Record<string, number> = {};
+    // meta per item: product / quality / unit come from its purchases
+    const meta: Record<string, { product?: string; quality?: string; unit?: "ton" | "kg" }> = {};
+    for (const p of purchases) {
+      meta[p.item] = {
+        product: p.product || meta[p.item]?.product,
+        quality: p.quality || meta[p.item]?.quality,
+        unit: p.unit ?? meta[p.item]?.unit ?? "ton",
+      };
+    }
     for (const [item, m] of Object.entries(map)) {
       const landedAvg = m.pq > 0 ? m.cost / m.pq : 0;
       const stockQty = m.pq - m.sq;
       rows.push({
         item,
+        ...meta[item],
         purchasedQty: m.pq,
         soldQty: m.sq,
         stockQty,
@@ -119,10 +148,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const supplierBalance = useMemo(() => {
     const map: Record<string, number> = {};
-    // dues are tracked per purchase: total cost minus what was already paid
+    // dues are tracked per purchase: STEEL amount only minus what was already paid
+    // (transport & other costs are our own expense, never owed to the mill)
     for (const p of purchases)
       map[p.supplierId] =
-        (map[p.supplierId] ?? 0) + Math.max(0, purchaseTotal(p) - (p.paid ?? 0));
+        (map[p.supplierId] ?? 0) + Math.max(0, steelAmount(p) - (p.paid ?? 0));
     for (const p of payments)
       if (p.type === "supplier")
         map[p.partyId] = (map[p.partyId] ?? 0) - p.amount;
@@ -169,6 +199,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     sales,
     payments,
     expenses,
+    products,
+    productItems,
+    qualities,
     inventory,
     byItem,
     customerBalance,
@@ -186,7 +219,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSales((prev) => [{ ...s, id: nextId(), invoiceNo }, ...prev]);
     },
     addPayment: (p) => setPayments((prev) => [{ ...p, id: nextId() }, ...prev]),
+    addCustomer: (c) => {
+      const id = nextId();
+      setCustomers((prev) => [...prev, { ...c, id }]);
+      return id;
+    },
     addExpense: (e) => setExpenses((prev) => [{ ...e, id: nextId() }, ...prev]),
+    addProduct: (name) =>
+      setProducts((prev) =>
+        prev.some((p) => p.name.toLowerCase() === name.toLowerCase())
+          ? prev
+          : [...prev, { id: nextId(), name }]
+      ),
+    addProductItem: (productId, name) =>
+      setProductItems((prev) =>
+        prev.some((i) => i.productId === productId && i.name.toLowerCase() === name.toLowerCase())
+          ? prev
+          : [...prev, { id: nextId(), productId, name }]
+      ),
+    addQuality: (name) =>
+      setQualities((prev) =>
+        prev.some((q) => q.name.toLowerCase() === name.toLowerCase())
+          ? prev
+          : [...prev, { id: nextId(), name }]
+      ),
+    // deleting a product also removes all of its items
+    deleteProduct: (id) => {
+      setProductItems((prev) => prev.filter((i) => i.productId !== id));
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+    },
+    deleteProductItem: (id) =>
+      setProductItems((prev) => prev.filter((i) => i.id !== id)),
+    deleteQuality: (id) =>
+      setQualities((prev) => prev.filter((q) => q.id !== id)),
   };
 
   return <StoreCtx.Provider value={store}>{children}</StoreCtx.Provider>;

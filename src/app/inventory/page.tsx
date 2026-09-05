@@ -2,7 +2,7 @@
 
 import { useStore } from "@/lib/store";
 import { Page, PageTitle, Stagger, StaggerItem, StatCard } from "@/components/ui";
-import { fmtMoney, fmtQty } from "@/lib/format";
+import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit } from "@/lib/format";
 
 export default function InventoryPage() {
   const { inventory } = useStore();
@@ -13,7 +13,7 @@ export default function InventoryPage() {
     <Page>
       <PageTitle
         title="Inventory"
-        sub="Stock per item at weighted-average landed cost"
+        sub="Stock per product item at weighted-average actual cost"
       />
       <Stagger className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StaggerItem>
@@ -31,44 +31,53 @@ export default function InventoryPage() {
         <table>
           <thead>
             <tr>
-              <th>Item</th>
+              <th>Product</th>
+              <th>Product Item</th>
+              <th>Quality</th>
               <th className="num">Purchased</th>
               <th className="num">Sold</th>
               <th className="num">In stock</th>
-              <th className="num">Landed cost /t</th>
-              <th className="num">Avg sell /t</th>
+              <th className="num">Actual Cost</th>
+              <th className="num">Your Selling Price</th>
               <th className="num">Stock value</th>
               <th className="num">Status</th>
             </tr>
           </thead>
           <tbody>
-            {inventory.map((r) => (
-              <tr key={r.item}>
-                <td className="font-medium">{r.item}</td>
-                <td className="num">{fmtQty(r.purchasedQty)}</td>
-                <td className="num">{fmtQty(r.soldQty)}</td>
-                <td className="num font-medium">{fmtQty(r.stockQty)}</td>
-                <td className="num">{fmtMoney(r.landedAvg)}</td>
-                <td className="num text-neutral-500">{fmtMoney(r.avgSellRate)}</td>
-                <td className="num">{fmtMoney(r.stockValue)}</td>
-                <td className="num">
-                  {r.stockQty <= 5 ? (
-                    <span className="text-xs border border-black px-2 py-0.5">
-                      LOW
-                    </span>
-                  ) : (
-                    <span className="text-xs text-neutral-400 px-2 py-0.5">
-                      OK
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {inventory.map((r) => {
+              const unit = r.unit ?? "ton";
+              return (
+                <tr key={r.item}>
+                  <td className="text-neutral-500">{r.product || "—"}</td>
+                  <td className="font-medium">{r.item}</td>
+                  <td className="text-neutral-500">{r.quality || "—"}</td>
+                  <td className="num">{fmtQtyWithUnit(r.purchasedQty, unit)}</td>
+                  <td className="num">{fmtQtyWithUnit(r.soldQty, unit)}</td>
+                  <td className="num font-medium">{fmtQtyWithUnit(r.stockQty, unit)}</td>
+                  <td className="num">{fmtRateWithUnit(r.landedAvg, unit)}</td>
+                  <td className="num text-neutral-500">
+                    {r.avgSellRate > 0 ? fmtRateWithUnit(r.avgSellRate, unit) : "—"}
+                  </td>
+                  <td className="num">{fmtMoney(r.stockValue)}</td>
+                  <td className="num">
+                    {r.stockQty <= 5 ? (
+                      <span className="text-xs border border-black px-2 py-0.5">
+                        LOW
+                      </span>
+                    ) : (
+                      <span className="text-xs text-neutral-400 px-2 py-0.5">
+                        OK
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
       <p className="text-xs text-neutral-500 mt-3">
-        Landed cost = (mill price + transport + other costs) ÷ quantity, averaged across all purchases of the item.
+        Actual Cost = product + transport + other expenses, per kg or per ton based on how the purchases were recorded. Your Selling Price is the average of your recorded selling prices.
       </p>
     </Page>
   );
