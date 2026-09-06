@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
-import { Page, PageTitle, Modal, useToggle } from "@/components/ui";
-import { fmtMoney, fmtQty, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtDateTime } from "@/lib/format";
+import { Page, PageTitle, Modal, useToggle, EmptyState } from "@/components/ui";
+import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtDateTime, qtyUnitLabel, perUnitLabel } from "@/lib/format";
 import type { Purchase } from "@/lib/types";
 
 export default function PurchasesPage() {
@@ -21,7 +21,6 @@ export default function PurchasesPage() {
     productId: products[0]?.id ?? "",
     item: "",
     quality: "",
-    unit: "ton" as "ton" | "kg",
     qty: 0,
     rate: 0,
     transport: 0,
@@ -30,37 +29,28 @@ export default function PurchasesPage() {
     paidNow: 0,
   });
 
-  // entered quantity converted to tons so all math stays consistent
-  const qtyTons = form.unit === "kg" ? form.qty / 1000 : form.qty;
-  // entered rate converted to per-ton
-  const ratePerTon = form.unit === "kg" ? form.rate * 1000 : form.rate;
-
-  const landedPerTon = qtyTons > 0
-    ? (qtyTons * ratePerTon + form.transport + form.otherCost) / qtyTons
-    : 0;
-
-  // summary figures follow the selected unit (kg shows per-kg, tons shows per-ton)
-  const unitLabel = form.unit === "kg" ? "kg" : "tons";
-  const perUnitLabel = form.unit === "kg" ? "/ kg" : "/ ton";
-  const totalSteel = form.qty * form.rate;
-  const totalCost = totalSteel + form.transport + form.otherCost;
-  const landedPerUnit = form.unit === "kg"
-    ? form.qty > 0 ? totalCost / form.qty : 0
-    : landedPerTon;
+  // the unit comes from the selected product — never a manual pick
+  const productUnit =
+    products.find((p) => p.id === form.productId)?.unit ?? "";
+  const qtyLabel = qtyUnitLabel(productUnit);
+  const perLabel = perUnitLabel(productUnit);
+  const totalStock = form.qty * form.rate;
+  const totalCost = totalStock + form.transport + form.otherCost;
+  const landedPerUnit = form.qty > 0 ? totalCost / form.qty : 0;
   const marginPerUnit = form.sellRate > 0 ? form.sellRate - landedPerUnit : 0;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const { paidNow, unit, ...rest } = form;
+    const { paidNow, ...rest } = form;
     addPurchase({
       ...rest,
       product: products.find((p) => p.id === form.productId)?.name ?? "",
-      unit,
-      qty: qtyTons, // stored in tons
-      rate: ratePerTon, // stored per ton
+      unit: productUnit, // snapshot the product's unit at entry
+      qty: Number(rest.qty),
+      rate: Number(rest.rate),
       transport: Number(rest.transport),
       otherCost: Number(rest.otherCost),
-      sellRate: Number(rest.sellRate) * (unit === "kg" ? 1000 : 1), // stored per ton
+      sellRate: Number(rest.sellRate) || undefined,
       paid: Number(paidNow) || 0,
       lastPaidAt: rest.date,
       lastPaidAmount: Number(paidNow) || 0,
@@ -100,7 +90,7 @@ export default function PurchasesPage() {
   const removePurchase = (p: Purchase) => {
     if (
       window.confirm(
-        `Delete this purchase?\n\n${p.item} · ${fmtQty(p.qty)} tons · ${fmtDate(p.date)}\n\nAll its details and payment records will be permanently removed.`
+        `Delete this purchase?\n\n${p.item} · ${fmtQtyWithUnit(p.qty, p.unit)} · ${fmtDate(p.date)}\n\nAll its details and payment records will be permanently removed.`
       )
     ) {
       deletePurchase(p.id);
@@ -113,15 +103,13 @@ export default function PurchasesPage() {
   let detailRows: { label: string; value: string; strong?: boolean; muted?: boolean }[] = [];
   if (selected) {
     const total = purchaseTotal(selected);
-    const costPerTon = selected.qty > 0 ? total / selected.qty : 0;
-    const avgSellPerTon =
+    const costPerUnit = selected.qty > 0 ? total / selected.qty : 0;
+    const avgSellPerUnit =
       inventory.find((r) => r.item === selected.item)?.avgSellRate ?? 0;
     // profit is based on YOUR selling price; average market rate is only a fallback
-    const usedSell = selected.sellRate ?? avgSellPerTon;
-    const unitDiv = selected.unit === "kg" ? 1000 : 1;
-    const perUnit = selected.unit === "kg" ? " / kg" : " / ton";
-    const costPerUnit = costPerTon / unitDiv;
-    const profitPerUnit = (usedSell - costPerTon) / unitDiv;
+    const usedSell = selected.sellRate ?? avgSellPerUnit;
+    const perUnit = perUnitLabel(selected.unit);
+    const profitPerUnit = usedSell > 0 ? usedSell - costPerUnit : 0;
     const payable = steelAmount(selected);
     const paid = selected.paid ?? 0;
     const remaining = Math.max(0, payable - paid);
@@ -149,8 +137,8 @@ export default function PurchasesPage() {
   return (
     <Page>
       <PageTitle
-        title="Steel Purchases"
-        sub="Steel bought from suppliers, including delivery and other costs"
+        title="Purchases"
+        sub="Stock bought from suppliers, including delivery and other costs"
         action={
           <button className="btn-primary" onClick={onOpen}>
             + Add Purchase
@@ -178,14 +166,30 @@ export default function PurchasesPage() {
         ))}
       </div>
 
-      {tab === "all" && (
+      {tab === "all" &&
+        (purchases.length === 0 ? (
+          <EmptyState
+            emoji="🚚"
+            title="No purchases yet"
+            hint={
+              suppliers.length === 0
+                ? "Add a mill / supplier first, then your first purchase will feel right at home."
+                : "Record your first purchase — date, supplier and rate is all it takes."
+            }
+            action={
+              <button className="btn-primary" onClick={onOpen}>
+                + Add Purchase
+              </button>
+            }
+          />
+        ) : (
       <div className="border border-neutral-200 overflow-x-auto">
         <table>
           <thead>
             <tr>
               <th>Purchase Date</th>
               <th>Supplier</th>
-              <th>Product Type</th>
+              <th>Item</th>
               <th className="num">Quantity</th>
               <th className="num">Buying Price</th>
               <th className="num">Your Selling Price</th>
@@ -232,7 +236,7 @@ export default function PurchasesPage() {
           </tbody>
         </table>
       </div>
-      )}
+        ))}
 
       {tab === "dues" && (
         <div>
@@ -244,8 +248,13 @@ export default function PurchasesPage() {
           </div>
 
           {duePurchases.length === 0 ? (
-            <div className="border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500">
-              No pending dues — all purchases are fully paid.
+            <div className="border border-dashed border-neutral-300">
+              <EmptyState
+                emoji="🎉"
+                compact
+                title="No pending dues"
+                hint="Every purchase is fully paid — the mills are smiling today."
+              />
             </div>
           ) : (
             <div className="border border-neutral-200 overflow-x-auto">
@@ -366,29 +375,14 @@ export default function PurchasesPage() {
           </div>
           <div>
             <label>Unit</label>
-            <div className="flex gap-2">
-              {(["ton", "kg"] as const).map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  onClick={() => setForm({ ...form, unit: u })}
-                  className={`flex-1 border px-3 py-2 text-sm uppercase tracking-wider transition-colors ${
-                    form.unit === u
-                      ? "bg-black text-white border-black"
-                      : "border-neutral-300 text-neutral-500 hover:border-neutral-500"
-                  }`}
-                >
-                  {u === "ton" ? "Ton" : "Kg"}
-                </button>
-              ))}
-            </div>
+            <input value={qtyUnitLabel(productUnit) || "—"} disabled className="!bg-neutral-50 !text-neutral-600" />
           </div>
           <div>
-            <label>Quantity ({unitLabel})</label>
+            <label>Quantity ({qtyLabel})</label>
             <input type="number" min="0.1" step="any" placeholder="0" value={numVal(form.qty)} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} required />
           </div>
           <div>
-            <label>Buying Price ({perUnitLabel})</label>
+            <label>Buying Price ({perLabel})</label>
             <input type="number" min="0" placeholder="0" value={numVal(form.rate)} onChange={(e) => setForm({ ...form, rate: Number(e.target.value) })} required />
           </div>
           <div>
@@ -401,7 +395,7 @@ export default function PurchasesPage() {
           </div>
           <div className="col-span-2 grid grid-cols-2 gap-4">
             <div>
-              <label>Your Selling Price ({perUnitLabel})</label>
+              <label>Your Selling Price ({perLabel})</label>
               <input type="number" min="0" placeholder="0" value={numVal(form.sellRate)} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} />
             </div>
             <div>
@@ -415,11 +409,11 @@ export default function PurchasesPage() {
                 Total Amount
               </span>
               <span className="block text-xs text-neutral-400 mt-1">
-                {form.qty || 0} {unitLabel} × {fmtMoney(form.rate)}{perUnitLabel}
+                {form.qty || 0} {qtyLabel} × {fmtMoney(form.rate)}{perLabel}
               </span>
             </div>
             <span className="font-medium tabular-nums text-right shrink-0">
-              {fmtMoney(totalSteel).replace("₨ ", "")}
+              {fmtMoney(totalStock).replace("₨ ", "")}
               <span className="text-neutral-400 text-xs ml-1">₨</span>
             </span>
           </div>
@@ -427,10 +421,10 @@ export default function PurchasesPage() {
             <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
               <div>
                 <span className="block text-xs uppercase tracking-widest text-neutral-500">
-                  Expected Profit ({perUnitLabel})
+                  Expected Profit ({perLabel})
                 </span>
                 <span className="block text-xs text-neutral-400 mt-1">
-                  sell {fmtMoney(form.sellRate)}{perUnitLabel} − cost {fmtMoney(landedPerUnit)}{perUnitLabel}
+                  sell {fmtMoney(form.sellRate)}{perLabel} − cost {fmtMoney(landedPerUnit)}{perLabel}
                 </span>
               </div>
               <span className={`font-medium tabular-nums text-right shrink-0 ${marginPerUnit < 0 ? "text-red-600" : ""}`}>
@@ -442,10 +436,10 @@ export default function PurchasesPage() {
           <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
             <div>
               <span className="block text-xs uppercase tracking-widest text-neutral-500">
-                Actual Cost ({perUnitLabel})
+                Actual Cost ({perLabel})
               </span>
               <span className="block text-xs text-neutral-400 mt-1">
-                product + transport + expenses, per {unitLabel === "kg" ? "kg" : "ton"}
+                product + transport + expenses, per {qtyUnitLabel(productUnit) || "unit"}
               </span>
             </div>
             <span className="font-medium tabular-nums text-right shrink-0">
@@ -459,11 +453,11 @@ export default function PurchasesPage() {
                 Remaining Due to Supplier
               </span>
               <span className="block text-xs text-neutral-500 mt-1">
-                total {fmtMoney(totalSteel)} − paid {fmtMoney(Number(form.paidNow) || 0)}
+                total {fmtMoney(totalStock)} − paid {fmtMoney(Number(form.paidNow) || 0)}
               </span>
             </div>
             <span className="font-medium tabular-nums text-right shrink-0">
-              {fmtMoney(Math.max(0, totalSteel - Number(form.paidNow || 0))).replace("₨ ", "")}
+              {fmtMoney(Math.max(0, totalStock - Number(form.paidNow || 0))).replace("₨ ", "")}
               <span className="text-neutral-500 text-xs ml-1">₨</span>
             </span>
           </div>
@@ -508,7 +502,7 @@ export default function PurchasesPage() {
         {selected && (
           <div className="flex justify-between items-center mt-4">
             <p className="text-xs text-neutral-500">
-              Profit = Your Selling Price − Actual Cost, shown per kg or per ton based on how this purchase was recorded.
+              Profit = Your Selling Price − Actual Cost, shown per unit of this product&apos;s unit of measure.
             </p>
             <button
               onClick={() => removePurchase(selected)}

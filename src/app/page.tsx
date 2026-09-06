@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { useStore, saleTotal, steelAmount } from "@/lib/store";
+import { useStore, saleGrandTotal } from "@/lib/store";
 import { Page, Stagger, StaggerItem, CountUp } from "@/components/ui";
-import { fmtMoney, fmtCompact, fmtDate } from "@/lib/format";
+import { fmtCompact, qtyUnitLabel } from "@/lib/format";
 
 type Period = "today" | "monthly" | "yearly";
 
@@ -28,9 +27,6 @@ const inPeriod = (date: string, period: Period) => {
   return d.getFullYear() === now.getFullYear();
 };
 
-const sortBy = <T,>(arr: T[], key: (x: T) => number) =>
-  [...arr].sort((a, b) => key(b) - key(a));
-
 /* ---------- shared primitives (monochrome, 8px radius) ---------- */
 
 function Card({
@@ -50,56 +46,6 @@ function Card({
     >
       {children}
     </div>
-  );
-}
-
-/* Section header used inside every card: uppercase, 500–600, letter-spaced */
-function SectionTitle({
-  children,
-  action,
-  dark = false,
-}: {
-  children: React.ReactNode;
-  action?: React.ReactNode;
-  dark?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-neutral-100">
-      <h2
-        className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${
-          dark ? "text-neutral-400" : "text-neutral-500"
-        }`}
-      >
-        {children}
-      </h2>
-      {action}
-    </div>
-  );
-}
-
-function ViewAll({ href }: { href: string }) {
-  return (
-    <Link
-      href={href}
-      className="text-xs font-medium underline underline-offset-4 text-neutral-500 hover:text-neutral-900 transition-colors"
-    >
-      View all →
-    </Link>
-  );
-}
-
-/* status badges — muted green/red, only for state */
-function Badge({ tone, children }: { tone: "pos" | "neg"; children: React.ReactNode }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md border ${
-        tone === "pos"
-          ? "text-[#3f6212] bg-[#f7f7f2] border-[#e5e5e0]"
-          : "text-[#b3261e] bg-[#fdf6f5] border-[#f0e0de]"
-      }`}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -175,13 +121,60 @@ function Kpi({
 
 export default function DashboardPage() {
   const {
-    stats, customers, customerBalance, suppliers, supplierBalance,
-    sales, payments, expenses, byItem, purchases,
+    customers,
+    suppliers,
+    sales,
+    payments,
+    expenses,
+    inventory,
+    byItem,
+    lineUnitCost,
+    products,
+    customerBalance,
+    supplierBalance,
   } = useStore();
+
   const [period, setPeriod] = useState<Period>("monthly");
+  const [productId, setProductId] = useState<string>("all");
+  const product = products.find((p) => p.id === productId) ?? null;
+  const isAll = !product;
+
+  const day = useMemo(
+    () =>
+      new Date().toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+    []
+  );
+
+  /* item -> product category map (drives which sales belong to a product) */
+  const productOf = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const r of inventory) if (r.product) m[r.item] = r.product;
+    return m;
+  }, [inventory]);
+
+  /* scope inventory + sales down to the selected product */
+  const invRows = useMemo(
+    () => (isAll ? inventory : inventory.filter((r) => r.product === product!.name)),
+    [inventory, isAll, product]
+  );
+  const saleRows = useMemo(
+    () =>
+      isAll
+        ? sales
+        : sales.filter((s) => s.lines.some((l) => productOf[l.item] === product!.name)),
+    [sales, isAll, product, productOf]
+  );
 
   /* period-scoped sales / payments / expenses */
-  const pSales = useMemo(() => sales.filter((x) => inPeriod(x.date, period)), [sales, period]);
+  const pSales = useMemo(
+    () => saleRows.filter((x) => inPeriod(x.date, period)),
+    [saleRows, period]
+  );
   const pPayments = useMemo(
     () => payments.filter((x) => inPeriod(x.date, period)),
     [payments, period]
@@ -196,77 +189,65 @@ export default function DashboardPage() {
     .reduce((a, p) => a + p.amount, 0);
 
   const salesTotal = useMemo(
-    () => pSales.reduce((a, s) => a + saleTotal(s), 0),
+    () => pSales.reduce((a, s) => a + saleGrandTotal(s), 0),
     [pSales]
   );
 
-  /* gross profit for the period + what was collected */
+  /* gross profit for the period */
   const grossProfit = useMemo(() => {
     let gp = 0;
-    for (const s of pSales)
-      for (const l of s.lines) gp += l.qty * (l.rate - (byItem[l.item] ?? 0));
+    for (const s of pSales) {
+      for (const [i, l] of s.lines.entries())
+        gp += l.qty * (l.rate - (lineUnitCost(s.id, i) || byItem[l.item] || 0));
+    }
     return gp;
-  }, [pSales, byItem]);
+  }, [pSales, lineUnitCost, byItem]);
 
-  /* net profit for the period after shop expenses */
-  const netProfit = useMemo(() => {
+  /* net profit for the period after shop expenses — whole-depot only,
+     since expenses can't be attributed to a single product */
+  const profitValue = useMemo(() => {
+    if (!isAll) return grossProfit;
     const totalExpenses = pExpenses.reduce((a, e) => a + e.amount, 0);
     return grossProfit - totalExpenses;
-  }, [grossProfit, pExpenses]);
+  }, [isAll, grossProfit, pExpenses]);
 
-  /* outstanding money — what customers owe us + what we owe mills */
+  const stockQty = invRows.reduce((a, r) => a + r.stockQty, 0);
+  const stockValue = invRows.reduce((a, r) => a + r.stockValue, 0);
+  const itemCount = invRows.length;
+  const inStockItems = invRows.filter((r) => r.stockQty > 0).length;
+  /* all products can have different units (kg vs bag) — only a single product has a meaningful qty sum */
+  const unitSuffix = isAll ? "" : qtyUnitLabel(product?.unit);
+  const stockCard = isAll
+    ? { value: inStockItems, suffix: "", hint: `${itemCount} tracked item${itemCount === 1 ? "" : "s"} in the depot` }
+    : { value: stockQty, suffix: unitSuffix ? ` ${unitSuffix}` : "", hint: `Worth ${fmtCompact(stockValue)}` };
+
+  /* dues are whole-depot figures — what customers owe us + what we owe mills */
   const dues = useMemo(() => {
     let receivable = 0;
-    for (const c of customers) receivable += Math.max(0, customerBalance(c.id));
+    let owingCustomers = 0;
+    for (const c of customers) {
+      const bal = customerBalance(c.id);
+      if (bal > 0) {
+        receivable += bal;
+        owingCustomers += 1;
+      }
+    }
     let payable = 0;
-    for (const s of suppliers) payable += Math.max(0, supplierBalance(s.id));
-    return { receivable, payable };
+    let owingMills = 0;
+    for (const s of suppliers) {
+      const bal = supplierBalance(s.id);
+      if (bal > 0) {
+        payable += bal;
+        owingMills += 1;
+      }
+    }
+    return { receivable, payable, owingCustomers, owingMills };
   }, [customers, suppliers, customerBalance, supplierBalance]);
-
-  /* top five customers by what they owe us */
-  const topCustomers = sortBy(customers, (c) => Math.max(0, customerBalance(c.id)))
-    .slice(0, 5)
-    .map((c) => ({ c, bal: Math.max(0, customerBalance(c.id)) }));
-
-  /* top five mills we still owe */
-  const topSuppliers = sortBy(suppliers, (s) => Math.max(0, supplierBalance(s.id)))
-    .slice(0, 5)
-    .map((s) => ({ s, bal: Math.max(0, supplierBalance(s.id)) }));
-
-  /* latest five purchases with supplier name and payment status */
-  const recentPurchases = [...purchases]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 5)
-    .map((p) => ({
-      p,
-      supplier: suppliers.find((s) => s.id === p.supplierId)?.name ?? "—",
-      due: Math.max(0, steelAmount(p) - (p.paid ?? 0)),
-    }));
-
-  const day = useMemo(
-    () =>
-      new Date().toLocaleDateString("en-GB", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }),
-    []
-  );
-
-  const quickActions: { label: string; href: string }[] = [
-    { label: "Add Purchase", href: "/purchases" },
-    { label: "Add Product", href: "/products" },
-    { label: "Create Invoice", href: "/sales" },
-    { label: "Add Customer", href: "/customers" },
-    { label: "Record Payment", href: "/payments" },
-    { label: "View Reports", href: "/reports" },
-  ];
 
   return (
     <Page>
       {/* ===== Header ===== */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-[22px] sm:text-2xl font-semibold tracking-tight">
             Good Morning, M. Kashif
@@ -292,9 +273,6 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {/* notifications */}
-    
-
           {/* profile */}
           <div className="flex items-center gap-2.5 pl-1 pr-3 py-1.5 rounded-lg bg-white border border-neutral-200">
             <div className="w-7 h-7 rounded-full bg-[#171717] text-white flex items-center justify-center text-[10px] font-semibold tracking-wide">
@@ -308,156 +286,109 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ===== Row 1 — Key figures ===== */}
-      <Stagger className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3.5 mb-6">
+      {/* ===== Product picker ===== */}
+      <div className="mb-8 flex flex-wrap items-end gap-x-6 gap-y-3">
+        <div className="w-full sm:w-80">
+          <label htmlFor="product-filter">Data for</label>
+          <select
+            id="product-filter"
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            className="w-full bg-white !py-2.5"
+          >
+            <option value="all">All Products — entire depot</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-neutral-500 pb-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-black" />
+          {isAll
+            ? products.length === 0
+              ? "No products yet — add them under Products"
+              : `${products.length} product${products.length === 1 ? "" : "s"} · ${itemCount} tracked item${itemCount === 1 ? "" : "s"}`
+            : `${product!.name} · ${qtyUnitLabel(product?.unit) || "unit"} · ${itemCount} item${itemCount === 1 ? "" : "s"} under it`}
+        </div>
+      </div>
+
+      {/* ===== Stats — the dashboard is stats only ===== */}
+      <Stagger className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
         <StaggerItem>
           <Kpi
             dark
-            label="Total Stock"
-            value={stats.stockQty}
+            label={isAll ? "Items in Stock" : "Stock in Hand"}
+            value={stockCard.value}
             money={false}
-            suffix=" t"
-            hint={`Worth ${fmtCompact(stats.stockValue)}`}
+            suffix={stockCard.suffix}
+            hint={stockCard.hint}
           />
         </StaggerItem>
         <StaggerItem>
-          <Kpi label="Stock Worth" value={stats.stockValue} hint="At average landed cost" />
+          <Kpi label="Stock Worth" value={stockValue} hint="At average landed cost" />
         </StaggerItem>
         <StaggerItem>
-          <Kpi label="Total Sales" value={salesTotal} hint={`${fmtCompact(moneyIn)} collected in period`} />
+          <Kpi
+            label="Sales"
+            value={salesTotal}
+            hint={
+              isAll
+                ? `${fmtCompact(moneyIn)} collected in period`
+                : `${pSales.length} invoice${pSales.length === 1 ? "" : "s"} in period`
+            }
+          />
         </StaggerItem>
         <StaggerItem>
-          <Kpi label="Profit" value={netProfit} hint={`Gross ${fmtCompact(grossProfit)}`} />
+          <Kpi
+            label="Profit"
+            value={profitValue}
+            hint={
+              isAll
+                ? `Gross ${fmtCompact(grossProfit)}`
+                : salesTotal > 0
+                  ? `${Math.round((grossProfit / salesTotal) * 100)}% gross margin`
+                  : "No sales in period yet"
+            }
+          />
         </StaggerItem>
         <StaggerItem>
-          <Card className="p-5 h-full flex flex-col justify-between gap-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
-              Payments Due
-            </p>
-            <div>
-              <div className="text-[#171717]">
-                <KpiNumber value={dues.receivable + dues.payable} />
-              </div>
-              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
-                <span className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#b3261e]" />
-                  Customers {fmtCompact(dues.receivable)}
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#b3261e]" />
-                  Mills {fmtCompact(dues.payable)}
-                </span>
-              </div>
-            </div>
-          </Card>
+          <Kpi
+            label="Payment Dues"
+            value={dues.receivable + dues.payable}
+            hint="Customers + mills combined"
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <Kpi
+            label="Customer Payment Dues"
+            value={dues.receivable}
+            hint={
+              dues.owingCustomers === 0
+                ? "No one owes you right now"
+                : `${dues.owingCustomers} customer${dues.owingCustomers === 1 ? "" : "s"} owe you`
+            }
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <Kpi
+            label="Mills Payment Dues"
+            value={dues.payable}
+            hint={
+              dues.owingMills === 0
+                ? "All mills paid up"
+                : `${dues.owingMills} mill${dues.owingMills === 1 ? "" : "s"} to pay`
+            }
+          />
         </StaggerItem>
       </Stagger>
 
-      {/* ===== Row 2 — Customer balances + Mill dues ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <Card>
-          <SectionTitle action={<ViewAll href="/customers" />}>
-            Top Customer Balances
-          </SectionTitle>
-          {topCustomers.length === 0 ? (
-            <p className="text-sm text-neutral-400 py-8 text-center">
-              No outstanding customer balances.
-            </p>
-          ) : (
-            <ul className="divide-y divide-neutral-100">
-              {topCustomers.map(({ c, bal }) => (
-                <li key={c.id} className="flex items-center justify-between gap-4 px-5 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[#171717] truncate">{c.name}</p>
-                    <p className="text-xs text-neutral-500 truncate">{c.shop}</p>
-                  </div>
-                  <Badge tone="neg">{fmtMoney(bal)} due</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card>
-          <SectionTitle action={<ViewAll href="/suppliers" />}>
-            Outstanding to Mills
-          </SectionTitle>
-          {topSuppliers.length === 0 ? (
-            <p className="text-sm text-neutral-400 py-8 text-center">
-              Nothing owed to mills right now.
-            </p>
-          ) : (
-            <ul className="divide-y divide-neutral-100">
-              {topSuppliers.map(({ s, bal }) => (
-                <li key={s.id} className="flex items-center justify-between gap-4 px-5 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[#171717] truncate">{s.name}</p>
-                    <p className="text-xs text-neutral-500 truncate">{s.mill}</p>
-                  </div>
-                  <Badge tone="neg">{fmtMoney(bal)} due</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      {/* ===== Row 3 — Recent Purchases + Quick Actions ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <Card className="lg:col-span-3">
-          <SectionTitle action={<ViewAll href="/purchases" />}>Recent Purchases</SectionTitle>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th className="!pl-5">Date</th>
-                  <th>Supplier</th>
-                  <th>Product</th>
-                  <th className="num">Amount</th>
-                  <th className="num !pr-5">Payment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentPurchases.map(({ p, supplier, due }) => (
-                  <tr key={p.id}>
-                    <td className="whitespace-nowrap text-xs text-neutral-500 !pl-5">
-                      {fmtDate(p.date)}
-                    </td>
-                    <td className="font-medium">{supplier}</td>
-                    <td className="text-neutral-600">{p.item}</td>
-                    <td className="num">{fmtMoney(p.qty * p.rate + p.transport + p.otherCost)}</td>
-                    <td className="num !pr-5">
-                      {due > 0 ? (
-                        <Badge tone="neg">Due {fmtMoney(due)}</Badge>
-                      ) : (
-                        <Badge tone="pos">Paid</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <SectionTitle>Quick Actions</SectionTitle>
-          <div className="p-4 grid grid-cols-2 gap-2.5">
-            {quickActions.map((a) => (
-              <Link
-                key={a.label}
-                href={a.href}
-                className="group flex items-center justify-between gap-2 px-3.5 py-3 rounded-lg border border-neutral-200 text-sm font-medium text-[#171717] hover:bg-[#171717] hover:text-white hover:border-[#171717] transition-colors duration-150"
-              >
-                {a.label}
-                <span className="text-neutral-400 group-hover:text-white transition-colors text-xs">
-                  →
-                </span>
-              </Link>
-            ))}
-          </div>
-        </Card>
-      </div>
+      <p className="text-xs text-neutral-500 mt-6">
+        {isAll
+          ? "Showing the whole depot — pick a product above to zoom its stock, sales and profit."
+          : `Stock, sales and profit are for ${product!.name}. Payment dues always cover the whole depot.`}
+      </p>
     </Page>
   );
 }

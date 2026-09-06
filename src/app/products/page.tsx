@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useStore } from "@/lib/store";
 import type { Product, ProductItem, Quality } from "@/lib/types";
-import { Page, PageTitle, Stagger, StaggerItem } from "@/components/ui";
+import { Page, PageTitle, Stagger, StaggerItem, EmptyState } from "@/components/ui";
 
 function AddForm({
   placeholder,
@@ -65,6 +65,81 @@ function ListCard({
   );
 }
 
+const UNIT_OPTIONS = ["kg", "bag", "piece", "dozen", "box", "roll", "sack"];
+
+/* add-product form with an extra Unit field (name + unit are both required) */
+function ProductAddForm({
+  onAdd,
+}: {
+  onAdd: (name: string, unit: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("kg");
+  return (
+    <form
+      className="flex gap-2 mt-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!name.trim() || !unit.trim()) return;
+        onAdd(name.trim(), unit.trim());
+        setName("");
+      }}
+    >
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="New product name (e.g. Rebar)"
+        className="flex-1"
+      />
+      <input
+        value={unit}
+        onChange={(e) => setUnit(e.target.value)}
+        list="product-units"
+        placeholder="Unit"
+        className="!w-24 shrink-0"
+      />
+      <datalist id="product-units">
+        {UNIT_OPTIONS.map((u) => (
+          <option key={u} value={u} />
+        ))}
+      </datalist>
+      <button type="submit" className="btn-primary !py-2 !px-4 text-xs">
+        + Add
+      </button>
+    </form>
+  );
+}
+
+/* inline unit editor used on each product row */
+function UnitSelect({
+  unit,
+  onChange,
+  dark = false,
+}: {
+  unit: string;
+  onChange: (unit: string) => void;
+  dark?: boolean;
+}) {
+  return (
+    <select
+      value={unit}
+      onChange={(e) => onChange(e.target.value)}
+      title="Unit of measure"
+      className={`!w-20 !py-1 !px-1.5 text-[11px] shrink-0 ml-2 border rounded ${
+        dark
+          ? "!bg-black !text-white !border-neutral-600"
+          : "!bg-transparent !border-neutral-300 text-neutral-500"
+      }`}
+    >
+      {UNIT_OPTIONS.map((u) => (
+        <option key={u} value={u}>
+          {u}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function ProductsPage() {
   const {
     products,
@@ -73,6 +148,7 @@ export default function ProductsPage() {
     purchases,
     sales,
     addProduct,
+    updateProduct,
     addProductItem,
     addQuality,
     deleteProduct,
@@ -146,6 +222,14 @@ export default function ProductsPage() {
             count={products.length}
           >
             <div className="space-y-1">
+              {products.length === 0 && (
+                <EmptyState
+                  emoji="🧱"
+                  compact
+                  title="No products yet"
+                  hint="Type a product name below — Rebar, Cement, anything you trade."
+                />
+              )}
               {products.map((p) => (
                 <div
                   key={p.id}
@@ -170,6 +254,11 @@ export default function ProductsPage() {
                       {productItems.filter((i) => i.productId === p.id).length} items
                     </span>
                   </button>
+                  <UnitSelect
+                    unit={p.unit || "kg"}
+                    onChange={(u) => updateProduct(p.id, { unit: u })}
+                    dark={selectedProduct === p.id}
+                  />
                   <button
                     onClick={() => removeProduct(p)}
                     aria-label={`Delete ${p.name}`}
@@ -185,7 +274,7 @@ export default function ProductsPage() {
                 </div>
               ))}
             </div>
-            <AddForm placeholder="New product name (e.g. Rebar)" onAdd={addProduct} />
+            <ProductAddForm onAdd={addProduct} />
           </ListCard>
         </StaggerItem>
 
@@ -236,9 +325,16 @@ export default function ProductsPage() {
                   </motion.div>
                 ))}
               {productItems.filter((i) => i.productId === selectedProduct).length === 0 && (
-                <p className="text-xs text-neutral-400 py-4 text-center">
-                  No items yet for this product.
-                </p>
+                <EmptyState
+                  emoji={selectedProduct ? "📦" : "👈"}
+                  compact
+                  title={selectedProduct ? "No items yet" : "No product picked yet"}
+                  hint={
+                    selectedProduct
+                      ? "Give this product its first item below."
+                      : "Add a product first — its items will live here."
+                  }
+                />
               )}
             </div>
             <AddForm
@@ -256,6 +352,14 @@ export default function ProductsPage() {
             count={qualities.length}
           >
             <div className="space-y-1">
+              {qualities.length === 0 && (
+                <EmptyState
+                  emoji="✨"
+                  compact
+                  title="No qualities yet"
+                  hint="Grade A, Grade B — label the grades of your items below."
+                />
+              )}
               {qualities.map((q) => (
                 <motion.div
                   key={q.id}

@@ -3,6 +3,7 @@ export type PaymentType = "customer" | "supplier";
 export interface Product {
   id: string;
   name: string;
+  unit: string; // e.g. "kg", "bag" — every quantity of this product is measured in it
 }
 
 export interface ProductItem {
@@ -37,12 +38,12 @@ export interface Purchase {
   product?: string; // product name (e.g. "Rebar")
   item: string; // product item name (e.g. "Rebar 10mm")
   quality?: string; // quality name (e.g. "Grade A")
-  qty: number; // always stored in TONS internally (kg entries are divided by 1000)
-  unit?: "ton" | "kg"; // unit the user entered with; defaults to "ton"
-  rate: number; // buying price PER TON (kg entries are multiplied by 1000)
+  qty: number; // in the product's own unit (kg, bag, …)
+  unit: string; // product's unit, snapshot at entry (e.g. "kg", "bag")
+  rate: number; // buying price PER UNIT of that unit
   transport: number;
   otherCost: number;
-  sellRate?: number; // your selling price per ton (planned)
+  sellRate?: number; // your selling price per unit (planned)
   paid?: number; // amount already paid to the supplier
   lastPaidAt?: string; // date of the most recent payment (ISO yyyy-mm-dd)
   lastPaidAmount?: number; // amount paid in that most recent payment
@@ -51,8 +52,11 @@ export interface Purchase {
 
 export interface SaleLine {
   item: string;
-  qty: number;
-  rate: number; // selling price per ton
+  qty: number; // in the product's own unit (kg, bag, …)
+  rate: number; // selling price per unit of that unit
+  unit: string; // product's unit, shown on the invoice
+  supplierId?: string; // which mill/supplier's stock this line came from
+  purchaseId?: string; // the purchase lot this line was fulfilled from (exact source)
 }
 
 export interface Sale {
@@ -61,6 +65,8 @@ export interface Sale {
   date: string;
   customerId: string;
   lines: SaleLine[];
+  discountPct?: number; // invoice-wide discount percent (0 if absent)
+  taxPct?: number; // invoice-wide sales tax percent (0 if absent)
 }
 
 export interface Payment {
@@ -70,6 +76,7 @@ export interface Payment {
   partyId: string;
   amount: number;
   method: "Cash" | "Bank" | "Cheque";
+  saleId?: string; // the specific invoice this payment settles (customer payments)
   note?: string;
 }
 
@@ -85,12 +92,29 @@ export interface InventoryRow {
   item: string;
   product?: string; // product category (e.g. Rebar)
   quality?: string; // quality grade, if set on purchases
-  unit?: "ton" | "kg"; // display unit from the item's purchases
+  unit?: string; // product's unit (kg, bag, …), derived from the product
+  supplierId?: string; // if set, this row is only that source's stock (else all sources)
   purchasedQty: number;
   soldQty: number;
   stockQty: number;
   totalCost: number;
   landedAvg: number;
   stockValue: number;
-  avgSellRate: number;
+  avgSellRate: number; // realized average selling price (from sales)
+  sellRate?: number; // recorded "Your Selling Price" on purchases (the invoice price)
+}
+
+// remaining stock of a single purchase lot, per source
+export interface StockLot {
+  purchaseId: string;
+  item: string;
+  product?: string;
+  quality?: string;
+  supplierId: string;
+  unit: string;
+  remainingQty: number; // purchased qty minus qty already sold from this lot
+  landedPerUnit: number; // actual landed cost per unit for this lot
+  sellPrice?: number; // the "Your Selling Price" recorded on the purchase (per unit)
+  purchasedAt: string;
+  supplierName: string;
 }

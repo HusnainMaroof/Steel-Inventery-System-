@@ -126,19 +126,30 @@ export function Modal({
   title,
   children,
   size = "md",
+  full = false,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: "md" | "2xl" | "3xl";
+  size?: "md" | "2xl" | "3xl" | "4xl" | "6xl";
+  full?: boolean;
 }) {
-  const maxW = size === "3xl" ? "max-w-3xl" : size === "2xl" ? "max-w-2xl" : "max-w-lg";
+  const maxW =
+    size === "6xl"
+      ? "max-w-6xl"
+      : size === "4xl"
+        ? "max-w-4xl"
+        : size === "3xl"
+          ? "max-w-3xl"
+          : size === "2xl"
+            ? "max-w-2xl"
+            : "max-w-lg"; // default "md" keeps the historical width
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -148,13 +159,21 @@ export function Modal({
             onClick={onClose}
           />
           <motion.div
-            className={`relative bg-white border border-neutral-900 w-full ${maxW} max-h-[92vh] overflow-y-auto p-4 sm:p-6`}
+            className={`relative bg-white border border-neutral-900 w-full ${
+              full
+                ? "max-w-[90vw] xl:max-w-6xl w-[90vw] h-[92vh] sm:h-[88vh] flex flex-col overflow-hidden"
+                : `${maxW} max-h-[94vh] sm:max-h-[92vh] overflow-y-auto`
+            } p-5 sm:p-7`}
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ type: "spring", stiffness: 380, damping: 30 }}
           >
-            <div className="flex items-center justify-between mb-5">
+            <div
+              className={`flex items-center justify-between ${
+                full ? "mb-5 shrink-0" : "mb-6"
+              }`}
+            >
               <h2 className="text-sm tracking-widest uppercase">{title}</h2>
               <button
                 onClick={onClose}
@@ -164,7 +183,13 @@ export function Modal({
                 ✕
               </button>
             </div>
-            {children}
+            {full ? (
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {children}
+              </div>
+            ) : (
+              children
+            )}
           </motion.div>
         </motion.div>
       )}
@@ -177,11 +202,13 @@ export function StatCard({
   label,
   value,
   money = true,
+  unit = "",
   invert = false,
 }: {
   label: string;
   value: number;
   money?: boolean;
+  unit?: string;
   invert?: boolean;
 }) {
   return (
@@ -199,7 +226,7 @@ export function StatCard({
         {money ? (
           <CountUp value={value} prefix="₨ " compact />
         ) : (
-          <CountUp value={value} suffix=" t" />
+          <CountUp value={value} suffix={unit ? ` ${unit}` : ""} />
         )}
       </div>
     </motion.div>
@@ -238,4 +265,49 @@ export function BarChart({
 export function useToggle(initial = false) {
   const [open, setOpen] = useState(initial);
   return { open, setOpen, onOpen: () => setOpen(true), onClose: () => setOpen(false) };
+}
+
+/* Cute empty state — a floating emoji + friendly words for when a list has
+   nothing in it yet. Use `compact` inside cards / small list areas. */
+export function EmptyState({
+  emoji = "🌱",
+  title,
+  hint,
+  action,
+  compact = false,
+}: {
+  emoji?: string;
+  title: string;
+  hint?: string;
+  action?: ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className={`flex flex-col items-center justify-center text-center px-4 ${
+        compact ? "py-8" : "py-14"
+      }`}
+    >
+      <motion.span
+        aria-hidden
+        className={compact ? "text-3xl leading-none" : "text-5xl leading-none"}
+        animate={{ y: [0, -6, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+      >
+        {emoji}
+      </motion.span>
+      <p className={`font-medium text-neutral-800 ${compact ? "text-sm mt-3" : "mt-4"}`}>
+        {title}
+      </p>
+      {hint && (
+        <p className="text-xs text-neutral-400 mt-1.5 max-w-xs leading-relaxed">
+          {hint}
+        </p>
+      )}
+      {action && <div className="mt-4">{action}</div>}
+    </motion.div>
+  );
 }

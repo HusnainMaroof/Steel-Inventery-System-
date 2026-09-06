@@ -7,20 +7,26 @@ export const fmtCompact = (n: number) => {
   return fmtMoney(n);
 };
 
-export const fmtQty = (n: number) =>
-  (Math.round(n * 100) / 100).toLocaleString("en-US") + " t";
+// plural quantity label — "kg" stays, count nouns pluralize ("bag" → "bags")
+export const qtyUnitLabel = (u?: string) =>
+  u === "bag" || u === "sack" || u === "box" || u === "roll" || u === "dozen"
+    ? `${u}s`
+    : u ?? "";
 
-// quantity stored internally in tons, shown in the purchase's chosen unit
-export const fmtQtyWithUnit = (qtyTons: number, unit?: "ton" | "kg") =>
-  unit === "kg"
-    ? Math.round(qtyTons * 1000).toLocaleString("en-US") + " kg"
-    : fmtQty(qtyTons);
+// quantities are stored and shown directly in the product's own unit (kg, bag, …)
+export const fmtQtyWithUnit = (qty: number, unit?: string) => {
+  const n = (Math.round(qty * 100) / 100).toLocaleString("en-US");
+  return unit ? `${n} ${qtyUnitLabel(unit)}` : n;
+};
 
-// rate stored internally per ton, shown per the purchase's chosen unit
-export const fmtRateWithUnit = (ratePerTon: number, unit?: "ton" | "kg") =>
-  unit === "kg"
-    ? "₨ " + Math.round(ratePerTon / 1000).toLocaleString("en-US") + " / kg"
-    : fmtMoney(ratePerTon) + " / ton";
+// rate is stored per product unit; shown per that unit when known
+export const fmtRateWithUnit = (rate: number, unit?: string) => {
+  const money = fmtMoney(rate);
+  return unit ? `${money} / ${unit}` : money;
+};
+
+// "per unit" label — always singular ("/ bag", "/ kg")
+export const perUnitLabel = (u?: string) => (u ? ` / ${u}` : "");
 
 export const fmtDate = (iso: string) =>
   new Date(iso + "T00:00:00").toLocaleDateString("en-GB", {
@@ -28,7 +34,6 @@ export const fmtDate = (iso: string) =>
     month: "short",
     year: "numeric",
   });
-
 // for full ISO timestamps — shows date and clock time
 export const fmtDateTime = (iso: string) => {
   const d = new Date(iso);

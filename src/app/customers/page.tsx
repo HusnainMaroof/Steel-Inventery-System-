@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useStore, saleTotal } from "@/lib/store";
-import { Page, PageTitle, Modal, useToggle } from "@/components/ui";
+import { useStore, saleGrandTotal } from "@/lib/store";
+import { Page, PageTitle, Modal, useToggle, EmptyState } from "@/components/ui";
+import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import { fmtMoney, fmtDate } from "@/lib/format";
 
 export default function CustomersPage() {
-  const { customers, sales, payments, customerBalance, addCustomer } = useStore();
+  const { customers, sales, payments, customerBalance, salePaid, addCustomer } = useStore();
   const [selected, setSelected] = useState<string | null>(null);
+  const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const { open, onOpen, onClose } = useToggle();
   const [form, setForm] = useState({ name: "", shop: "", phone: "" });
 
@@ -28,7 +30,7 @@ export default function CustomersPage() {
   const custPayments = cust
     ? payments.filter((p) => p.type === "customer" && p.partyId === cust.id)
     : [];
-  const custTotalSales = custSales.reduce((a, s) => a + saleTotal(s), 0);
+  const custTotalSales = custSales.reduce((a, s) => a + saleGrandTotal(s), 0);
   const custTotalReceived = custPayments.reduce((a, p) => a + p.amount, 0);
 
   // same wording as the dashboard: "owes ₨X" / "advance ₨X"
@@ -50,6 +52,18 @@ export default function CustomersPage() {
           </button>
         }
       />
+      {customers.length === 0 ? (
+        <EmptyState
+          emoji="🤝"
+          title="No customers yet"
+          hint="Add the shops you sell to — their balances and ledgers will live here."
+          action={
+            <button className="btn-primary" onClick={onOpen}>
+              + New Customer
+            </button>
+          }
+        />
+      ) : (
       <div className="border border-neutral-200 overflow-x-auto">
         <table>
           <thead>
@@ -67,7 +81,7 @@ export default function CustomersPage() {
             {customers.map((c) => {
               const invoiced = sales
                 .filter((s) => s.customerId === c.id)
-                .reduce((a, s) => a + saleTotal(s), 0);
+                .reduce((a, s) => a + saleGrandTotal(s), 0);
               const received = payments
                 .filter((p) => p.type === "customer" && p.partyId === c.id)
                 .reduce((a, p) => a + p.amount, 0);
@@ -94,6 +108,7 @@ export default function CustomersPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       <Modal open={!!cust} onClose={() => setSelected(null)} title={cust ? `${cust.name} · Ledger` : "Customer"} size="2xl">
         {cust && (
@@ -132,19 +147,41 @@ export default function CustomersPage() {
                     <th>Invoice</th>
                     <th>Date</th>
                     <th className="num">Total</th>
+                    <th className="num">Paid</th>
+                    <th className="num">Due</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
                   {custSales.length === 0 && (
-                    <tr><td colSpan={3} className="text-neutral-400">No invoices yet.</td></tr>
+                    <tr><td colSpan={6} className="text-neutral-400">🧾 No invoices yet — this ledger is patiently waiting.</td></tr>
                   )}
-                  {custSales.map((s) => (
-                    <tr key={s.id}>
-                      <td className="font-medium">{s.invoiceNo}</td>
-                      <td className="whitespace-nowrap">{fmtDate(s.date)}</td>
-                      <td className="num">{fmtMoney(saleTotal(s))}</td>
-                    </tr>
-                  ))}
+                  {custSales.map((s) => {
+                    const total = saleGrandTotal(s);
+                    const paid = salePaid(s.id);
+                    const due = Math.max(0, total - paid);
+                    return (
+                      <tr key={s.id}>
+                        <td className="font-medium">{s.invoiceNo}</td>
+                        <td className="whitespace-nowrap">{fmtDate(s.date)}</td>
+                        <td className="num">{fmtMoney(total)}</td>
+                        <td className="num text-neutral-500">{fmtMoney(paid)}</td>
+                        <td className={`num font-medium ${due > 0 ? "text-[#a12b1f]" : "text-neutral-400"}`}>
+                          {fmtMoney(due)}
+                        </td>
+                        <td className="num whitespace-nowrap">
+                          {due > 0 && (
+                            <button
+                              onClick={() => setPaySaleId(s.id)}
+                              className="text-xs underline underline-offset-2 hover:text-neutral-500"
+                            >
+                              Receive
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -164,7 +201,7 @@ export default function CustomersPage() {
                 </thead>
                 <tbody>
                   {custPayments.length === 0 && (
-                    <tr><td colSpan={3} className="text-neutral-400">No payments yet.</td></tr>
+                    <tr><td colSpan={3} className="text-neutral-400">💸 No payments yet — they&apos;ll show up here.</td></tr>
                   )}
                   {custPayments.map((p) => (
                     <tr key={p.id}>
@@ -217,6 +254,8 @@ export default function CustomersPage() {
           </div>
         </form>
       </Modal>
+
+      <ReceivePaymentModal saleId={paySaleId} onClose={() => setPaySaleId(null)} />
     </Page>
   );
 }

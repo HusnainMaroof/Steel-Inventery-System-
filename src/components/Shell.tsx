@@ -135,9 +135,6 @@ function MobileNav({
                   </div>
                   {navLinks(() => setDrawerOpen(false))}
                 </div>
-                <div className="text-[11px] text-neutral-400 uppercase tracking-widest whitespace-nowrap pt-6">
-                  Mock data · FY 2026
-                </div>
               </div>
             </motion.aside>
           </>
@@ -246,11 +243,6 @@ export default function Shell({ children }: { children: ReactNode }) {
             </div>
             {navLinks()}
           </div>
-          {!collapsed && (
-            <div className="text-[11px] text-neutral-400 uppercase tracking-widest whitespace-nowrap">
-              Mock data · FY 2026
-            </div>
-          )}
         </motion.aside>
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>

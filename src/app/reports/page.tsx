@@ -1,19 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useStore, purchaseTotal, saleTotal } from "@/lib/store";
-import { Page, PageTitle, StatCard, Stagger, StaggerItem } from "@/components/ui";
-import { fmtMoney, fmtQty, monthKey, monthLabel } from "@/lib/format";
+import Link from "next/link";
+import { useStore, purchaseTotal, saleGrandTotal } from "@/lib/store";
+import { Page, PageTitle, StatCard, Stagger, StaggerItem, EmptyState } from "@/components/ui";
+import { fmtMoney, monthKey, monthLabel } from "@/lib/format";
 import CreditDebit from "@/components/CreditDebit";
 
 type Row = {
   key: string; label: string;
-  purchasedQty: number; purchaseSpend: number;
-  soldQty: number; revenue: number; expenses: number; profit: number;
+  purchaseSpend: number;
+  revenue: number; expenses: number; profit: number;
 };
 
 export default function ReportsPage() {
-  const { purchases, sales, expenses, inventory, byItem, customers, customerBalance, suppliers, supplierBalance } =
+  const { purchases, sales, expenses, inventory, byItem, lineUnitCost, customers, customerBalance, suppliers, supplierBalance } =
     useStore();
   const [tab, setTab] = useState<"monthly" | "yearly">("monthly");
   const year = "2026";
@@ -37,36 +38,37 @@ export default function ReportsPage() {
         const ss = sales.filter((s) => monthKey(s.date) === k);
         const es = expenses.filter((e) => monthKey(e.date) === k);
         const purchaseSpend = ps.reduce((a, p) => a + purchaseTotal(p), 0);
-        const revenue = ss.reduce((a, s) => a + saleTotal(s), 0);
+        const revenue = ss.reduce((a, s) => a + saleGrandTotal(s), 0);
         const cogs = ss.reduce(
-          (a, s) => a + s.lines.reduce((b, l) => b + l.qty * (byItem[l.item] ?? 0), 0),
+          (a, s) =>
+            a +
+            s.lines.reduce(
+              (b, l, i) => b + l.qty * (lineUnitCost(s.id, i) || byItem[l.item] || 0),
+              0
+            ),
           0
         );
         const exp = es.reduce((a, e) => a + e.amount, 0);
         return {
           key: k,
           label: monthLabel(k),
-          purchasedQty: ps.reduce((a, p) => a + p.qty, 0),
           purchaseSpend,
-          soldQty: ss.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0),
           revenue,
           expenses: exp,
           profit: revenue - cogs - exp,
         };
       }),
-    [months, purchases, sales, expenses, byItem]
+    [months, purchases, sales, expenses, byItem, lineUnitCost]
   );
 
   const yearTotals = rows.reduce(
     (a, r) => ({
-      purchasedQty: a.purchasedQty + r.purchasedQty,
       purchaseSpend: a.purchaseSpend + r.purchaseSpend,
-      soldQty: a.soldQty + r.soldQty,
       revenue: a.revenue + r.revenue,
       expenses: a.expenses + r.expenses,
       profit: a.profit + r.profit,
     }),
-    { purchasedQty: 0, purchaseSpend: 0, soldQty: 0, revenue: 0, expenses: 0, profit: 0 }
+    { purchaseSpend: 0, revenue: 0, expenses: 0, profit: 0 }
   );
 
   const receivable = customers.reduce((a, c) => a + Math.max(0, customerBalance(c.id)), 0);
@@ -86,10 +88,23 @@ export default function ReportsPage() {
       />
       <Stagger className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <StaggerItem><StatCard label={`Money in (${year})`} value={yearTotals.revenue} /></StaggerItem>
-        <StaggerItem><StatCard label="Spent on steel" value={-yearTotals.purchaseSpend} /></StaggerItem>
+        <StaggerItem><StatCard label="Spent on stock" value={-yearTotals.purchaseSpend} /></StaggerItem>
         <StaggerItem><StatCard label="Profit left" value={yearTotals.profit} /></StaggerItem>
         <StaggerItem><StatCard label="Stock in shop (worth)" value={inventory.reduce((a, r) => a + r.stockValue, 0)} /></StaggerItem>
       </Stagger>
+      {months.length === 0 ? (
+        <EmptyState
+          emoji="🗓️"
+          title="Nothing to report yet"
+          hint="Reports fill themselves in as you record purchases, sales and expenses."
+          action={
+            <Link href="/purchases" className="btn-primary">
+              + Add Purchase
+            </Link>
+          }
+        />
+      ) : (
+      <>
       <div className="mb-10">
         <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mb-4">
           Credit &amp; Debit — who owes who
@@ -101,8 +116,8 @@ export default function ReportsPage() {
           <table>
             <thead>
               <tr>
-                <th>Month</th><th className="num">Steel in (t)</th><th className="num">Spent</th>
-                <th className="num">Steel out (t)</th><th className="num">Money in</th>
+                <th>Month</th><th className="num">Spent</th>
+                <th className="num">Money in</th>
                 <th className="num">Expenses</th><th className="num">Profit</th>
               </tr>
             </thead>
@@ -110,9 +125,7 @@ export default function ReportsPage() {
               {rows.map((r) => (
                 <tr key={r.key}>
                   <td className="font-medium">{r.label}</td>
-                  <td className="num">{fmtQty(r.purchasedQty)}</td>
                   <td className="num">{fmtMoney(r.purchaseSpend)}</td>
-                  <td className="num">{fmtQty(r.soldQty)}</td>
                   <td className="num">{fmtMoney(r.revenue)}</td>
                   <td className="num">{fmtMoney(r.expenses)}</td>
                   <td className="num font-medium">{fmtMoney(r.profit)}</td>
@@ -120,9 +133,7 @@ export default function ReportsPage() {
               ))}
               <tr className="font-medium bg-neutral-50">
                 <td>Year {year}</td>
-                <td className="num">{fmtQty(yearTotals.purchasedQty)}</td>
                 <td className="num">{fmtMoney(yearTotals.purchaseSpend)}</td>
-                <td className="num">{fmtQty(yearTotals.soldQty)}</td>
                 <td className="num">{fmtMoney(yearTotals.revenue)}</td>
                 <td className="num">{fmtMoney(yearTotals.expenses)}</td>
                 <td className="num">{fmtMoney(yearTotals.profit)}</td>
@@ -135,9 +146,7 @@ export default function ReportsPage() {
           <table>
             <thead><tr><th>Summary — Year {year}</th><th className="num">Amount</th></tr></thead>
             <tbody>
-              <tr><td>Steel bought in the year</td><td className="num">{fmtQty(yearTotals.purchasedQty)} t</td></tr>
-              <tr><td>Money spent on steel (incl. transport)</td><td className="num">{fmtMoney(yearTotals.purchaseSpend)}</td></tr>
-              <tr><td>Steel sold in the year</td><td className="num">{fmtQty(yearTotals.soldQty)} t</td></tr>
+              <tr><td>Money spent on stock (incl. transport)</td><td className="num">{fmtMoney(yearTotals.purchaseSpend)}</td></tr>
               <tr><td>Money received from sales</td><td className="num">{fmtMoney(yearTotals.revenue)}</td></tr>
               <tr><td>Shop expenses</td><td className="num">{fmtMoney(yearTotals.expenses)}</td></tr>
               <tr className="font-medium"><td>Profit left</td><td className="num">{fmtMoney(yearTotals.profit)}</td></tr>
@@ -146,6 +155,8 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+      )}
+      </>
       )}
     </Page>
   );

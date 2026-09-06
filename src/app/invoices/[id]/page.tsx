@@ -3,20 +3,28 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useStore, saleTotal } from "@/lib/store";
-import { fmtMoney, fmtDate } from "@/lib/format";
+import { useStore, saleTotal, saleDiscount, saleTax, saleGrandTotal } from "@/lib/store";
+import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate } from "@/lib/format";
 
 export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
-  const { sales, customers, byItem } = useStore();
+  const { sales, customers, suppliers, byItem, lineUnitCost } = useStore();
   const sale = sales.find((s) => s.id === params.id);
 
   if (!sale)
     return <p className="p-8 text-neutral-500">Invoice not found.</p>;
 
+  const supplierName = (id?: string) =>
+    (id && suppliers.find((s) => s.id === id)?.name) || "";
   const cust = customers.find((c) => c.id === sale.customerId);
-  const total = saleTotal(sale);
-  const cogs = sale.lines.reduce((a, l) => a + l.qty * (byItem[l.item] ?? 0), 0);
+  const subtotal = saleTotal(sale);
+  const disc = saleDiscount(sale);
+  const tax = saleTax(sale);
+  const grand = saleGrandTotal(sale);
+  const cogs = sale.lines.reduce(
+    (a, l, i) => a + l.qty * (lineUnitCost(sale.id, i) || byItem[l.item] || 0),
+    0
+  );
 
   return (
     <div className="p-4 sm:p-8">
@@ -59,8 +67,8 @@ export default function InvoiceDetailPage() {
             <tr>
               <th>#</th>
               <th>Item</th>
-              <th className="num">Qty (t)</th>
-              <th className="num">Rate / ton</th>
+              <th className="num">Qty</th>
+              <th className="num">Rate</th>
               <th className="num">Amount</th>
             </tr>
           </thead>
@@ -68,9 +76,16 @@ export default function InvoiceDetailPage() {
             {sale.lines.map((l, i) => (
               <tr key={i}>
                 <td className="text-neutral-400">{i + 1}</td>
-                <td>{l.item}</td>
-                <td className="num">{l.qty.toFixed(2)}</td>
-                <td className="num">{fmtMoney(l.rate)}</td>
+                <td>
+                  {l.item}
+                  {supplierName(l.supplierId) ? (
+                    <span className="block text-[10px] text-neutral-400">
+                      Source: {supplierName(l.supplierId)}
+                    </span>
+                  ) : null}
+                </td>
+                <td className="num">{fmtQtyWithUnit(l.qty, l.unit)}</td>
+                <td className="num">{fmtRateWithUnit(l.rate, l.unit)}</td>
                 <td className="num font-medium">{fmtMoney(l.qty * l.rate)}</td>
               </tr>
             ))}
@@ -81,15 +96,28 @@ export default function InvoiceDetailPage() {
           <div className="w-full sm:w-64">
             <div className="flex justify-between py-2 border-b border-neutral-300">
               <span className="text-neutral-500 text-sm">Subtotal</span>
-              <span className="tabular-nums">{fmtMoney(total)}</span>
+              <span className="tabular-nums">{fmtMoney(subtotal)}</span>
             </div>
-            <div className="flex justify-between py-2 border-b border-neutral-300">
-              <span className="text-neutral-500 text-sm">Tax</span>
-              <span className="tabular-nums text-neutral-500">—</span>
-            </div>
+            {disc > 0 && (
+              <div className="flex justify-between py-2 border-b border-neutral-300">
+                <span className="text-neutral-500 text-sm">Discount ({(sale.discountPct ?? 0)}%)</span>
+                <span className="tabular-nums text-neutral-500">− {fmtMoney(disc)}</span>
+              </div>
+            )}
+            {tax > 0 ? (
+              <div className="flex justify-between py-2 border-b border-neutral-300">
+                <span className="text-neutral-500 text-sm">Tax ({(sale.taxPct ?? 0)}%)</span>
+                <span className="tabular-nums">{fmtMoney(tax)}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between py-2 border-b border-neutral-300">
+                <span className="text-neutral-500 text-sm">Tax</span>
+                <span className="tabular-nums text-neutral-500">—</span>
+              </div>
+            )}
             <div className="flex justify-between py-3 bg-black text-white px-3 mt-2">
               <span className="text-xs uppercase tracking-widest">Total</span>
-              <span className="tabular-nums font-medium">{fmtMoney(total)}</span>
+              <span className="tabular-nums font-medium">{fmtMoney(grand)}</span>
             </div>
           </div>
         </div>

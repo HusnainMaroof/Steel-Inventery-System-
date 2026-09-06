@@ -4,7 +4,7 @@ import { use } from "react";
 import { motion } from "framer-motion";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
 import { Page, PageTitle } from "@/components/ui";
-import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate } from "@/lib/format";
+import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, perUnitLabel } from "@/lib/format";
 
 export default function PurchaseDetailPage({
   params,
@@ -28,12 +28,10 @@ export default function PurchaseDetailPage({
   }
 
   const total = purchaseTotal(purchase);
-  const costPerTon = purchase.qty > 0 ? total / purchase.qty : 0;
-  const sellPerTon = purchase.sellRate ?? inv?.avgSellRate ?? 0;
-  const unitDiv = purchase.unit === "kg" ? 1000 : 1;
-  const perUnit = purchase.unit === "kg" ? " / kg" : " / ton";
-  const costPerUnit = costPerTon / unitDiv;
-  const profitPerUnit = (sellPerTon - costPerTon) / unitDiv;
+  const costPerUnit = purchase.qty > 0 ? total / purchase.qty : 0;
+  const sellPerUnit = purchase.sellRate ?? inv?.avgSellRate ?? 0;
+  const perUnit = perUnitLabel(purchase.unit);
+  const profitPerUnit = sellPerUnit > 0 ? sellPerUnit - costPerUnit : 0;
 
   const payable = steelAmount(purchase);
   const paid = purchase.paid ?? 0;
@@ -93,7 +91,7 @@ export default function PurchaseDetailPage({
       </motion.div>
 
       <p className="text-xs text-neutral-500 mt-4 max-w-xl">
-        Profit = Your Selling Price − Actual Cost, shown per kg or per ton based on how this purchase was recorded.
+        Profit = Your Selling Price − Actual Cost, shown per unit of this product&apos;s unit of measure.
       </p>
     </Page>
   );

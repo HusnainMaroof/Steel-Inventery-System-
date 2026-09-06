@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { useStore, saleTotal } from "@/lib/store";
-import { Page, PageTitle, BarChart, StatCard, Stagger, StaggerItem } from "@/components/ui";
+import { useStore, saleGrandTotal } from "@/lib/store";
+import { Page, PageTitle, BarChart, StatCard, Stagger, StaggerItem, EmptyState } from "@/components/ui";
 import { fmtMoney, monthKey, monthLabel } from "@/lib/format";
 import CreditDebit from "@/components/CreditDebit";
 
@@ -34,7 +35,7 @@ function Row({
 }
 
 export default function ProfitLossPage() {
-  const { sales, byItem, expenses, purchases } = useStore();
+  const { sales, byItem, lineUnitCost, expenses, purchases } = useStore();
   const [mode, setMode] = useState<"all" | "month">("all");
   const [month, setMonth] = useState(
     Object.keys(
@@ -46,9 +47,14 @@ export default function ProfitLossPage() {
     const ss = mode === "month" ? sales.filter((s) => monthKey(s.date) === month) : sales;
     const es = mode === "month" ? expenses.filter((e) => monthKey(e.date) === month) : expenses;
     const ps = mode === "month" ? purchases.filter((p) => monthKey(p.date) === month) : purchases;
-    const revenue = ss.reduce((a, s) => a + saleTotal(s), 0);
+    const revenue = ss.reduce((a, s) => a + saleGrandTotal(s), 0);
     const cogs = ss.reduce(
-      (a, s) => a + s.lines.reduce((b, l) => b + l.qty * (byItem[l.item] ?? 0), 0),
+      (a, s) =>
+        a +
+        s.lines.reduce(
+          (b, l, i) => b + l.qty * (lineUnitCost(s.id, i) || byItem[l.item] || 0),
+          0
+        ),
       0
     );
     const totalExpenses = es.reduce((a, e) => a + e.amount, 0);
@@ -57,7 +63,7 @@ export default function ProfitLossPage() {
       0
     );
     return { revenue, cogs, totalExpenses, purchaseSpend, grossProfit: revenue - cogs, net: revenue - cogs - totalExpenses };
-  }, [mode, month, sales, expenses, purchases, byItem]);
+  }, [mode, month, sales, expenses, purchases, byItem, lineUnitCost]);
 
   const months = useMemo(() => {
     const keys = Array.from(
@@ -66,15 +72,20 @@ export default function ProfitLossPage() {
     return keys.map((k) => {
       const ss = sales.filter((s) => monthKey(s.date) === k);
       const es = expenses.filter((e) => monthKey(e.date) === k);
-      const revenue = ss.reduce((a, s) => a + saleTotal(s), 0);
+      const revenue = ss.reduce((a, s) => a + saleGrandTotal(s), 0);
       const cogs = ss.reduce(
-        (a, s) => a + s.lines.reduce((b, l) => b + l.qty * (byItem[l.item] ?? 0), 0),
+        (a, s) =>
+          a +
+          s.lines.reduce(
+            (b, l, i) => b + l.qty * (lineUnitCost(s.id, i) || byItem[l.item] || 0),
+            0
+          ),
         0
       );
       const exp = es.reduce((a, e) => a + e.amount, 0);
       return { label: k, revenue, net: revenue - cogs - exp };
     });
-  }, [sales, expenses, byItem]);
+  }, [sales, expenses, byItem, lineUnitCost]);
 
   return (
     <Page>
@@ -110,10 +121,23 @@ export default function ProfitLossPage() {
         }
       />
 
+      {sales.length === 0 && expenses.length === 0 && purchases.length === 0 ? (
+        <EmptyState
+          emoji="📈"
+          title="No numbers to crunch yet"
+          hint="Profit & Loss wakes up as soon as you record your first purchase or sale."
+          action={
+            <Link href="/purchases" className="btn-primary">
+              + Add Purchase
+            </Link>
+          }
+        />
+      ) : (
+      <>
       {/* the four big numbers, same style as the dashboard */}
       <Stagger className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
         <StaggerItem><StatCard label="Money in (sales)" value={scoped.revenue} /></StaggerItem>
-        <StaggerItem><StatCard label="Steel cost (what you sold)" value={-scoped.cogs} /></StaggerItem>
+        <StaggerItem><StatCard label="Cost of stock sold" value={-scoped.cogs} /></StaggerItem>
         <StaggerItem><StatCard label="Shop expenses" value={-scoped.totalExpenses} /></StaggerItem>
         <StaggerItem><StatCard label="Profit left" value={scoped.net} /></StaggerItem>
       </Stagger>
@@ -121,8 +145,8 @@ export default function ProfitLossPage() {
       <div className="grid md:grid-cols-2 gap-10">
         <div>
           <Row label="Money in — from sales" value={scoped.revenue} />
-          <Row label="Less — cost of the steel you sold" value={scoped.cogs} minus />
-          <Row label="Profit from steel" value={scoped.grossProfit} strong />
+          <Row label="Less — cost of the stock you sold" value={scoped.cogs} minus />
+          <Row label="Profit from trading" value={scoped.grossProfit} strong />
           <Row label="Less — shop expenses" value={scoped.totalExpenses} minus />
           <div className="flex justify-between py-4 mt-2 bg-black text-white px-4 -mx-4">
             <span className="text-xs uppercase tracking-widest">Profit left</span>
@@ -173,6 +197,8 @@ export default function ProfitLossPage() {
           </table>
         </div>
       </div>
+      </>
+      )}
     </Page>
   );
 }

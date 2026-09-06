@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useStore, purchaseTotal } from "@/lib/store";
-import { Page, PageTitle, Modal, useToggle } from "@/components/ui";
+import { Page, PageTitle, Modal, useToggle, EmptyState } from "@/components/ui";
 import { fmtMoney } from "@/lib/format";
 
 export default function SuppliersPage() {
@@ -33,6 +33,18 @@ export default function SuppliersPage() {
           </button>
         }
       />
+      {suppliers.length === 0 ? (
+        <EmptyState
+          emoji="🏭"
+          title="No mills / suppliers yet"
+          hint="Add the mills and suppliers you buy stock from — track every load and what you owe them."
+          action={
+            <button className="btn-primary" onClick={onOpen}>
+              + New Supplier
+            </button>
+          }
+        />
+      ) : (
       <div className="border border-neutral-200 overflow-x-auto">
         <table>
           <thead>
@@ -71,6 +83,7 @@ export default function SuppliersPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       <Modal open={open} onClose={onClose} title="New Supplier">
         <form onSubmit={save} className="grid gap-4">
