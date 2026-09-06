@@ -95,13 +95,12 @@ function MobileNav({
           </svg>
         </button>
         <Link href="/" className="text-sm font-medium tracking-tight whitespace-nowrap">
-          STEEL <span className="text-neutral-400">AND LEDGER</span>
+          New Ittifaq <span className="text-neutral-400">Steel Depot</span>
         </Link>
         <span className="w-9" aria-hidden />
       </header>
 
       <main className="p-4">{children}</main>
-
       {/* drawer + scrim */}
       <AnimatePresence>
         {drawerOpen && (
@@ -124,7 +123,7 @@ function MobileNav({
                 <div>
                   <div className="flex items-center justify-between mb-8 min-h-8">
                     <div className="text-lg font-medium tracking-tight whitespace-nowrap">
-                      STEEL <span className="text-neutral-400">AND LEDGER</span>
+                      New Ittifaq <span className="text-neutral-400">Steel Depot</span>
                     </div>
                     <button
                       onClick={() => setDrawerOpen(false)}
@@ -218,20 +217,20 @@ export default function Shell({ children }: { children: ReactNode }) {
         <motion.aside
           animate={{ width: collapsed ? 68 : 248 }}
           transition={{ type: "spring", stiffness: 260, damping: 30 }}
-          className="shrink-0 border-r border-neutral-200 flex flex-col justify-between py-6 px-4 sticky top-0 h-screen no-print overflow-hidden"
+          className="shrink-0 bg-white border-r border-neutral-200 flex flex-col justify-between py-6 px-4 sticky top-0 h-screen no-print overflow-hidden"
         >
           <div>
             <div className="flex items-center justify-between mb-10 min-h-8">
               <Link href="/" className="block leading-tight min-w-0">
                 {collapsed ? (
-                  <span className="text-lg font-medium tracking-tight">S/L</span>
+                  <span className="text-lg font-medium tracking-tight">N/I</span>
                 ) : (
                   <>
                     <div className="text-lg font-medium tracking-tight whitespace-nowrap">
-                      STEEL <span className="text-neutral-400">AND LEDGER</span>
+                      New Ittifaq <span className="text-neutral-400">Steel Depot</span>
                     </div>
                     <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 mt-1">
-                      Steel Factory
+                      Steel Depot & Cement Agency
                     </div>
                   </>
                 )}
@@ -253,7 +252,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             </div>
           )}
         </motion.aside>
-        <main className="flex-1 min-w-0 p-6 lg:p-8">{children}</main>
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
 
       {/* ===== Mobile layout (below md) ===== */}
