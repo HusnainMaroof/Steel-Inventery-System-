@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
-import { Page, PageTitle, Modal, useToggle, EmptyState } from "@/components/ui";
+import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
 import type { Sale } from "@/lib/types";
@@ -15,7 +15,7 @@ type DateGroup = {
 };
 
 export default function CustomersPage() {
-  const { customers, sales, salePaid, addCustomer } = useStore();
+  const { customers, sales, salePaid, addCustomer, deleteCustomer } = useStore();
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const { open, onOpen, onClose } = useToggle();
   const [form, setForm] = useState({ name: "", shop: "", phone: "" });
@@ -27,6 +27,14 @@ export default function CustomersPage() {
 
   const [viewCustomerId, setViewCustomerId] = useState<string | null>(null);
   const viewCustomer = customers.find((c) => c.id === viewCustomerId);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; shop: string; phone: string } | null>(null);
+
+  const confirmDeleteCustomer = () => {
+    if (!deleteTarget) return;
+    deleteCustomer(deleteTarget.id);
+    if (viewCustomerId === deleteTarget.id) setViewCustomerId(null);
+    setDeleteTarget(null);
+  };
 
   const customerDateGroups: DateGroup[] = useMemo(() => {
     if (!viewCustomerId) return [];
@@ -141,7 +149,7 @@ export default function CustomersPage() {
           {/* desktop / tablet */}
           <div className="hidden sm:block border border-neutral-200 bg-white overflow-x-auto">
             {/* header */}
-            <div className="grid grid-cols-[1.5fr_1fr_1fr_150px] gap-4 px-5 py-2.5 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200">
+            <div className="grid grid-cols-[1.5fr_1fr_1fr_190px] gap-4 px-5 py-2.5 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200">
               <span>Customer</span>
               <span>Shop / Area</span>
               <span>Phone</span>
@@ -151,17 +159,23 @@ export default function CustomersPage() {
             {rows.map((c) => (
               <div
                 key={c.id}
-                className="grid grid-cols-[1.5fr_1fr_1fr_150px] gap-4 px-5 py-3.5 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 transition-colors items-center"
+                className="grid grid-cols-[1.5fr_1fr_1fr_190px] gap-4 px-5 py-3.5 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 transition-colors items-center"
               >
                 <span className="font-semibold text-xs text-neutral-900 truncate">{c.name}</span>
                 <span className="text-xs text-neutral-500 truncate">{c.shop || "—"}</span>
                 <span className="text-xs text-neutral-600 tabular-nums">{c.phone || "—"}</span>
-                <span className="text-right">
+                <span className="text-right whitespace-nowrap">
                   <button
                     onClick={() => setViewCustomerId(c.id)}
                     className="btn-primary !py-1.5 !px-4 text-xs"
                   >
                     View History
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(c)}
+                    className="btn-ghost !py-1.5 !px-3 text-xs text-red-600 hover:!bg-red-50 ml-2"
+                  >
+                    Delete
                   </button>
                 </span>
               </div>
@@ -185,6 +199,12 @@ export default function CustomersPage() {
                     className="btn-primary !py-1.5 !px-4 text-xs"
                   >
                     View History
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(c)}
+                    className="btn-ghost !py-1.5 !px-3 text-xs text-red-600 hover:!bg-red-50 ml-2"
+                  >
+                    Delete
                   </button>
                 </div>
               </div>
@@ -286,6 +306,71 @@ export default function CustomersPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Delete Customer Confirm Modal */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteCustomer}
+        title="Delete this customer?"
+        confirmLabel="Delete Customer"
+      >
+        {deleteTarget && (() => {
+          const t = deleteTarget;
+          const inv = sales.filter((s) => s.customerId === t.id);
+          const total = inv.reduce((a, s) => a + saleGrandTotal(s), 0);
+          const paid = inv.reduce((a, s) => a + salePaid(s.id), 0);
+          const due = Math.max(0, total - paid);
+          return (
+            <>
+              <div className="border border-neutral-200 mb-5">
+                <div className="flex justify-between items-center gap-3 py-2.5 px-4 border-b border-neutral-200">
+                  <span className="text-sm font-medium truncate">{t.name}</span>
+                  <span className="text-xs text-neutral-400 shrink-0 tabular-nums">{t.phone || "—"}</span>
+                </div>
+                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
+                  <span className="text-neutral-500">Shop / Area</span>
+                  <span className="tabular-nums">{t.shop || "—"}</span>
+                </div>
+                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
+                  <span className="text-neutral-500">Invoices on record</span>
+                  <span className="tabular-nums">{inv.length}</span>
+                </div>
+                {due > 0 && (
+                  <div className="flex justify-between py-2 px-4 text-xs">
+                    <span className="text-neutral-500">They owe you</span>
+                    <span className="tabular-nums font-medium text-[#a12b1f]">{fmtMoney(due)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="border border-red-200 bg-red-50 p-4">
+                <p className="text-[11px] uppercase tracking-widest text-red-700 font-medium mb-2">Deleting changes your numbers</p>
+                <ul className="text-xs text-neutral-700 space-y-1.5 list-disc pl-4">
+                  <li>
+                    <span className="font-medium text-neutral-900">Customer dues:</span>{" "}
+                    {due > 0
+                      ? `their unpaid ${fmtMoney(due)} is cleared, so Customer Payment Dues on the dashboard falls.`
+                      : "they have paid everything, so no due changes."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-neutral-900">Sales & records:</span>{" "}
+                    {inv.length} invoice{inv.length === 1 ? "" : "s"} and their payments are removed.
+                  </li>
+                  <li>
+                    <span className="font-medium text-neutral-900">Stock:</span> sold goods return to Inventory, so those stock rows grow again.
+                  </li>
+                  <li>
+                    <span className="font-medium text-neutral-900">Profit:</span> that revenue and its profit leave Sales, Dashboard and Reports.
+                  </li>
+                </ul>
+                <p className="text-[11px] font-semibold text-red-700 mt-2.5">
+                  Dues, stock, profit and reports all update across the app. This cannot be undone.
+                </p>
+              </div>
+            </>
+          );
+        })()}
+      </ConfirmModal>
 
       <ReceivePaymentModal saleId={paySaleId} onClose={() => setPaySaleId(null)} />
     </Page>

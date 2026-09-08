@@ -90,7 +90,7 @@ export default function SaleDetailModal({
           </thead>
           <tbody>
             {sale.lines.map((l, i) => {
-              const source = [productOf(l.item), supplierName(l.supplierId)].filter(Boolean).join(" · ");
+              const source = [productOf(l.item), l.spec, supplierName(l.supplierId)].filter(Boolean).join(" · ");
               return (
                 <tr key={i}>
                   <td className="font-medium">
@@ -178,7 +178,7 @@ export default function SaleDetailModal({
 
       {/* actions */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
-        <Link href={`/invoices/${sale.id}`} className="btn-ghost !py-1.5 !px-3 text-xs">
+        <Link href={`/sales/${sale.id}`} className="btn-ghost !py-1.5 !px-3 text-xs">
           Print / Save PDF →
         </Link>
         {due > 0 && (

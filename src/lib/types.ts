@@ -4,6 +4,7 @@ export interface Product {
   id: string;
   name: string;
   unit: string; // e.g. "kg", "bag" — every quantity of this product is measured in it
+  specLabel?: string; // what its secondary list means, e.g. "Factory / Mill" for Cement; default "Quality"
 }
 
 export interface ProductItem {
@@ -14,6 +15,8 @@ export interface ProductItem {
 
 export interface Quality {
   id: string;
+  productId?: string; // which product this grade fits (e.g. Grades for Steel); blank = fits any
+  specOnly?: boolean; // true when this entry belongs to the product's spec list (e.g. Cement factories) rather than its quality list
   name: string;
 }
 
@@ -37,7 +40,8 @@ export interface Purchase {
   supplierId: string;
   product?: string; // product name (e.g. "Rebar")
   item: string; // product item name (e.g. "Rebar 10mm")
-  quality?: string; // quality name (e.g. "Grade A")
+  spec?: string; // product's own spec, e.g. Cement factory/mill ("Lucky Cement")
+  quality?: string; // quality grade (e.g. "60 Grade", "53 OPC")
   qty: number; // in the product's own unit (kg, bag, …)
   unit: string; // product's unit, snapshot at entry (e.g. "kg", "bag")
   rate: number; // buying price PER UNIT of that unit
@@ -55,6 +59,7 @@ export interface SaleLine {
   qty: number; // in the product's own unit (kg, bag, …)
   rate: number; // selling price per unit of that unit
   unit: string; // product's unit, shown on the invoice
+  spec?: string; // product's own spec, e.g. Cement factory ("Lucky Cement")
   quality?: string; // quality grade sold (e.g. "60 Grade")
   supplierId?: string; // which mill/supplier's stock this line came from
   purchaseId?: string; // the purchase lot this line was fulfilled from (exact source)
@@ -93,6 +98,7 @@ export interface Expense {
 export interface InventoryRow {
   item: string;
   product?: string; // product category (e.g. Rebar)
+  spec?: string; // product's own spec, e.g. Cement factory ("Lucky Cement")
   quality?: string; // quality grade, if set on purchases
   unit?: string; // product's unit (kg, bag, …), derived from the product
   supplierId?: string; // if set, this row is only that source's stock (else all sources)
@@ -111,6 +117,7 @@ export interface StockLot {
   purchaseId: string;
   item: string;
   product?: string;
+  spec?: string; // product's own spec, e.g. Cement factory ("Lucky Cement")
   quality?: string;
   supplierId: string;
   unit: string;

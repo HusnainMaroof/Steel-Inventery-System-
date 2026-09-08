@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useStore } from "@/lib/store";
+import { fmtMoney } from "@/lib/format";
 import { Page, PageTitle, Modal, useToggle } from "@/components/ui";
 import SaleDetailModal from "@/components/SaleDetailModal";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
@@ -26,6 +27,7 @@ export default function SalesPage() {
   const [discountPct, setDiscountPct] = useState(0);
   const [taxPct, setTaxPct] = useState(0);
   const [paidNow, setPaidNow] = useState(0);
+  const [payError, setPayError] = useState("");
 
   /* ---- money on the current draft ---- */
   const subtotal = draft.lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
@@ -45,6 +47,7 @@ export default function SalesPage() {
     setDiscountPct(0);
     setTaxPct(0);
     setPaidNow(0);
+    setPayError("");
     setSaleDate(new Date().toISOString().slice(0, 10));
     setExistingId(customers[0]?.id ?? "");
     setNewOpen(true);
@@ -66,6 +69,12 @@ export default function SalesPage() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
+    const paying = Number(paidNow) || 0;
+    if (paying > grandTotal + 0.001) {
+      setPayError(`Amount paid (${fmtMoney(paying)}) can't be more than this invoice's total of ${fmtMoney(grandTotal)}.`);
+      return;
+    }
+    setPayError("");
     const saleId = addSale({
       date: saleDate,
       customerId: existingId,
@@ -76,17 +85,18 @@ export default function SalesPage() {
         qty: Number(l.qty),
         rate: Number(l.rate),
         unit: draft.unitOf(l.item),
+        spec: l.spec || undefined,
         quality: l.quality || undefined,
         supplierId: l.supplierId || undefined,
         purchaseId: l.purchaseId || undefined,
       })),
     });
-    if ((Number(paidNow) || 0) > 0) {
+    if (paying > 0) {
       addPayment({
         date: saleDate,
         type: "customer",
         partyId: existingId,
-        amount: Math.min(Number(paidNow), grandTotal),
+        amount: paying,
         method: "Cash",
         note: "Paid at time of sale",
         saleId,
@@ -108,8 +118,8 @@ export default function SalesPage() {
     <Page>
       {/* ================= SALES LIST ================= */}
       <PageTitle
-        title="Sales"
-        sub="Stock sold to customers — invoices are generated automatically"
+        title="Sales & Invoices"
+        sub="Every sale is an invoice — create, open, print or receive payment"
         action={
           <button className="btn-primary" onClick={startNewSale}>
             + New Sale
@@ -148,11 +158,14 @@ export default function SalesPage() {
         setDraft={draft.setDraft}
         onDraftProduct={draft.onDraftProduct}
         onDraftItem={draft.onDraftItem}
+        onDraftSpec={draft.onDraftSpec}
         onDraftQuality={draft.onDraftQuality}
         productsWithStock={draft.productsWithStock}
         itemsOf={draft.itemsOf}
+        specsOf={draft.specsOf}
         qualitiesOf={draft.qualitiesOf}
         sourcesOf={draft.sourcesOf}
+        productSpecLabel={draft.productSpecLabel}
         sourceUnits={draft.sourceUnits}
         availOf={draft.availOf}
         supplierName={draft.supplierName}
@@ -177,8 +190,9 @@ export default function SalesPage() {
           taxAmt,
           grandTotal,
           paidNow,
-          setPaidNow,
+          setPaidNow: (n: number) => { setPaidNow(n); setPayError(""); },
           remaining,
+          payError,
           customerName: customer?.name ?? "customer",
           canSave,
         }}

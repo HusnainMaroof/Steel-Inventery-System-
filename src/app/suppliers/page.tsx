@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
-import { Page, PageTitle, Modal, useToggle, EmptyState } from "@/components/ui";
+import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
-import type { Purchase } from "@/lib/types";
+import type { Purchase, Supplier } from "@/lib/types";
 
 type DateGroup = {
   date: string;
@@ -14,7 +14,7 @@ type DateGroup = {
 };
 
 export default function SuppliersPage() {
-  const { suppliers, purchases, addSupplier } = useStore();
+  const { suppliers, purchases, sales, products, addSupplier, deleteSupplier } = useStore();
   const { open, onOpen, onClose } = useToggle();
   const [form, setForm] = useState({ name: "", mill: "", phone: "" });
 
@@ -25,6 +25,14 @@ export default function SuppliersPage() {
 
   const [viewSupplierId, setViewSupplierId] = useState<string | null>(null);
   const viewSupplier = suppliers.find((s) => s.id === viewSupplierId);
+  const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
+
+  const confirmDeleteSupplier = () => {
+    if (!deleteTarget) return;
+    deleteSupplier(deleteTarget.id);
+    if (viewSupplierId === deleteTarget.id) setViewSupplierId(null);
+    setDeleteTarget(null);
+  };
 
   const supplierDateGroups: DateGroup[] = useMemo(() => {
     if (!viewSupplierId) return [];
@@ -44,6 +52,14 @@ export default function SuppliersPage() {
         dayPaid: items.reduce((a, p) => a + (p.paid ?? 0), 0),
       }));
   }, [purchases, viewSupplierId]);
+
+  /* what the secondary field means for a product — "Quality" by default,
+     "Factory / Mill" when it is Cement */
+  const specLabelOf = (productName?: string) => {
+    const pr = products.find((x) => x.name === productName);
+    const custom = pr?.specLabel ?? (productName?.toLowerCase().includes("cement") ? "Factory / Mill" : undefined);
+    return custom ?? "Quality";
+  };
 
   const formatPhone = (v: string) => {
     const digits = v.replace(/\D/g, "").slice(0, 11);
@@ -132,7 +148,7 @@ export default function SuppliersPage() {
           {/* desktop / tablet */}
           <div className="hidden sm:block border border-neutral-200 bg-white overflow-x-auto">
             {/* header */}
-            <div className="grid grid-cols-[1.5fr_1fr_1fr_150px] gap-4 px-5 py-2.5 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200">
+            <div className="grid grid-cols-[1.5fr_1fr_1fr_190px] gap-4 px-5 py-2.5 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200">
               <span>Supplier</span>
               <span>Phone</span>
               <span>Mill / Address</span>
@@ -142,17 +158,23 @@ export default function SuppliersPage() {
             {filteredSuppliers.map((s) => (
               <div
                 key={s.id}
-                className="grid grid-cols-[1.5fr_1fr_1fr_150px] gap-4 px-5 py-3.5 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 transition-colors items-center"
+                className="grid grid-cols-[1.5fr_1fr_1fr_190px] gap-4 px-5 py-3.5 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 transition-colors items-center"
               >
                 <span className="font-semibold text-xs text-neutral-900 truncate">{s.name}</span>
                 <span className="text-xs text-neutral-600 tabular-nums">{s.phone || "—"}</span>
                 <span className="text-xs text-neutral-500 truncate">{s.mill || "—"}</span>
-                <span className="text-right">
+                <span className="text-right whitespace-nowrap">
                   <button
                     onClick={() => setViewSupplierId(s.id)}
                     className="btn-primary !py-1.5 !px-4 text-xs"
                   >
                     View History
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(s)}
+                    className="btn-ghost !py-1.5 !px-3 text-xs text-red-600 hover:!bg-red-50 ml-2"
+                  >
+                    Delete
                   </button>
                 </span>
               </div>
@@ -176,6 +198,12 @@ export default function SuppliersPage() {
                     className="btn-primary !py-1.5 !px-4 text-xs"
                   >
                     View History
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(s)}
+                    className="btn-ghost !py-1.5 !px-3 text-xs text-red-600 hover:!bg-red-50 ml-2"
+                  >
+                    Delete
                   </button>
                 </div>
               </div>
@@ -247,7 +275,7 @@ export default function SuppliersPage() {
                             {/* Row: Quality */}
                             {p.quality && (
                               <div className="flex items-baseline justify-between gap-4">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Quality</span>
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">{specLabelOf(p.product)}</span>
                                 <span className="text-[13px] font-medium text-neutral-700 text-right">{p.quality}</span>
                               </div>
                             )}
@@ -289,6 +317,84 @@ export default function SuppliersPage() {
           </div>
         )}
       </Modal>
+
+      {/* Delete Supplier Confirm Modal */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteSupplier}
+        title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete supplier?"}
+        confirmLabel="Delete Supplier"
+      >
+        {deleteTarget && (() => {
+          const t = deleteTarget;
+          const pur = purchases.filter((p) => p.supplierId === t.id);
+          const pIds = new Set(pur.map((p) => p.id));
+          const inv = sales.filter((s) =>
+            s.lines.some(
+              (l) => l.supplierId === t.id || (l.purchaseId && pIds.has(l.purchaseId))
+            )
+          );
+          const dues = pur.reduce((a, p) => a + Math.max(0, steelAmount(p) - (p.paid ?? 0)), 0);
+          return (
+            <>
+              <div className="border border-neutral-200 mb-5">
+                <div className="flex justify-between items-center gap-3 py-2.5 px-4 border-b border-neutral-200">
+                  <span className="text-sm font-medium truncate">{t.name}</span>
+                  <span className="text-xs text-neutral-400 shrink-0 tabular-nums">{t.phone || "—"}</span>
+                </div>
+                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
+                  <span className="text-neutral-500">Mill / Address</span>
+                  <span className="tabular-nums">{t.mill || "—"}</span>
+                </div>
+                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
+                  <span className="text-neutral-500">Purchases from them</span>
+                  <span className="tabular-nums">{pur.length}</span>
+                </div>
+                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
+                  <span className="text-neutral-500">Sales using their stock</span>
+                  <span className="tabular-nums">{inv.length}</span>
+                </div>
+                {dues > 0 && (
+                  <div className="flex justify-between py-2 px-4 text-xs">
+                    <span className="text-neutral-500">You owe them</span>
+                    <span className="tabular-nums font-medium text-[#a12b1f]">{fmtMoney(dues)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="border border-red-200 bg-red-50 p-4">
+                <p className="text-[11px] uppercase tracking-widest text-red-700 font-medium mb-2">Deleting changes your numbers</p>
+                <ul className="text-xs text-neutral-700 space-y-1.5 list-disc pl-4">
+                  <li>
+                    <span className="font-medium text-neutral-900">Mill dues:</span>{" "}
+                    {dues > 0
+                      ? `the unpaid ${fmtMoney(dues)} is cleared, so Mills Payment Dues on the dashboard falls.`
+                      : "this mill is fully paid up, so no due changes."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-neutral-900">Stock:</span>{" "}
+                    {pur.length > 0
+                      ? `${pur.length} purchase load${pur.length === 1 ? "" : "s"} are removed, and the stock they added leaves Inventory.`
+                      : "no purchases are on record, so stock is unchanged."}
+                  </li>
+                  {inv.length > 0 && (
+                    <li>
+                      <span className="font-medium text-neutral-900">Sales & profit:</span>{" "}
+                      {inv.length} invoice{inv.length === 1 ? "" : "s"} sold from this mill&apos;s stock are removed — their revenue, dues and profit drop from Sales, Dashboard and Reports.
+                    </li>
+                  )}
+                  <li>
+                    <span className="font-medium text-neutral-900">Records:</span> payments made to this mill are removed too.
+                  </li>
+                </ul>
+                <p className="text-[11px] font-semibold text-red-700 mt-2.5">
+                  Stock, mill dues, profit and reports all update across the app. This cannot be undone.
+                </p>
+              </div>
+            </>
+          );
+        })()}
+      </ConfirmModal>
     </Page>
   );
 }

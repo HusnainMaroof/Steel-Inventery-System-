@@ -54,17 +54,27 @@ function PaymentForm({
   const [method, setMethod] = useState<"Cash" | "Bank" | "Cheque">("Cash");
   const [amount, setAmount] = useState(defaultAmount);
   const [note, setNote] = useState("");
+  const [err, setErr] = useState("");
   if (!sale) return null;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const amt = Number(amount) || 0;
-    if (amt <= 0) return;
+    if (amt <= 0) {
+      setErr("Enter the amount you're receiving.");
+      return;
+    }
+    if (amt > due + 0.001) {
+      const totalAmt = saleGrandTotal(sale);
+      setErr(`You can't receive more than the remaining due of ${fmtMoney(due)} — ${fmtMoney(totalAmt)} is the invoice total and ${fmtMoney(totalAmt - due)} is already paid.`);
+      return;
+    }
+    setErr("");
     addPayment({
       date,
       type: "customer",
       partyId: sale.customerId,
-      amount: Math.min(amt, due),
+      amount: amt,
       method,
       saleId: sale.id,
       note: note.trim() || `Payment on ${sale.invoiceNo}`,
@@ -93,7 +103,7 @@ function PaymentForm({
         </div>
       </div>
 
-      <form onSubmit={submit} className="grid grid-cols-2 gap-4">
+      <form onSubmit={submit} noValidate className="grid grid-cols-2 gap-4">
         <div>
           <label>Date</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
@@ -112,9 +122,12 @@ function PaymentForm({
             type="number" min="0" max={due || undefined} step="any"
             placeholder="0"
             value={numVal(amount)}
-            onChange={(e) => setAmount(Number(e.target.value))}
+            onChange={(e) => { setAmount(Number(e.target.value)); setErr(""); }}
             required
           />
+          {err && (
+            <div className="col-span-2 border border-red-200 bg-red-50 text-red-700 text-xs px-3 py-2">{err}</div>
+          )}
         </div>
         <div className="col-span-2">
           <label>Note (optional)</label>

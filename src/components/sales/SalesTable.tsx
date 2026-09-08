@@ -14,6 +14,7 @@ type SoldLine = {
 
 type SaleRow = {
   id: string;
+  invoiceNo: string;
   customerName: string;
   createdAt: string;
   time: string;
@@ -89,6 +90,7 @@ export default function SalesTable({
       const due = Math.max(0, total - paid);
       const row: SaleRow = {
         id: s.id,
+        invoiceNo: s.invoiceNo,
         customerName: customerName(s.customerId),
         createdAt: s.createdAt,
         time: fmtTime(s.createdAt),
@@ -200,7 +202,7 @@ export default function SalesTable({
       {/* ── stats ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         <div className="border border-neutral-200 bg-white p-4">
-          <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Sales</span>
+          <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Sales / Invoices</span>
           <span className="block text-xl font-semibold tabular-nums mt-1">
             {filteredCount}
             {hasFilters && <span className="text-sm font-normal text-neutral-400"> / {sales.length}</span>}
@@ -233,7 +235,7 @@ export default function SalesTable({
               {/* desktop */}
               <div className="hidden sm:block border border-neutral-200 bg-white overflow-x-auto">
                 <div className="grid grid-cols-[minmax(0,1.5fr)_70px_110px_110px_110px_150px] gap-2 px-4 py-2 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200 min-w-[850px]">
-                  <span>Items Sold</span>
+                  <span>Invoice / Items</span>
                   <span className="text-right">Time</span>
                   <span className="text-right">Total</span>
                   <span className="text-right">Paid</span>
@@ -247,6 +249,7 @@ export default function SalesTable({
                     className="grid grid-cols-[minmax(0,1.5fr)_70px_110px_110px_110px_150px] gap-2 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors min-w-[850px]"
                   >
                     <span className="min-w-0">
+                      <span className="block text-[10px] text-neutral-400 truncate">{s.invoiceNo}</span>
                       <span className="block font-medium text-xs text-neutral-900 truncate mb-0.5">{s.customerName}</span>
                       <span className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_auto] gap-x-3 gap-y-0.5">
                         {s.soldLines.map((line, i) => (
@@ -287,8 +290,11 @@ export default function SalesTable({
                     onClick={() => onView(s.id)}
                     className="p-3 cursor-pointer active:bg-neutral-50"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm truncate">{s.customerName}</span>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0">
+                        <span className="block font-medium text-sm truncate">{s.customerName}</span>
+                        <span className="block text-[10px] text-neutral-400 mt-0.5">{s.invoiceNo}</span>
+                      </span>
                       <span className="shrink-0 text-[10px] text-neutral-400 tabular-nums">{s.time}</span>
                     </div>
                     <div className="mt-1.5 mb-2 space-y-1">

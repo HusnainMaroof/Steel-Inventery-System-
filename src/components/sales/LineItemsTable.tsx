@@ -5,6 +5,7 @@ import { fmtMoney, fmtRateWithUnit } from "@/lib/format";
 interface LineForm {
   product: string;
   item: string;
+  spec?: string;
   quality: string;
   supplierId: string;
   purchaseId?: string;
@@ -61,7 +62,7 @@ export default function LineItemsTable({
               <tr key={i}>
                 <td className="font-medium whitespace-nowrap">{l.item}</td>
                 <td className="text-neutral-500 text-xs whitespace-nowrap">
-                  {l.quality ? `${l.quality} · ` : ""}{supplierName(l.supplierId)}
+                  {l.spec ? `${l.spec} · ` : ""}{l.quality ? `${l.quality} · ` : ""}{supplierName(l.supplierId)}
                 </td>
                 <td className="num">
                   <div className="inline-flex items-center justify-end gap-1.5">

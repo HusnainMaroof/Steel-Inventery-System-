@@ -9,6 +9,7 @@ import SaleSummaryPanel from "./SaleSummaryPanel";
 interface LineForm {
   product: string;
   item: string;
+  spec?: string;
   quality: string;
   supplierId: string;
   purchaseId?: string;
@@ -19,6 +20,7 @@ interface LineForm {
 interface Draft {
   product: string;
   item: string;
+  spec?: string;
   quality: string;
   supplierId: string;
   qty: number;
@@ -38,11 +40,14 @@ export default function NewSaleModal({
   setDraft,
   onDraftProduct,
   onDraftItem,
+  onDraftSpec,
   onDraftQuality,
   productsWithStock,
   itemsOf,
+  specsOf,
   qualitiesOf,
   sourcesOf,
+  productSpecLabel,
   sourceUnits,
   availOf,
   supplierName,
@@ -73,13 +78,16 @@ export default function NewSaleModal({
   setDraft: (patch: Partial<Draft>) => void;
   onDraftProduct: (p: string) => void;
   onDraftItem: (i: string) => void;
+  onDraftSpec: (s: string) => void;
   onDraftQuality: (q: string) => void;
   productsWithStock: string[];
   itemsOf: (product: string) => { item: string }[];
-  qualitiesOf: (item: string) => string[];
-  sourcesOf: (item: string, quality?: string) => { supplierId?: string; stockQty: number; unit?: string }[];
-  sourceUnits: (item: string, supplierId: string) => string;
-  availOf: (item: string, quality: string, supplierId: string) => number;
+  specsOf: (item: string) => string[];
+  qualitiesOf: (item: string, spec?: string) => string[];
+  sourcesOf: (item: string, quality?: string, spec?: string) => { supplierId?: string; stockQty: number; unit?: string }[];
+  productSpecLabel: (product: string) => string;
+  sourceUnits: (item: string, spec: string | undefined, supplierId: string) => string;
+  availOf: (item: string, quality: string, spec: string | undefined, supplierId: string) => number;
   supplierName: (id: string) => string;
   unitOf: (item: string) => string;
   draftAvail: number;
@@ -104,6 +112,7 @@ export default function NewSaleModal({
     paidNow: number;
     setPaidNow: (n: number) => void;
     remaining: number;
+    payError?: string;
     customerName: string;
     canSave: boolean;
   };
@@ -153,11 +162,14 @@ export default function NewSaleModal({
               setDraft={setDraft}
               onDraftProduct={onDraftProduct}
               onDraftItem={onDraftItem}
+              onDraftSpec={onDraftSpec}
               onDraftQuality={onDraftQuality}
               productsWithStock={productsWithStock}
               itemsOf={itemsOf}
+              specsOf={specsOf}
               qualitiesOf={qualitiesOf}
               sourcesOf={sourcesOf}
+              productSpecLabel={productSpecLabel}
               sourceUnits={sourceUnits}
               availOf={availOf}
               supplierName={supplierName}
@@ -201,6 +213,7 @@ export default function NewSaleModal({
               paidNow={entSummary.paidNow}
               setPaidNow={entSummary.setPaidNow}
               remaining={entSummary.remaining}
+              payError={entSummary.payError}
               customerName={entSummary.customerName}
               canSave={entSummary.canSave}
             />

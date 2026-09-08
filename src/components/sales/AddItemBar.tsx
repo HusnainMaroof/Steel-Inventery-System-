@@ -5,6 +5,7 @@ import { fmtQtyWithUnit, fmtRateWithUnit, qtyUnitLabel } from "@/lib/format";
 interface Draft {
   product: string;
   item: string;
+  spec?: string;
   quality: string;
   supplierId: string;
   qty: number;
@@ -17,11 +18,14 @@ export default function AddItemBar({
   setDraft,
   onDraftProduct,
   onDraftItem,
+  onDraftSpec,
   onDraftQuality,
   productsWithStock,
   itemsOf,
+  specsOf,
   qualitiesOf,
   sourcesOf,
+  productSpecLabel,
   sourceUnits,
   availOf,
   supplierName,
@@ -37,17 +41,20 @@ export default function AddItemBar({
   setDraft: (patch: Partial<Draft>) => void;
   onDraftProduct: (product: string) => void;
   onDraftItem: (item: string) => void;
+  onDraftSpec: (spec: string) => void;
   onDraftQuality: (quality: string) => void;
   productsWithStock: string[];
   itemsOf: (product: string) => { item: string }[];
-  qualitiesOf: (item: string) => string[];
-  sourcesOf: (item: string, quality?: string) => {
+  specsOf: (item: string) => string[];
+  qualitiesOf: (item: string, spec?: string) => string[];
+  sourcesOf: (item: string, quality?: string, spec?: string) => {
     supplierId?: string;
     stockQty: number;
     unit?: string;
   }[];
-  sourceUnits: (item: string, supplierId: string) => string;
-  availOf: (item: string, quality: string, supplierId: string) => number;
+  productSpecLabel: (product: string) => string;
+  sourceUnits: (item: string, spec: string | undefined, supplierId: string) => string;
+  availOf: (item: string, quality: string, spec: string | undefined, supplierId: string) => number;
   supplierName: (id: string) => string;
   draftAvail: number;
   draftUnit: string;
@@ -57,6 +64,10 @@ export default function AddItemBar({
   onAdd: () => void;
   hasStock: boolean;
 }) {
+  const specLabel = productSpecLabel(draft.product);
+  const specCustom = specLabel !== "Quality";
+  const specOptions = specsOf(draft.item);
+
   return (
     <div className="mt-8 border border-neutral-200 rounded-xl p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2 mb-4">
@@ -86,22 +97,33 @@ export default function AddItemBar({
                   {itemsOf(draft.product).map((r) => <option key={r.item} value={r.item}>{r.item}</option>)}
                 </select>
               </div>
+              {specCustom && specOptions.length > 0 && (
+                <div>
+                  <label className="!mb-1">{specLabel}</label>
+                  <select value={draft.spec ?? ""} onChange={(e) => onDraftSpec(e.target.value)}>
+                    <option value="" disabled>
+                      {specOptions.length === 0 ? "No stock…" : "Select factory…"}
+                    </option>
+                    {specOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="!mb-1">Quality</label>
                 <select value={draft.quality} onChange={(e) => onDraftQuality(e.target.value)}>
-                  <option value="">Any quality</option>
-                  {qualitiesOf(draft.item).map((q) => <option key={q} value={q}>{q}</option>)}
+                  <option value="">{specCustom ? "Any quality" : "Any quality"}</option>
+                  {qualitiesOf(draft.item, draft.spec).map((q) => <option key={q} value={q}>{q}</option>)}
                 </select>
               </div>
               <div>
                 <label className="!mb-1">Mill / Source</label>
                 <select value={draft.supplierId} onChange={(e) => setDraft({ supplierId: e.target.value, qty: 1 })}>
                   <option value="" disabled>
-                    {sourcesOf(draft.item, draft.quality).length === 0 ? "No stock…" : "Select mill…"}
+                    {sourcesOf(draft.item, draft.quality, draft.spec).length === 0 ? "No stock…" : "Select mill…"}
                   </option>
-                  {sourcesOf(draft.item, draft.quality).map((r) => (
+                  {sourcesOf(draft.item, draft.quality, draft.spec).map((r) => (
                     <option key={r.supplierId} value={r.supplierId ?? ""} disabled={r.stockQty <= 0}>
-                      {supplierName(r.supplierId ?? "")} — {fmtQtyWithUnit(availOf(draft.item, draft.quality, r.supplierId ?? ""), sourceUnits(draft.item, r.supplierId ?? ""))} left
+                      {supplierName(r.supplierId ?? "")} — {fmtQtyWithUnit(availOf(draft.item, draft.quality, draft.spec, r.supplierId ?? ""), sourceUnits(draft.item, draft.spec, r.supplierId ?? ""))} left
                     </option>
                   ))}
                 </select>
@@ -115,6 +137,7 @@ export default function AddItemBar({
               {draft.item && draft.supplierId ? (
                 <>
                   <span className="font-medium text-neutral-700">{draft.item}</span>
+                  {draft.spec ? ` · ${draft.spec}` : ""}
                   {draft.quality ? ` · ${draft.quality}` : ""} · {supplierName(draft.supplierId)}
                   {draftPrice ? (
                     <span className="ml-2 text-neutral-600 tabular-nums">

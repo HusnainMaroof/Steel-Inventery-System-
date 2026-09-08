@@ -86,10 +86,14 @@ interface Store {
   addProduct: (name: string, unit: string) => void;
   updateProduct: (id: string, patch: Partial<Product>) => void;
   addProductItem: (productId: string, name: string) => void;
-  addQuality: (name: string) => void;
+  addQuality: (productId: string, name: string, specOnly?: boolean) => void;
   deleteProduct: (id: string) => void;
   deleteProductItem: (id: string) => void;
   deleteQuality: (id: string) => void;
+  deleteCustomer: (id: string) => void;
+  deleteSupplier: (id: string) => void;
+  deleteInventoryItem: (item: string) => void;
+  hideInventoryItem: (item: string) => void; // removes a sold-out row from the inventory list only — records & numbers stay
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -97,7 +101,7 @@ const StoreCtx = createContext<Store | null>(null);
 let seq = 1000;
 const nextId = () => `x${seq++}`;
 
-// seed ids are `prod-*`, `item-*`, `qual-*`, `sup-*`, `cust-*`, plus p1..p5 / s1..s3
+// seed ids are `prod-*`, `item-*`, `qual-*`; records created in-app get x1000, x1001, …
 const INITIAL = seedInitialState;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -110,6 +114,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>(INITIAL.products);
   const [productItems, setProductItems] = useState<ProductItem[]>(INITIAL.productItems);
   const [qualities, setQualities] = useState<Quality[]>(INITIAL.qualities);
+  const [hiddenItems, setHiddenItems] = useState<string[]>([]);
 
   const {
     inventory,
@@ -144,11 +149,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // product name -> unit, so each item's unit comes from its product definition
     const productUnit: Record<string, string> = {};
     for (const prod of products) productUnit[prod.name] = prod.unit;
-    // meta per item: product / quality come from purchases; unit comes from the product
-    const meta: Record<string, { product?: string; quality?: string; unit?: string }> = {};
+    // meta per item: product / spec / quality come from purchases; unit comes from the product
+    const meta: Record<string, { product?: string; spec?: string; quality?: string; unit?: string }> = {};
     for (const p of purchases) {
       meta[p.item] = {
         product: p.product || meta[p.item]?.product,
+        spec: p.spec || meta[p.item]?.spec,
         quality: p.quality || meta[p.item]?.quality,
         unit:
           (p.product && productUnit[p.product]) ||
@@ -173,6 +179,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         sellRate: m.srq > 0 ? m.sr / m.srq : 0,
       });
       itemMap[item] = landedAvg;
+    }
+    // fully-sold rows that were cleaned off the inventory list stay hidden
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].stockQty <= 0.000001 && hiddenItems.includes(rows[i].item))
+        rows.splice(i, 1);
     }
     rows.sort((a, b) => a.item.localeCompare(b.item));
 
@@ -239,12 +250,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       string,
       InventoryRow & { pq: number; cost: number; remain: number; remainVal: number; sellW: number; sellQ: number }
     > = {};
-    const srcKey = (item: string, supplierId: string) => `${item}\u0000${supplierId}`;
-    // purchased totals per item+source
+    const srcKey = (item: string, spec: string | undefined, supplierId: string) =>
+      `${item}\u0000${spec ?? ""}\u0000${supplierId}`;
+    // purchased totals per item+spec+source
     for (const p of purchases) {
-      const k = srcKey(p.item, p.supplierId);
+      const k = srcKey(p.item, p.spec, p.supplierId);
       const a = (srcAgg[k] ??= {
         item: p.item,
+        product: meta[p.item]?.product,
+        spec: p.spec,
+        quality: p.quality,
         supplierId: p.supplierId,
         purchasedQty: 0,
         soldQty: 0,
@@ -262,11 +277,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       a.pq += p.qty;
       a.cost += purchaseTotal(p);
+      if (p.spec) a.spec = p.spec;
+      if (p.quality) a.quality = p.quality;
     }
-    // remaining stock per item+source (and the selling price of that remaining stock)
+    // remaining stock per item+spec+source (and the selling price of that remaining stock)
     for (const lot of lots) {
       if (lot.remaining <= 0.000001) continue;
-      const a = srcAgg[srcKey(lot.p.item, lot.p.supplierId)];
+      const a = srcAgg[srcKey(lot.p.item, lot.p.spec, lot.p.supplierId)];
       if (a) {
         a.remain += lot.remaining;
         a.remainVal += lot.remaining * lot.landed;
@@ -283,6 +300,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return {
         item: a.item,
         ...meta[a.item],
+        spec: a.spec,
+        quality: a.quality,
         supplierId: a.supplierId,
         purchasedQty: a.pq,
         soldQty: a.pq - stockQty,
@@ -310,6 +329,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         purchaseId: l.p.id,
         item: l.p.item,
         product: l.p.product,
+        spec: l.p.spec,
         quality: l.p.quality,
         supplierId: l.p.supplierId,
         unit: l.p.unit || (l.p.product && productUnit[l.p.product]) || "",
@@ -325,7 +345,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       lineCostRec[lineKey(saleId, idx)] ?? 0;
 
     return { inventory: rows, byItem: itemMap, byItemSource, stockLots, inventoryBySource, lineUnitCost };
-  }, [purchases, sales, products, suppliers]);
+  }, [purchases, sales, products, suppliers, hiddenItems]);
 
   /* per-invoice allocation: explicit payments settle their invoice first,
      then a customer's unallocated payments settle their oldest unpaid invoices (FIFO) */
@@ -480,21 +500,86 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ? prev
           : [...prev, { id: nextId(), productId, name }]
       ),
-    addQuality: (name) =>
+    addQuality: (productId, name, specOnly) =>
       setQualities((prev) =>
-        prev.some((q) => q.name.toLowerCase() === name.toLowerCase())
+        prev.some((q) => q.productId === productId && q.name.toLowerCase() === name.toLowerCase())
           ? prev
-          : [...prev, { id: nextId(), name }]
+          : [
+              ...prev,
+              specOnly
+                ? { id: nextId(), productId, specOnly: true, name }
+                : { id: nextId(), productId, name },
+            ]
       ),
-    // deleting a product also removes all of its items
+    // deleting a product also removes all of its items and its qualities
     deleteProduct: (id) => {
       setProductItems((prev) => prev.filter((i) => i.productId !== id));
+      setQualities((prev) => prev.filter((q) => q.productId !== id));
       setProducts((prev) => prev.filter((p) => p.id !== id));
     },
     deleteProductItem: (id) =>
       setProductItems((prev) => prev.filter((i) => i.id !== id)),
     deleteQuality: (id) =>
       setQualities((prev) => prev.filter((q) => q.id !== id)),
+    // removing a customer also removes their sales and the payments made by them
+    deleteCustomer: (id) => {
+      const saleIds = new Set(
+        sales.filter((s) => s.customerId === id).map((s) => s.id)
+      );
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+      setSales((prev) => prev.filter((s) => s.customerId !== id));
+      setPayments((prev) =>
+        prev.filter(
+          (p) =>
+            !(
+              p.type === "customer" &&
+              (p.partyId === id || (p.saleId && saleIds.has(p.saleId)))
+            )
+        )
+      );
+    },
+    // removing a supplier also removes their purchases, the sales that drew
+    // on that mill's stock, and the payments made to / for those records
+    deleteSupplier: (id) => {
+      const pIds = new Set(
+        purchases.filter((p) => p.supplierId === id).map((p) => p.id)
+      );
+      const saleIds = new Set(
+        sales
+          .filter((s) =>
+            s.lines.some(
+              (l) => l.supplierId === id || (l.purchaseId && pIds.has(l.purchaseId))
+            )
+          )
+          .map((s) => s.id)
+      );
+      setSuppliers((prev) => prev.filter((s) => s.id !== id));
+      setPurchases((prev) => prev.filter((p) => p.supplierId !== id));
+      setSales((prev) => prev.filter((s) => !saleIds.has(s.id)));
+      setPayments((prev) =>
+        prev.filter(
+          (p) =>
+            !(
+              (p.saleId && saleIds.has(p.saleId)) ||
+              (p.type === "supplier" && p.partyId === id)
+            )
+        )
+      );
+    },
+    // wiping an inventory item removes every purchase and sale of it, so the
+    // row disappears from inventory, purchases and sales together
+    deleteInventoryItem: (item) => {
+      const saleIds = new Set(
+        sales.filter((s) => s.lines.some((l) => l.item === item)).map((s) => s.id)
+      );
+      setPurchases((prev) => prev.filter((p) => p.item !== item));
+      setSales((prev) => prev.filter((s) => !saleIds.has(s.id)));
+      setPayments((prev) => prev.filter((p) => !(p.saleId && saleIds.has(p.saleId))));
+    },
+    // cosmetic cleanup for fully-sold rows: the item leaves the inventory
+    // list but its purchases, sales, dues and profit records are untouched
+    hideInventoryItem: (item) =>
+      setHiddenItems((prev) => (prev.includes(item) ? prev : [...prev, item])),
   };
 
   return <StoreCtx.Provider value={store}>{children}</StoreCtx.Provider>;

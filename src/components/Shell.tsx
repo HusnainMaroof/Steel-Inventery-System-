@@ -13,11 +13,9 @@ const ICONS: Record<string, ReactNode> = {
   "/inventory": <path d="M3 5.5 8 3l5 2.5v5L8 13 3 10.5ZM3 5.5 8 8l5-2.5M8 8v5" />,
   "/products": <path d="M8 2 3 4.5v7L8 14l5-2.5v-7L8 2ZM3 4.5 8 7l5-2.5M8 7v7" />,
   "/sales": <path d="M3 2.5h10v11l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2ZM5.5 6h5M5.5 8.5h5" />,
-  "/invoices": <path d="M4 2.5h8v11l-1.6-1-1.6 1-1.6-1-1.6 1-1.6-1ZM6 6h4M6 8.5h4" />,
   "/customers": <path d="M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 13.5c.7-2.2 3-3.5 5.5-3.5s4.8 1.3 5.5 3.5" />,
   "/suppliers": <path d="M2.5 13.5v-6l3-1.5v7.5M5.5 13.5h5v-9l-5 1.5M10.5 13.5h3v-4l-3-1.2M4 8.5h.01M7.5 9.5h.01" />,
   "/payments": <path d="M2 5.5h12v7H2ZM2 5.5 8 2.5l6 3M11.5 9h.01" />,
-  "/profit": <path d="M2.5 13.5h11M4 12V8.5M7 12V5.5M10 12V7M13 12V3.5" />,
   "/reports": <path d="M4 2.5h6l2.5 2.5v8.5H4ZM10 2.5V5h2.5M6 8h4M6 10.5h4" />,
 };
 
@@ -26,13 +24,11 @@ const NAV = [
   { href: "/purchases", label: "Purchases" },
   { href: "/products", label: "Products" },
   { href: "/inventory", label: "Inventory" },
-  { href: "/sales", label: "Sales" },
-  { href: "/invoices", label: "Invoices" },
+  { href: "/sales", label: "Sales & Invoices" },
   { href: "/customers", label: "Customers" },
   { href: "/suppliers", label: "Mills / Suppliers" },
   { href: "/payments", label: "Payments" },
-  { href: "/profit", label: "Profit & Loss" },
-  { href: "/reports", label: "Reports" },
+  { href: "/reports", label: "Reports & Profit" },
 ];
 
 function Chevron({ collapsed }: { collapsed: boolean }) {
@@ -148,7 +144,13 @@ export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
-  if (pathname?.startsWith("/invoices/")) return <>{children}</>;
+  // Printable invoice page (and old /invoices deep links) render without the
+  // sidebar so the paper layout prints cleanly
+  if (
+    pathname?.startsWith("/sales/") ||
+    pathname?.startsWith("/invoices/")
+  )
+    return <>{children}</>;
 
   const navLinks = (onNavigate?: () => void) => (
     <nav className="flex flex-col gap-0.5">

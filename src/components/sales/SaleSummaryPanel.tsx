@@ -16,6 +16,7 @@ export default function SaleSummaryPanel({
   paidNow,
   setPaidNow,
   remaining,
+  payError,
   customerName,
   canSave,
 }: {
@@ -30,6 +31,7 @@ export default function SaleSummaryPanel({
   paidNow: number;
   setPaidNow: (n: number) => void;
   remaining: number;
+  payError?: string;
   customerName: string;
   canSave: boolean;
 }) {
@@ -88,6 +90,11 @@ export default function SaleSummaryPanel({
             value={numVal(paidNow)}
             onChange={(e) => setPaidNow(Number(e.target.value))}
           />
+          {payError && (
+            <div className="mt-2 border border-red-200 bg-red-50 text-red-700 text-[11px] px-2.5 py-2">
+              {payError}
+            </div>
+          )}
         </div>
 
         <div className={`flex justify-between items-center px-3 py-2.5 border border-dashed -mx-3 ${remaining > 0 ? "border-neutral-400" : "border-neutral-300"}`}>

@@ -302,6 +302,42 @@ export function Modal({
   );
 }
 
+/* Destructive-action confirm dialog: summary + warning content up to the
+   caller, consistent Cancel / red Delete footer everywhere. */
+export function ConfirmModal({
+  open,
+  onClose,
+  onConfirm,
+  title = "Are you sure?",
+  confirmLabel = "Delete",
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title?: string;
+  confirmLabel?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} title={title}>
+      <div className="mb-6">{children}</div>
+      <div className="flex justify-end gap-3">
+        <button type="button" className="btn-ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="btn-primary !bg-[#a12b1f] hover:!bg-[#8a241a]"
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 /* Big stat card with count-up */
 export function StatCard({
   label,

@@ -64,7 +64,7 @@ function KpiNumber({
   compact?: boolean;
 }) {
   return (
-    <span className="text-[26px] lg:text-[30px] font-bold leading-none tracking-tight tabular-nums">
+    <span className="text-[30px] sm:text-[36px] lg:text-[42px] font-bold leading-none tracking-tight tabular-nums">
       {prefix}
       <CountUp value={value} compact={compact} />
       {suffix}
@@ -302,27 +302,24 @@ export default function DashboardPage() {
         hint: `Worth ${fmtCompact(stockValue)}`,
       };
 
-  /* dues are whole-depot figures — what customers owe us + what we owe mills */
+  /* dues are whole-depot figures — who owes us, and which mills we owe */
   const dues = useMemo(() => {
-    let receivable = 0;
-    let owingCustomers = 0;
-    for (const c of customers) {
-      const bal = customerBalance(c.id);
-      if (bal > 0) {
-        receivable += bal;
-        owingCustomers += 1;
-      }
-    }
-    let payable = 0;
-    let owingMills = 0;
-    for (const s of suppliers) {
-      const bal = supplierBalance(s.id);
-      if (bal > 0) {
-        payable += bal;
-        owingMills += 1;
-      }
-    }
-    return { receivable, payable, owingCustomers, owingMills };
+    const custDues = customers
+      .map((c) => ({ name: c.name, bal: customerBalance(c.id) }))
+      .filter((d) => d.bal > 0)
+      .sort((a, b) => b.bal - a.bal);
+    const millDues = suppliers
+      .map((s) => ({ name: s.name, bal: supplierBalance(s.id) }))
+      .filter((d) => d.bal > 0)
+      .sort((a, b) => b.bal - a.bal);
+    return {
+      receivable: custDues.reduce((a, d) => a + d.bal, 0),
+      payable: millDues.reduce((a, d) => a + d.bal, 0),
+      owingCustomers: custDues.length,
+      owingMills: millDues.length,
+      custDues,
+      millDues,
+    };
   }, [customers, suppliers, customerBalance, supplierBalance]);
 
   return (
@@ -440,35 +437,28 @@ export default function DashboardPage() {
             }
           />
         </StaggerItem>
-        <StaggerItem>
-          <Kpi
-            label="Payment Dues"
-            value={dues.receivable + dues.payable}
-            hint="Customers + mills combined"
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Kpi
-            label="Customer Payment Dues"
-            value={dues.receivable}
-            hint={
-              dues.owingCustomers === 0
-                ? "No one owes you right now"
-                : `${dues.owingCustomers} customer${dues.owingCustomers === 1 ? "" : "s"} owe you`
-            }
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Kpi
-            label="Mills Payment Dues"
-            value={dues.payable}
-            hint={
-              dues.owingMills === 0
-                ? "All mills paid up"
-                : `${dues.owingMills} mill${dues.owingMills === 1 ? "" : "s"} to pay`
-            }
-          />
-        </StaggerItem>
+        {dues.owingCustomers > 0 && (
+          <StaggerItem>
+            <Kpi
+              label="Customer Payment Dues"
+              value={dues.receivable}
+              hint={dues.custDues
+                .map((d) => `${d.name} owes ${fmtCompact(d.bal)}`)
+                .join(" · ")}
+            />
+          </StaggerItem>
+        )}
+        {dues.owingMills > 0 && (
+          <StaggerItem>
+            <Kpi
+              label="Mills Payment Dues"
+              value={dues.payable}
+              hint={dues.millDues
+                .map((d) => `pay ${d.name} ${fmtCompact(d.bal)}`)
+                .join(" · ")}
+            />
+          </StaggerItem>
+        )}
       </Stagger>
 
       <p className="text-xs text-neutral-500 mt-6">

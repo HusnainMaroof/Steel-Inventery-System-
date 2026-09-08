@@ -2,23 +2,27 @@
 
 import { useState, useMemo } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
-import { Page, PageTitle, Modal, useToggle, EmptyState } from "@/components/ui";
+import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtDateTime, qtyUnitLabel, perUnitLabel } from "@/lib/format";
 import type { Purchase } from "@/lib/types";
 
 export default function PurchasesPage() {
-  const { purchases, suppliers, inventory, products, productItems, qualities, addPurchase, updatePurchase, deletePurchase, addPayment } = useStore();
+  const { purchases, suppliers, inventory, products, productItems, qualities, sales, addPurchase, updatePurchase, deletePurchase, addPayment, addQuality } = useStore();
   const { open, onOpen, onClose } = useToggle();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | "dues">("all");
   const [payId, setPayId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState(0);
+  const [payError, setPayError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Purchase | null>(null);
 
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     supplierId: suppliers[0]?.id ?? "",
     productId: products[0]?.id ?? "",
     item: "",
+    spec: "",
     quality: "",
     qty: 0,
     rate: 0,
@@ -28,7 +32,18 @@ export default function PurchasesPage() {
     paidNow: 0,
   });
 
-  const productUnit = products.find((p) => p.id === form.productId)?.unit ?? "";
+  const formProduct = products.find((p) => p.id === form.productId);
+  const productUnit = formProduct?.unit ?? "";
+  // what the secondary picker means for this product — "Quality" by default,
+  // "Factory / Mill" when buying Cement
+  const specLabelOf = (productName?: string) => {
+    const pr = products.find((x) => x.name === productName);
+    const custom = pr?.specLabel ?? (productName?.toLowerCase().includes("cement") ? "Factory / Mill" : undefined);
+    return custom ?? "Quality";
+  };
+  const specLabel = formProduct
+    ? specLabelOf(formProduct.name)
+    : "Quality";
   const qtyLabel = qtyUnitLabel(productUnit);
   const perLabel = perUnitLabel(productUnit);
   const totalStock = form.qty * form.rate;
@@ -36,39 +51,69 @@ export default function PurchasesPage() {
   const landedPerUnit = form.qty > 0 ? totalCost / form.qty : 0;
   const marginPerUnit = form.sellRate > 0 ? form.sellRate - landedPerUnit : 0;
 
+  const openAdd = () => {
+    setFormError("");
+    onOpen();
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const { paidNow, ...rest } = form;
+    const paidNow = Number(form.paidNow) || 0;
+    if (paidNow > totalStock + 0.001) {
+      setFormError(`Amount paid (${fmtMoney(paidNow)}) can't be more than this purchase's total of ${fmtMoney(totalStock)}.`);
+      return;
+    }
+    setFormError("");
+    // type-in support: whatever spec / quality the user typed and is not on
+    // the list yet is saved against this product on the spot
+    const isCustomSpec = specLabel !== "Quality";
+    const specName = form.spec.trim();
+    const qualName = form.quality.trim();
+    const known = (name: string) =>
+      qualities.some(
+        (q) =>
+          q.name.toLowerCase() === name.toLowerCase() &&
+          (!q.productId || q.productId === form.productId)
+      );
+    if (specName && isCustomSpec && !known(specName)) addQuality(form.productId, specName, true);
+    if (qualName && !known(qualName)) addQuality(form.productId, qualName);
     addPurchase({
-      ...rest,
+      date: form.date,
+      supplierId: form.supplierId,
       product: products.find((p) => p.id === form.productId)?.name ?? "",
+      item: form.item,
+      spec: isCustomSpec ? specName || undefined : undefined,
+      quality: qualName || undefined,
+      qty: Number(form.qty),
       unit: productUnit,
-      qty: Number(rest.qty),
-      rate: Number(rest.rate),
-      transport: Number(rest.transport),
-      otherCost: Number(rest.otherCost),
-      sellRate: Number(rest.sellRate) || undefined,
-      paid: Number(paidNow) || 0,
-      lastPaidAt: rest.date,
-      lastPaidAmount: Number(paidNow) || 0,
-      paymentHistory: Number(paidNow) > 0 ? [{ date: new Date().toISOString(), amount: Number(paidNow) }] : [],
+      rate: Number(form.rate),
+      transport: Number(form.transport),
+      otherCost: Number(form.otherCost),
+      sellRate: Number(form.sellRate) || undefined,
+      paid: paidNow,
+      lastPaidAt: form.date,
+      lastPaidAmount: paidNow,
+      paymentHistory: paidNow > 0 ? [{ date: new Date().toISOString(), amount: paidNow }] : [],
     });
     onClose();
-    setForm((f) => ({ ...f, item: "", quality: "", qty: 0, rate: 0, transport: 0, otherCost: 0, sellRate: 0, paidNow: 0 }));
+    setForm((f) => ({ ...f, item: "", spec: "", quality: "", qty: 0, rate: 0, transport: 0, otherCost: 0, sellRate: 0, paidNow: 0 }));
   };
 
   const supplierName = (id: string) => suppliers.find((s) => s.id === id)?.name ?? id;
   const numVal = (v: number) => (v === 0 ? "" : v);
+  const openPay = (id: string) => { setPayId(id); setPayAmount(0); setPayError(""); };
+  const closePay = () => { setPayId(null); setPayError(""); };
   const remainingOf = (p: Purchase) => Math.max(0, steelAmount(p) - (p.paid ?? 0));
   const duePurchases = purchases.filter((p) => remainingOf(p) > 0);
   const totalDue = duePurchases.reduce((a, p) => a + remainingOf(p), 0);
 
-  const removePurchase = (p: Purchase) => {
-    if (window.confirm(`Delete this purchase?\n\n${p.item} · ${fmtQtyWithUnit(p.qty, p.unit)} · ${fmtDate(p.date)}\n\nAll its details and payment records will be permanently removed.`)) {
-      deletePurchase(p.id);
-      if (selectedId === p.id) setSelectedId(null);
-      if (payId === p.id) setPayId(null);
-    }
+  const confirmDeletePurchase = () => {
+    if (!deleteTarget) return;
+    const p = deleteTarget;
+    deletePurchase(p.id);
+    if (selectedId === p.id) setSelectedId(null);
+    if (payId === p.id) setPayId(null);
+    setDeleteTarget(null);
   };
 
   // Date-grouped purchases
@@ -88,6 +133,7 @@ export default function PurchasesPage() {
           id: p.id,
           product: p.product,
           quality: p.quality,
+          spec: p.spec,
           supplier: supplierName(p.supplierId),
           item: p.item,
           qty: p.qty,
@@ -116,6 +162,7 @@ export default function PurchasesPage() {
           id: p.id,
           product: p.product,
           quality: p.quality,
+          spec: p.spec,
           supplier: supplierName(p.supplierId),
           item: p.item,
           totalPayable: steelAmount(p),
@@ -135,7 +182,7 @@ export default function PurchasesPage() {
       <PageTitle
         title="Purchases"
         sub="Stock bought from suppliers, including delivery and other costs"
-        action={<button className="btn-primary" onClick={onOpen}>+ Add Purchase</button>}
+        action={<button className="btn-primary" onClick={openAdd}>+ Add Purchase</button>}
       />
 
       <div className="flex gap-6 border-b border-neutral-200 mb-4">
@@ -151,7 +198,7 @@ export default function PurchasesPage() {
 
       {tab === "all" && (
         purchases.length === 0 ? (
-          <EmptyState emoji="🚚" title="No purchases yet" hint={suppliers.length === 0 ? "Add a mill / supplier first, then your first purchase will feel right at home." : "Record your first purchase — date, supplier and rate is all it takes."} action={<button className="btn-primary" onClick={onOpen}>+ Add Purchase</button>} />
+          <EmptyState emoji="🚚" title="No purchases yet" hint={suppliers.length === 0 ? "Add a mill / supplier first, then your first purchase will feel right at home." : "Record your first purchase — date, supplier and rate is all it takes."} action={<button className="btn-primary" onClick={openAdd}>+ Add Purchase</button>} />
         ) : (
           <div className="space-y-6">
             {purchaseDateGroups.map((g) => (
@@ -182,7 +229,7 @@ export default function PurchasesPage() {
                       <span className="min-w-0">
                         <span className="block font-medium text-xs truncate">{r.item}</span>
                         <span className="block text-[11px] text-neutral-400 truncate">
-                          {[r.product, r.quality].filter(Boolean).join(" · ") || "—"}
+                          {[r.product, r.spec, r.quality].filter(Boolean).join(" · ") || "—"}
                         </span>
                       </span>
                       <span className="self-center text-neutral-600 text-xs truncate">{r.supplier}</span>
@@ -195,7 +242,7 @@ export default function PurchasesPage() {
                         <button onClick={(e) => { e.stopPropagation(); setSelectedId(r.id); }} className="btn-ghost !py-1 !px-3 text-xs">
                           View
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); removePurchase(purchases.find((p) => p.id === r.id)!); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">
+                        <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(purchases.find((p) => p.id === r.id)!); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">
                           Delete
                         </button>
                       </span>
@@ -212,7 +259,7 @@ export default function PurchasesPage() {
                         <span className="shrink-0 font-medium text-sm tabular-nums">{fmtQtyWithUnit(r.qty, r.unit)}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
-                        <span className="truncate">{([r.product, r.quality].filter(Boolean).join(" · ") || "—")}</span>
+                        <span className="truncate">{([r.product, r.spec, r.quality].filter(Boolean).join(" · ") || "—")}</span>
                         <span className="shrink-0 text-neutral-400 truncate">{r.supplier}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-1.5 text-xs">
@@ -266,13 +313,13 @@ export default function PurchasesPage() {
                     {g.rows.map((r) => (
                       <div
                         key={r.id}
-                        onClick={() => { setPayId(r.id); setPayAmount(0); }}
+                        onClick={() => { openPay(r.id); }}
                         className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_130px_100px_110px_100px_150px] gap-3 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors min-w-[820px]"
                       >
                         <span className="min-w-0">
                           <span className="block font-medium text-xs truncate">{r.item}</span>
                           <span className="block text-[11px] text-neutral-400 truncate">
-                            {[r.product, r.quality].filter(Boolean).join(" · ") || "—"}
+                            {[r.product, r.spec, r.quality].filter(Boolean).join(" · ") || "—"}
                           </span>
                         </span>
                         <span className="self-center text-neutral-600 text-xs truncate">{r.supplier}</span>
@@ -283,8 +330,8 @@ export default function PurchasesPage() {
                           {r.lastPaidAt ? fmtDate(r.lastPaidAt) : <span className="text-neutral-400">—</span>}
                         </span>
                         <span className="self-center text-right whitespace-nowrap">
-                          <button onClick={(e) => { e.stopPropagation(); setPayId(r.id); setPayAmount(0); }} className="btn-primary !py-1 !px-3 text-xs">Pay</button>
-                          <button onClick={(e) => { e.stopPropagation(); removePurchase(purchases.find((p) => p.id === r.id)!); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
+                          <button onClick={(e) => { e.stopPropagation(); openPay(r.id); }} className="btn-primary !py-1 !px-3 text-xs">Pay</button>
+                          <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(purchases.find((p) => p.id === r.id)!); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
                         </span>
                       </div>
                     ))}
@@ -299,7 +346,7 @@ export default function PurchasesPage() {
                           <span className="shrink-0 font-medium text-sm text-[#a12b1f] tabular-nums">Due {fmtMoney(r.remaining)}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
-                          <span className="truncate">{([r.product, r.quality].filter(Boolean).join(" · ") || "—")}</span>
+                          <span className="truncate">{([r.product, r.spec, r.quality].filter(Boolean).join(" · ") || "—")}</span>
                           <span className="shrink-0 text-neutral-400 truncate">{r.supplier}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-1.5 text-xs text-neutral-500">
@@ -307,8 +354,8 @@ export default function PurchasesPage() {
                           <span className="tabular-nums shrink-0">{r.lastPaidAt ? `Last ${fmtDate(r.lastPaidAt)}` : "No payments yet"}</span>
                         </div>
                         <div className="flex justify-end gap-2 mt-2">
-                          <button onClick={() => { setPayId(r.id); setPayAmount(0); }} className="btn-primary !py-1 !px-3 text-xs">Pay</button>
-                          <button onClick={() => removePurchase(purchases.find((p) => p.id === r.id)!)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
+                          <button onClick={() => { openPay(r.id); }} className="btn-primary !py-1 !px-3 text-xs">Pay</button>
+                          <button onClick={() => setDeleteTarget(purchases.find((p) => p.id === r.id)!)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
                         </div>
                       </div>
                     ))}
@@ -321,13 +368,78 @@ export default function PurchasesPage() {
       )}
 
       {/* Add Purchase Modal */}
-      <Modal open={open} onClose={onClose} title="Add Purchase">
+      <Modal open={open} onClose={() => { onClose(); setFormError(""); }} title="Add Purchase">
         <form onSubmit={submit} className="grid grid-cols-2 gap-4">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required /></div>
           <div><label>Supplier</label><select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-          <div><label>Product</label><select value={form.productId} onChange={(e) => { const v = e.target.value; const firstItem = productItems.find((i) => i.productId === v)?.name ?? ""; setForm({ ...form, productId: v, item: firstItem }); }}>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label>Product</label><select value={form.productId} onChange={(e) => { const v = e.target.value; const firstItem = productItems.find((i) => i.productId === v)?.name ?? ""; setForm({ ...form, productId: v, item: firstItem, spec: "", quality: "" }); }}>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
           <div><label>Product Item</label><select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} required><option value="" disabled>Select item…</option>{productItems.filter((i) => i.productId === form.productId).map((i) => <option key={i.id} value={i.name}>{i.name}</option>)}</select></div>
-          <div><label>Quality</label><select value={form.quality} onChange={(e) => setForm({ ...form, quality: e.target.value })}><option value="">Not specified</option>{qualities.map((q) => <option key={q.id} value={q.name}>{q.name}</option>)}</select></div>
+          {/* Cement and friends: factory/mill + quality as two fields */}
+          {specLabel !== "Quality" ? (
+            <>
+              <div>
+                <label>{specLabel}</label>
+                <input
+                  list="spec-options"
+                  placeholder="Pick or type a factory…"
+                  value={form.spec}
+                  onChange={(e) => setForm({ ...form, spec: e.target.value })}
+                />
+                <datalist id="spec-options">
+                  {qualities
+                    .filter(
+                      (q) =>
+                        q.specOnly &&
+                        (!q.productId || q.productId === form.productId)
+                    )
+                    .map((q) => (
+                      <option key={q.id} value={q.name} />
+                    ))}
+                </datalist>
+              </div>
+              <div>
+                <label>Quality</label>
+                <input
+                  list="quality-options"
+                  placeholder="Pick or type a quality…"
+                  value={form.quality}
+                  onChange={(e) => setForm({ ...form, quality: e.target.value })}
+                />
+                <datalist id="quality-options">
+                  {qualities
+                    .filter(
+                      (q) =>
+                        !q.specOnly &&
+                        (!q.productId || q.productId === form.productId)
+                    )
+                    .map((q) => (
+                      <option key={q.id} value={q.name} />
+                    ))}
+                </datalist>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label>{specLabel}</label>
+              <input
+                list="quality-options"
+                placeholder="Pick or type a quality…"
+                value={form.quality}
+                onChange={(e) => setForm({ ...form, quality: e.target.value })}
+              />
+              <datalist id="quality-options">
+                {qualities
+                  .filter(
+                    (q) =>
+                      !q.specOnly &&
+                      (!q.productId || q.productId === form.productId)
+                  )
+                  .map((q) => (
+                    <option key={q.id} value={q.name} />
+                  ))}
+              </datalist>
+            </div>
+          )}
           <div><label>Unit</label><input value={qtyUnitLabel(productUnit) || "—"} disabled className="!bg-neutral-50 !text-neutral-600" /></div>
           <div><label>Quantity ({qtyLabel})</label><input type="number" min="0.1" step="any" placeholder="0" value={numVal(form.qty)} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} required /></div>
           <div><label>Buying Price ({perLabel})</label><input type="number" min="0" placeholder="0" value={numVal(form.rate)} onChange={(e) => setForm({ ...form, rate: Number(e.target.value) })} required /></div>
@@ -355,8 +467,11 @@ export default function PurchasesPage() {
             <div><span className="block text-xs uppercase tracking-widest text-neutral-400">Remaining Due to Supplier</span><span className="block text-xs text-neutral-500 mt-1">total {fmtMoney(totalStock)} − paid {fmtMoney(Number(form.paidNow) || 0)}</span></div>
             <span className="font-medium tabular-nums text-right shrink-0">{fmtMoney(Math.max(0, totalStock - Number(form.paidNow || 0))).replace("₨ ", "")}<span className="text-neutral-500 text-xs ml-1">₨</span></span>
           </div>
+          {formError && (
+            <div className="col-span-2 border border-red-200 bg-red-50 text-red-700 text-xs px-3 py-2">{formError}</div>
+          )}
           <div className="col-span-2 flex justify-end gap-3">
-            <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={() => { onClose(); setFormError(""); }}>Cancel</button>
             <button type="submit" className="btn-primary">Save Purchase</button>
           </div>
         </form>
@@ -367,6 +482,8 @@ export default function PurchasesPage() {
         {selected && (() => {
           const total = purchaseTotal(selected);
           const costPerUnit = selected.qty > 0 ? total / selected.qty : 0;
+          const transportShare = selected.qty > 0 ? selected.transport / selected.qty : 0;
+          const otherShare = selected.qty > 0 ? selected.otherCost / selected.qty : 0;
           const avgSellPerUnit = inventory.find((r) => r.item === selected.item)?.avgSellRate ?? 0;
           const usedSell = selected.sellRate ?? avgSellPerUnit;
           const perUnit = perUnitLabel(selected.unit);
@@ -379,12 +496,17 @@ export default function PurchasesPage() {
             { label: "Supplier", value: supplierName(selected.supplierId) },
             { label: "Product", value: selected.product || "—" },
             { label: "Product Item", value: selected.item },
-            { label: "Quality", value: selected.quality || "—" },
+            ...(selected.spec
+              ? [{ label: specLabelOf(selected.product), value: selected.spec }]
+              : []),
+            { label: selected.spec ? "Quality" : specLabelOf(selected.product), value: selected.quality || "—" },
             { label: "Quantity", value: fmtQtyWithUnit(selected.qty, selected.unit) },
-            { label: "Buying Price", value: fmtRateWithUnit(selected.rate, selected.unit) },
-            { label: "Transport Cost", value: fmtMoney(selected.transport), muted: true },
-            { label: "Other Expenses", value: fmtMoney(selected.otherCost), muted: true },
-            { label: "Actual Cost" + perUnit, value: fmtMoney(costPerUnit), muted: true },
+            { label: "Buying Price" + perUnit, value: fmtMoney(selected.rate) },
+            { label: "+ Transport" + perUnit, value: selected.transport > 0 ? fmtMoney(transportShare) : "—", muted: true },
+            { label: "+ Other Expenses" + perUnit, value: selected.otherCost > 0 ? fmtMoney(otherShare) : "—", muted: true },
+            { label: "Landed Cost" + perUnit, value: fmtMoney(costPerUnit), strong: true },
+            { label: "Transport (total)", value: fmtMoney(selected.transport), muted: true },
+            { label: "Other Expenses (total)", value: fmtMoney(selected.otherCost), muted: true },
             { label: "Total Payable to Mill", value: fmtMoney(payable) },
             { label: "Already Paid", value: fmtMoney(paid), muted: true },
             { label: "Remaining Due", value: fmtMoney(remaining), strong: remaining > 0, muted: remaining === 0 },
@@ -400,16 +522,93 @@ export default function PurchasesPage() {
                 </div>
               ))}
               <div className="flex justify-between items-center mt-4">
-                <p className="text-xs text-neutral-500">Profit = Your Selling Price − Actual Cost, shown per unit of this product&apos;s unit of measure.</p>
-                <button onClick={() => removePurchase(selected)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50 shrink-0">Delete</button>
+                <p className="text-xs text-neutral-500">Landed cost = buying price + transport + other expenses, spread per unit. Profit = Your Selling Price − Landed Cost.</p>
+                <button onClick={() => setDeleteTarget(selected)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50 shrink-0">Delete</button>
               </div>
             </div>
           );
         })()}
       </Modal>
 
+      {/* Delete Purchase Confirm Modal */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeletePurchase}
+        title="Delete this purchase?"
+        confirmLabel="Delete Purchase"
+      >
+        {deleteTarget && (() => {
+          const p = deleteTarget;
+          const due = Math.max(0, steelAmount(p) - (p.paid ?? 0));
+          const otherPurchases = purchases.some((x) => x.item === p.item && x.id !== p.id);
+          const soldAny = sales.some((s) => s.lines.some((l) => l.item === p.item));
+          const soldFrom = sales.reduce(
+            (a, s) =>
+              a +
+              s.lines
+                .filter((l) => l.purchaseId === p.id)
+                .reduce((x, l) => x + l.qty, 0),
+            0
+          );
+          const vanishes = !otherPurchases && !soldAny;
+          return (
+            <>
+              <div className="border border-neutral-200 mb-5">
+                <div className="flex justify-between items-center gap-3 py-2.5 px-4 border-b border-neutral-200">
+                  <span className="text-sm text-neutral-500 truncate">{p.item}</span>
+                  <span className="font-medium text-sm tabular-nums shrink-0">{fmtQtyWithUnit(p.qty, p.unit)}</span>
+                </div>
+                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
+                  <span className="text-neutral-500">Supplier</span>
+                  <span className="tabular-nums">{supplierName(p.supplierId)}</span>
+                </div>
+                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
+                  <span className="text-neutral-500">Purchase date</span>
+                  <span className="tabular-nums">{fmtDate(p.date)}</span>
+                </div>
+                {due > 0 && (
+                  <div className="flex justify-between py-2 px-4 text-xs">
+                    <span className="text-neutral-500">Unpaid to mill</span>
+                    <span className="tabular-nums font-medium text-[#a12b1f]">{fmtMoney(due)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="border border-red-200 bg-red-50 p-4">
+                <p className="text-[11px] uppercase tracking-widest text-red-700 font-medium mb-2">Deleting changes your numbers</p>
+                <ul className="text-xs text-neutral-700 space-y-1.5 list-disc pl-4">
+                  <li>
+                    <span className="font-medium text-neutral-900">Mill dues:</span>{" "}
+                    {due > 0
+                      ? `the unpaid ${fmtMoney(due)} to the mill is cleared, so the dues shown on your dashboard fall.`
+                      : "this purchase was fully paid, so no due changes."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-neutral-900">Stock:</span>{" "}
+                    the {fmtQtyWithUnit(p.qty, p.unit)} it added leaves inventory
+                    {vanishes ? ` — nothing else references ${p.item}, so it disappears from the Inventory page` : ""}.
+                  </li>
+                  {soldFrom > 0 && (
+                    <li>
+                      <span className="font-medium text-neutral-900">Profit:</span>{" "}
+                      {fmtQtyWithUnit(soldFrom, p.unit)} of it is already sold — those sales are re-costed from your other stock, so past profit figures shift.
+                    </li>
+                  )}
+                  <li>
+                    <span className="font-medium text-neutral-900">Records:</span> this purchase and its payment history are permanently removed.
+                  </li>
+                </ul>
+                <p className="text-[11px] font-semibold text-red-700 mt-2.5">
+                  Stock, mill dues, profit and reports all update across the app. This cannot be undone.
+                </p>
+              </div>
+            </>
+          );
+        })()}
+      </ConfirmModal>
+
       {/* Pay Due Modal */}
-      <Modal open={!!payId} onClose={() => setPayId(null)} title="Pay Supplier">
+      <Modal open={!!payId} onClose={closePay} title="Pay Supplier">
         {(() => {
           const p = purchases.find((x) => x.id === payId);
           if (!p) return null;
@@ -418,7 +617,7 @@ export default function PurchasesPage() {
           const rem = Math.max(0, total - paid);
           const history = p.paymentHistory ?? (paid > 0 ? [{ date: p.date + "T00:00:00", amount: paid }] : []);
           return (
-            <form onSubmit={(e) => { e.preventDefault(); const amt = Math.min(Number(payAmount) || 0, rem); if (amt <= 0) return; const today = new Date().toISOString().slice(0, 10); updatePurchase(p.id, { paid: paid + amt, lastPaidAt: today, lastPaidAmount: amt, paymentHistory: [...(p.paymentHistory ?? []), { date: new Date().toISOString(), amount: amt }] }); addPayment({ date: today, type: "supplier", partyId: p.supplierId, amount: amt, method: "Cash", note: `Payment on ${p.item} purchase` }); setPayId(null); }}>
+            <form noValidate onSubmit={(e) => { e.preventDefault(); const amt = Number(payAmount) || 0; if (amt <= 0) { setPayError("Enter the amount you're paying to the mill."); return; } if (amt > rem + 0.001) { setPayError(`You can't pay more than the remaining due of ${fmtMoney(rem)} — ${fmtMoney(total)} is payable and ${fmtMoney(paid)} is already paid.`); return; } setPayError(""); const today = new Date().toISOString().slice(0, 10); updatePurchase(p.id, { paid: paid + amt, lastPaidAt: today, lastPaidAmount: amt, paymentHistory: [...(p.paymentHistory ?? []), { date: new Date().toISOString(), amount: amt }] }); addPayment({ date: today, type: "supplier", partyId: p.supplierId, amount: amt, method: "Cash", note: `Payment on ${p.item} purchase` }); closePay(); }}>
               <div className="mb-4">
                 <div className="flex justify-between py-2 border-b border-neutral-200 text-sm"><span className="text-neutral-500">{p.item} · {supplierName(p.supplierId)}</span><span className="tabular-nums">{fmtDate(p.date)}</span></div>
                 <div className="flex justify-between py-2 border-b border-neutral-200 text-sm"><span className="text-neutral-500">Total Payable to Mill</span><span className="tabular-nums">{fmtMoney(total)}</span></div>
@@ -437,9 +636,12 @@ export default function PurchasesPage() {
                 </div>
               )}
               <label>Amount to Pay</label>
-              <input type="number" min="0" max={rem} placeholder="0" value={numVal(payAmount)} onChange={(e) => setPayAmount(Number(e.target.value))} required />
+              <input type="number" min="0" max={rem} placeholder="0" value={numVal(payAmount)} onChange={(e) => { setPayAmount(Number(e.target.value)); setPayError(""); }} required />
+              {payError && (
+                <div className="border border-red-200 bg-red-50 text-red-700 text-xs px-3 py-2 mt-3">{payError}</div>
+              )}
               <div className="flex justify-end gap-3 mt-6">
-                <button type="button" className="btn-ghost" onClick={() => setPayId(null)}>Cancel</button>
+                <button type="button" className="btn-ghost" onClick={closePay}>Cancel</button>
                 <button type="submit" className="btn-primary">Record Payment</button>
               </div>
             </form>

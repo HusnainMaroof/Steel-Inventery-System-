@@ -13,14 +13,13 @@ import type {
 /*
  * Demo data loaded on first run so every screen has something to show.
  *
- * Kept deliberately minimal so the flow is easy to follow:
- *   • 1 supplier — Amreli Steels (everything is bought from them)
- *   • 1 customer — Rahim Builders (everything is sold to them)
- *   • 1 purchase — a 2,000 kg load of 3 Sutar (unpaid, so mill dues exist)
- *   • 1 sale     — 500 kg of that steel to the customer (unpaid, so customer
- *                  dues exist)
- *   • no payments / expenses yet — record them through the app to watch
- *     inventory, dues and profit move.
+ * Kept small and easy to follow:
+ *   • 1 supplier — Amreli Steels (both purchases are bought from them)
+ *   • 1 customer — Rahim Builders (both sales are sold to them)
+ *   • 2 purchases — 3 Sutar (unpaid, so mill dues exist) and 4 Sutar
+ *     (fully paid)
+ *   • 2 sales — one paid off fully, one still owed, so customer dues exist
+ *   • matching payments recorded through the normal flows
  *
  * Products, items and qualities stay as the full catalogue (Steel/Wire/
  * Cement) so the entry forms have everything to pick from.
@@ -29,7 +28,7 @@ import type {
 export const seedProducts: Product[] = [
   { id: "prod-steel", name: "Steel", unit: "kg" },
   { id: "prod-wire", name: "Wire", unit: "kg" },
-  { id: "prod-cement", name: "Cement", unit: "bag" },
+  { id: "prod-cement", name: "Cement", unit: "bag", specLabel: "Factory / Mill" },
 ];
 
 export const seedProductItems: ProductItem[] = [
@@ -48,16 +47,27 @@ export const seedProductItems: ProductItem[] = [
   { id: "item-cement-white", productId: "prod-cement", name: "White Cement" },
 ];
 
+/* Qualities belong to a product so the right options show per product:
+   Steel uses Grades, Wire uses Gauges, Cement carries a Factory / Mill (spec)
+   plus OPC grades as its qualities */
 export const seedQualities: Quality[] = [
-  { id: "qual-40", name: "40 Grade" },
-  { id: "qual-60", name: "60 Grade" },
-  { id: "qual-75", name: "75 Grade" },
-  { id: "qual-16g", name: "16 Gauge" },
-  { id: "qual-18g", name: "18 Gauge" },
-  { id: "qual-20g", name: "20 Gauge" },
-  { id: "qual-33", name: "33 OPC" },
-  { id: "qual-43", name: "43 OPC" },
-  { id: "qual-53", name: "53 OPC" },
+  // Steel — grades
+  { id: "qual-40", productId: "prod-steel", name: "40 Grade" },
+  { id: "qual-60", productId: "prod-steel", name: "60 Grade" },
+  { id: "qual-75", productId: "prod-steel", name: "75 Grade" },
+  // Wire — gauges
+  { id: "qual-16g", productId: "prod-wire", name: "16 Gauge" },
+  { id: "qual-18g", productId: "prod-wire", name: "18 Gauge" },
+  { id: "qual-20g", productId: "prod-wire", name: "20 Gauge" },
+  // Cement — factory / mill names (the product's spec list)
+  { id: "qual-lucky", productId: "prod-cement", specOnly: true, name: "Lucky Cement" },
+  { id: "qual-fauji", productId: "prod-cement", specOnly: true, name: "Fauji Cement" },
+  { id: "qual-dgkhan", productId: "prod-cement", specOnly: true, name: "DG Khan Cement" },
+  { id: "qual-maple", productId: "prod-cement", specOnly: true, name: "Maple Leaf Cement" },
+  // Cement — OPC grades (the product's qualities)
+  { id: "qual-33", productId: "prod-cement", name: "33 OPC" },
+  { id: "qual-43", productId: "prod-cement", name: "43 OPC" },
+  { id: "qual-53", productId: "prod-cement", name: "53 OPC" },
 ];
 
 export const seedSuppliers: Supplier[] = [
@@ -68,16 +78,16 @@ export const seedCustomers: Customer[] = [
   { id: "cust-rahim", name: "Rahim Builders", shop: "Gulberg, Lahore", phone: "0321-9988776" },
 ];
 
-/* The single purchase — 3 Sutar, unpaid so the mill has a due */
+/* Purchases — mostly unpaid, so mill dues show on the dashboard */
 export const seedPurchases: Purchase[] = [
   {
     id: "p1",
-    date: "2026-09-08",
+    date: "2026-09-01",
     supplierId: "sup-amreli",
     product: "Steel",
     item: "3 Sutar",
     quality: "60 Grade",
-    qty: 2000, // kg
+    qty: 1000, // kg
     unit: "kg",
     rate: 240, // per kg
     transport: 2500,
@@ -85,25 +95,60 @@ export const seedPurchases: Purchase[] = [
     sellRate: 280,
     paid: 0,
   },
+  {
+    id: "p2",
+    date: "2026-09-02",
+    supplierId: "sup-amreli",
+    product: "Steel",
+    item: "4 Sutar",
+    quality: "60 Grade",
+    qty: 600, // kg
+    unit: "kg",
+    rate: 250, // per kg
+    transport: 1800,
+    otherCost: 0,
+    sellRate: 290,
+    paid: 150000,
+    lastPaidAt: "2026-09-03",
+    lastPaidAmount: 150000,
+    paymentHistory: [{ date: "2026-09-03T10:00:00", amount: 150000 }],
+  },
 ];
 
-/* The single sale — 500 kg of that load sold to Rahim Builders */
+/* Sales — one paid off fully, the second still owed, so customer dues show */
 export const seedSales: Sale[] = [
   {
     id: "s1",
     invoiceNo: "INV-001",
-    date: "2026-09-08",
-    createdAt: "2026-09-08T11:20:00",
+    date: "2026-09-04",
+    createdAt: "2026-09-04T11:20:00",
     customerId: "cust-rahim",
     discountPct: 0,
     taxPct: 0,
     lines: [
-      { item: "3 Sutar", qty: 500, rate: 280, unit: "kg", quality: "60 Grade", supplierId: "sup-amreli", purchaseId: "p1" },
+      { item: "3 Sutar", qty: 300, rate: 280, unit: "kg", quality: "60 Grade", supplierId: "sup-amreli", purchaseId: "p1" },
+    ],
+  },
+  {
+    id: "s2",
+    invoiceNo: "INV-002",
+    date: "2026-09-07",
+    createdAt: "2026-09-07T15:40:00",
+    customerId: "cust-rahim",
+    discountPct: 0,
+    taxPct: 0,
+    lines: [
+      { item: "3 Sutar", qty: 400, rate: 280, unit: "kg", quality: "60 Grade", supplierId: "sup-amreli", purchaseId: "p1" },
+      { item: "4 Sutar", qty: 200, rate: 290, unit: "kg", quality: "60 Grade", supplierId: "sup-amreli", purchaseId: "p2" },
     ],
   },
 ];
 
-export const seedPayments: Payment[] = [];
+/* Journal copy of what has been paid — matches the paid fields above */
+export const seedPayments: Payment[] = [
+  { id: "pmt1", date: "2026-09-03", type: "supplier", partyId: "sup-amreli", amount: 150000, method: "Bank", note: "Payment on 4 Sutar purchase" },
+  { id: "pmt2", date: "2026-09-05", type: "customer", partyId: "cust-rahim", amount: 84000, method: "Bank", saleId: "s1", note: "Payment on INV-001" },
+];
 
 export const seedExpenses: Expense[] = [];
 
