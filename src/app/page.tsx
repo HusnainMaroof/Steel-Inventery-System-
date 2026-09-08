@@ -208,23 +208,81 @@ export default function DashboardPage() {
     [pSales],
   );
 
-  /* gross profit for the period */
-  const grossProfit = useMemo(() => {
-    let gp = 0;
-    for (const s of pSales) {
-      for (const [i, l] of s.lines.entries())
-        gp += l.qty * (l.rate - (lineUnitCost(s.id, i) || byItem[l.item] || 0));
-    }
-    return gp;
-  }, [pSales, lineUnitCost, byItem]);
+  /* profit of each sale = its selling price minus the actual cost of the
+     stock it consumed (same costing as Profit & Loss) */
+  const profitBySale = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const s of sales)
+      m[s.id] = s.lines.reduce(
+        (a, l, i) => a + l.qty * (l.rate - (lineUnitCost(s.id, i) || byItem[l.item] || 0)),
+        0
+      );
+    return m;
+  }, [sales, lineUnitCost, byItem]);
 
-  /* net profit for the period after shop expenses — whole-depot only,
-     since expenses can't be attributed to a single product */
-  const profitValue = useMemo(() => {
-    if (!isAll) return grossProfit;
-    const totalExpenses = pExpenses.reduce((a, e) => a + e.amount, 0);
-    return grossProfit - totalExpenses;
-  }, [isAll, grossProfit, pExpenses]);
+  /* Realized (cash-basis) profit: profit is counted only from customer
+     payments actually received in the period, matched to the invoice the
+     money settled — so an invoice's profit appears when the dues are paid,
+     not when the goods leave the shop. Whole depot = net of shop expenses. */
+  const realized = useMemo(() => {
+    let profit = 0;
+    let received = 0;
+    const productName = product?.name ?? "";
+    const depotProfit = saleRows.reduce((a, s) => a + (profitBySale[s.id] ?? 0), 0);
+    const depotGrand = saleRows.reduce((a, s) => a + saleGrandTotal(s), 0);
+    const blendedMargin = depotGrand > 0 ? depotProfit / depotGrand : 0;
+
+    for (const pmt of pPayments) {
+      if (pmt.type !== "customer") continue;
+      const s = pmt.saleId ? sales.find((x) => x.id === pmt.saleId) ?? null : null;
+      const inScope = isAll
+        ? true
+        : !!s && s.lines.some((l) => productOf[l.item] === productName);
+      if (!inScope) continue;
+
+      if (!s) {
+        // unallocated payment — settled FIFO later; use the blended margin
+        profit += pmt.amount * blendedMargin;
+        received += pmt.amount;
+        continue;
+      }
+      const grand = saleGrandTotal(s);
+      if (grand <= 0) continue;
+
+      if (isAll) {
+        const margin = (profitBySale[s.id] ?? 0) / grand;
+        profit += pmt.amount * margin;
+        received += pmt.amount;
+      } else {
+        // attribute the payment to the chosen product's share of the invoice
+        let prodProfit = 0;
+        let prodRev = 0;
+        s.lines.forEach((l, i) => {
+          if (productOf[l.item] === productName) {
+            const cost = lineUnitCost(s.id, i) || byItem[l.item] || 0;
+            prodProfit += l.qty * (l.rate - cost);
+            prodRev += l.qty * l.rate;
+          }
+        });
+        profit += (pmt.amount * prodProfit) / grand;
+        received += (pmt.amount * prodRev) / grand;
+      }
+    }
+    return { profit, received };
+  }, [pPayments, sales, saleRows, isAll, product, productOf, lineUnitCost, byItem, profitBySale]);
+
+  /* shop expenses for the period (whole depot only) */
+  const expensesPeriod = useMemo(
+    () => pExpenses.reduce((a, e) => a + e.amount, 0),
+    [pExpenses]
+  );
+
+  /* net profit shown on the card: realized − shop expenses (whole depot),
+     or realized profit of the chosen product */
+  const profitValue = useMemo(
+    () => (isAll ? realized.profit - expensesPeriod : realized.profit),
+    [isAll, realized.profit, expensesPeriod]
+  );
 
   const stockQty = invRows.reduce((a, r) => a + r.stockQty, 0);
   const stockValue = invRows.reduce((a, r) => a + r.stockValue, 0);
@@ -371,14 +429,14 @@ export default function DashboardPage() {
         </StaggerItem>
         <StaggerItem>
           <Kpi
-            label="Profit"
+            label="Net Profit"
             value={profitValue}
             hint={
-              isAll
-                ? `Gross ${fmtCompact(grossProfit)}`
-                : salesTotal > 0
-                  ? `${Math.round((grossProfit / salesTotal) * 100)}% gross margin`
-                  : "No sales in period yet"
+              realized.received > 0
+                ? isAll
+                  ? `Collected ${fmtCompact(realized.received)} · net after shop expenses`
+                  : `${Math.round((realized.profit / realized.received) * 100)}% net margin on ${fmtCompact(realized.received)} collected`
+                : "Counts as customers clear their dues"
             }
           />
         </StaggerItem>

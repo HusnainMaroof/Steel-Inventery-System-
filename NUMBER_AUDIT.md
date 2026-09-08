@@ -58,9 +58,9 @@ Landed cost per kg = (480,000 + 2,500) / 2,000 = **₨241.25**, so selling 500 k
 
 **Payments page:** Received ₨0 · Paid to mills ₨0 · Net ₨0 (nothing paid yet — expected).
 
-**Dashboard:** Sales ₨140,000 (collected ₨0), Profit/gross ₨19,375, Customer Payment Dues ₨140,000, Mills Payment Dues ₨480,000.
+**Dashboard:** Sales ₨140,000 (collected ₨0) · **Net Profit ₨0** — profit is realized/cash-basis, i.e. it counts only as customer payments arrive (the demo has none yet, so the card reads "Counts as customers clear their dues") · Customer Payment Dues ₨140,000 · Mills Payment Dues ₨480,000.
 
-**Profit & Loss:** Revenue ₨140,000 − COGS ₨120,625 − Expenses ₨0 = **Net ₨19,375**.
+**Profit & Loss:** Revenue ₨140,000 − COGS ₨120,625 − Expenses ₨0 = **Net ₨19,375** (income-statement/accrual view — the bill was raised, even if not yet collected). The dashboard deliberately shows the realized net instead, so the two pages answer different questions.
 
 **Reports:** Money in ₨140,000 · Stock purchased ₨480,000 · Profit left ₨19,375 · Stock worth ₨361,875 · receivable ₨140,000 / payable ₨480,000.
 
