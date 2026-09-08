@@ -1,11 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
-import { useStore, saleGrandTotal } from "@/lib/store";
-import { Page, PageTitle, EmptyState } from "@/components/ui";
-import SaleDetailModal from "@/components/SaleDetailModal";
-import ReceivePaymentModal from "@/components/ReceivePaymentModal";
+import { saleGrandTotal } from "@/lib/store";
+import { EmptyState } from "@/components/ui";
 import { fmtMoney, fmtDate, fmtTime, fmtQtyWithUnit } from "@/lib/format";
 
 type SoldLine = {
@@ -15,7 +12,7 @@ type SoldLine = {
   qtyText: string; // e.g. "500 kg"
 };
 
-type InvoiceRow = {
+type SaleRow = {
   id: string;
   customerName: string;
   createdAt: string;
@@ -26,21 +23,29 @@ type InvoiceRow = {
   due: number;
 };
 
-export default function InvoicesPage() {
-  const { sales, customers, inventory, salePaid } = useStore();
-  const [viewId, setViewId] = useState<string | null>(null);
-  const [paySaleId, setPaySaleId] = useState<string | null>(null);
-  // which product category an item belongs to (e.g. "3 Sutar" → "Steel")
-  const productOf = useMemo(
-    () => (item: string) => inventory.find((r) => r.item === item)?.product ?? "",
-    [inventory]
-  );
-  // the quality grade bought for that item (fallback when the line has none saved)
-  const qualityOf = useMemo(
-    () => (item: string) => inventory.find((r) => r.item === item)?.quality ?? "",
-    [inventory]
-  );
-
+export default function SalesTable({
+  sales,
+  customerName,
+  customers,
+  hasInventory,
+  productOf,
+  qualityOf,
+  salePaid,
+  onView,
+  onReceive,
+  onNewSale,
+}: {
+  sales: { id: string; invoiceNo: string; date: string; createdAt: string; customerId: string; lines: { item: string; qty: number; rate: number; unit: string; quality?: string; supplierId?: string }[]; discountPct?: number; taxPct?: number }[];
+  customerName: (id: string) => string;
+  customers: { id: string; name: string; phone: string }[];
+  hasInventory: boolean;
+  productOf: (item: string) => string;
+  qualityOf: (item: string) => string;
+  salePaid: (saleId: string) => number;
+  onView: (id: string) => void;
+  onReceive: (id: string) => void;
+  onNewSale: () => void;
+}) {
   const [searchInput, setSearchInput] = useState("");
   const [searchMode, setSearchMode] = useState<"name" | "phone">("name");
   const [dateInput, setDateInput] = useState("");
@@ -77,14 +82,14 @@ export default function InvoicesPage() {
       return true;
     });
 
-    const map = new Map<string, InvoiceRow[]>();
+    const map = new Map<string, SaleRow[]>();
     for (const s of filtered) {
       const total = saleGrandTotal(s);
       const paid = salePaid(s.id);
       const due = Math.max(0, total - paid);
-      const row: InvoiceRow = {
+      const row: SaleRow = {
         id: s.id,
-        customerName: customers.find((c) => c.id === s.customerId)?.name ?? "",
+        customerName: customerName(s.customerId),
         createdAt: s.createdAt,
         time: fmtTime(s.createdAt),
         soldLines: s.lines.map((l) => {
@@ -105,14 +110,14 @@ export default function InvoicesPage() {
 
     return Array.from(map.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([date, invoices]) => ({
+      .map(([date, sales]) => ({
         date,
-        invoices: invoices.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        sales: sales.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       }));
-  }, [sales, customers, productOf, qualityOf, salePaid, appliedSearch, appliedMode, appliedDate]);
+  }, [sales, customers, customerName, productOf, qualityOf, salePaid, appliedSearch, appliedMode, appliedDate]);
 
-  const totalDue = groups.reduce((a, g) => a + g.invoices.reduce((b, r) => b + r.due, 0), 0);
-  const filteredCount = groups.reduce((a, g) => a + g.invoices.length, 0);
+  const totalDue = groups.reduce((a, g) => a + g.sales.reduce((b, r) => b + r.due, 0), 0);
+  const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
 
   const handleSearch = () => {
     setAppliedSearch(searchInput);
@@ -133,26 +138,34 @@ export default function InvoicesPage() {
     if (e.key === "Enter") handleSearch();
   };
 
-  return (
-    <Page>
-      <PageTitle title="Invoices" sub="All sales invoices — click Open to view, print or save as PDF" />
+  if (sales.length === 0) {
+    return (
+      <EmptyState
+        emoji={hasInventory ? "🧾" : "🏗️"}
+        title={hasInventory ? "No sales yet" : "Nothing to sell yet"}
+        hint={hasInventory ? "Sell from your stock — the invoice is created automatically." : "Record a purchase first — once stock lands, sales take a minute."}
+        action={<button className="btn-primary" onClick={onNewSale}>+ New Sale</button>}
+      />
+    );
+  }
 
+  return (
+    <>
       {/* ── filters ── */}
-      {sales.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-          <div className="flex flex-1 sm:max-w-96">
-            <select
-              value={searchMode}
-              onChange={(e) => setSearchMode(e.target.value as "name" | "phone")}
-              className="!w-auto !rounded-r-none !border-r-0"
-            >
-              <option value="name">Name</option>
-              <option value="phone">Phone</option>
-            </select>
-            <div className="relative flex-1">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
+        <div className="flex flex-1 sm:max-w-96">
+          <select
+            value={searchMode}
+            onChange={(e) => setSearchMode(e.target.value as "name" | "phone")}
+            className="!w-auto !rounded-r-none !border-r-0"
+          >
+            <option value="name">Name</option>
+            <option value="phone">Phone</option>
+          </select>
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
               <input
                 type="text"
                 placeholder={searchMode === "name" ? "Search by customer name..." : "Search by phone number..."}
@@ -161,59 +174,49 @@ export default function InvoicesPage() {
                 onKeyDown={handleKeyDown}
                 className="!w-full !rounded-l-none !pl-9"
               />
-            </div>
           </div>
-          <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <input
-              type="date"
-              value={dateInput}
-              onChange={(e) => setDateInput(e.target.value)}
-              className="!w-full sm:!w-52 !pl-9"
-            />
-          </div>
-          <button onClick={handleSearch} className="btn-primary !py-2 !px-4 text-xs whitespace-nowrap">
-            Search
-          </button>
-          {hasFilters && (
-            <button onClick={handleClear} className="btn-ghost !py-2 !px-4 text-xs whitespace-nowrap">
-              Clear
-            </button>
-          )}
         </div>
-      )}
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <input
+            type="date"
+            value={dateInput}
+            onChange={(e) => setDateInput(e.target.value)}
+            className="!w-full sm:!w-52 !pl-9"
+          />
+        </div>
+        <button onClick={handleSearch} className="btn-primary !py-2 !px-4 text-xs whitespace-nowrap">
+          Search
+        </button>
+        {hasFilters && (
+          <button onClick={handleClear} className="btn-ghost !py-2 !px-4 text-xs whitespace-nowrap">
+            Clear
+          </button>
+        )}
+      </div>
 
       {/* ── stats ── */}
-      {sales.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-          <div className="border border-neutral-200 bg-white p-4">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Invoices</span>
-            <span className="block text-xl font-semibold tabular-nums mt-1">
-              {filteredCount}
-              {hasFilters && <span className="text-sm font-normal text-neutral-400"> / {sales.length}</span>}
-            </span>
-          </div>
-          <div className="border border-black bg-black text-white p-4">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-400">Total outstanding</span>
-            <span className="block text-xl font-semibold tabular-nums mt-1">{fmtMoney(totalDue)}</span>
-          </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        <div className="border border-neutral-200 bg-white p-4">
+          <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Sales</span>
+          <span className="block text-xl font-semibold tabular-nums mt-1">
+            {filteredCount}
+            {hasFilters && <span className="text-sm font-normal text-neutral-400"> / {sales.length}</span>}
+          </span>
         </div>
-      )}
+        <div className="border border-black bg-black text-white p-4">
+          <span className="block text-[11px] uppercase tracking-widest text-neutral-400">Total outstanding</span>
+          <span className="block text-xl font-semibold tabular-nums mt-1">{fmtMoney(totalDue)}</span>
+        </div>
+      </div>
 
       {/* ── results ── */}
-      {groups.length === 0 && !hasFilters ? (
-        <EmptyState
-          emoji="🧾"
-          title="No invoices yet"
-          hint="Create a sale and its invoice will appear here — ready to print or save as PDF."
-          action={<Link href="/sales" className="btn-primary">+ Create Sale</Link>}
-        />
-      ) : groups.length === 0 ? (
+      {groups.length === 0 ? (
         <EmptyState
           emoji="🔍"
-          title="No invoices match your filters"
+          title="No sales match your filters"
           hint="Try adjusting the search or date to find what you're looking for."
           action={<button onClick={handleClear} className="btn-primary">Clear filters</button>}
         />
@@ -223,7 +226,7 @@ export default function InvoicesPage() {
             <div key={g.date}>
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-sm font-medium">{fmtDate(g.date)}</span>
-                <span className="text-xs text-neutral-400">{g.invoices.length} invoice{g.invoices.length > 1 ? "s" : ""}</span>
+                <span className="text-xs text-neutral-400">{g.sales.length} sale{g.sales.length > 1 ? "s" : ""}</span>
                 <div className="flex-1 border-b border-neutral-200" />
               </div>
 
@@ -237,16 +240,16 @@ export default function InvoicesPage() {
                   <span className="text-right">Due</span>
                   <span />
                 </div>
-                {g.invoices.map((inv) => (
+                {g.sales.map((s) => (
                   <div
-                    key={inv.id}
-                    onClick={() => setViewId(inv.id)}
+                    key={s.id}
+                    onClick={() => onView(s.id)}
                     className="grid grid-cols-[minmax(0,1.5fr)_70px_110px_110px_110px_150px] gap-2 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors min-w-[850px]"
                   >
                     <span className="min-w-0">
-                      <span className="block font-medium text-xs text-neutral-900 truncate mb-0.5">{inv.customerName}</span>
+                      <span className="block font-medium text-xs text-neutral-900 truncate mb-0.5">{s.customerName}</span>
                       <span className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_auto] gap-x-3 gap-y-0.5">
-                        {inv.soldLines.map((line, i) => (
+                        {s.soldLines.map((line, i) => (
                           <span key={i} className="contents">
                             <span className="text-[11px] font-semibold text-neutral-900 truncate">{line.product}</span>
                             <span className="text-[11px] font-medium text-neutral-700 truncate">{line.item}</span>
@@ -256,19 +259,19 @@ export default function InvoicesPage() {
                         ))}
                       </span>
                     </span>
-                    <span className="self-center text-right text-xs text-neutral-500 tabular-nums whitespace-nowrap">{inv.time}</span>
-                    <span className="self-center text-right font-medium text-xs tabular-nums">{fmtMoney(inv.total)}</span>
-                    <span className="self-center text-right text-xs text-neutral-500 tabular-nums">{fmtMoney(inv.paid)}</span>
-                    <span className={`self-center text-right font-medium text-xs tabular-nums ${inv.due > 0 ? "text-[#a12b1f]" : "text-neutral-400"}`}>
-                      {inv.due > 0 ? fmtMoney(inv.due) : "—"}
+                    <span className="self-center text-right text-xs text-neutral-500 tabular-nums whitespace-nowrap">{s.time}</span>
+                    <span className="self-center text-right font-medium text-xs tabular-nums">{fmtMoney(s.total)}</span>
+                    <span className="self-center text-right text-xs text-neutral-500 tabular-nums">{fmtMoney(s.paid)}</span>
+                    <span className={`self-center text-right font-medium text-xs tabular-nums ${s.due > 0 ? "text-[#a12b1f]" : "text-neutral-400"}`}>
+                      {s.due > 0 ? fmtMoney(s.due) : "—"}
                     </span>
                     <span className="self-center text-right whitespace-nowrap">
-                      {inv.due > 0 && (
-                        <button onClick={(e) => { e.stopPropagation(); setPaySaleId(inv.id); }} className="btn-primary !py-1 !px-2.5 text-xs">
+                      {s.due > 0 && (
+                        <button onClick={(e) => { e.stopPropagation(); onReceive(s.id); }} className="btn-primary !py-1 !px-2.5 text-xs">
                           Receive
                         </button>
                       )}
-                      <button onClick={(e) => { e.stopPropagation(); setViewId(inv.id); }} className="underline underline-offset-2 hover:text-neutral-500 text-xs ml-2">
+                      <button onClick={(e) => { e.stopPropagation(); onView(s.id); }} className="underline underline-offset-2 hover:text-neutral-500 text-xs ml-2">
                         Open
                       </button>
                     </span>
@@ -278,18 +281,18 @@ export default function InvoicesPage() {
 
               {/* mobile */}
               <div className="sm:hidden border border-neutral-200 bg-white divide-y divide-neutral-100">
-                {g.invoices.map((inv) => (
+                {g.sales.map((s) => (
                   <div
-                    key={inv.id}
-                    onClick={() => setViewId(inv.id)}
+                    key={s.id}
+                    onClick={() => onView(s.id)}
                     className="p-3 cursor-pointer active:bg-neutral-50"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm truncate">{inv.customerName}</span>
-                      <span className="shrink-0 text-[10px] text-neutral-400 tabular-nums">{inv.time}</span>
+                      <span className="font-medium text-sm truncate">{s.customerName}</span>
+                      <span className="shrink-0 text-[10px] text-neutral-400 tabular-nums">{s.time}</span>
                     </div>
                     <div className="mt-1.5 mb-2 space-y-1">
-                      {inv.soldLines.map((line, i) => (
+                      {s.soldLines.map((line, i) => (
                         <div key={i} className="flex items-center justify-between gap-2 text-xs">
                           <span className="min-w-0 truncate">
                             <span className="font-semibold text-neutral-900">{line.product}</span>
@@ -301,14 +304,14 @@ export default function InvoicesPage() {
                       ))}
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium tabular-nums text-sm">{fmtMoney(inv.total)}</span>
-                      <span className={`tabular-nums text-xs ${inv.due > 0 ? "text-[#a12b1f] font-medium" : "text-neutral-400"}`}>
-                        {inv.due > 0 ? `Due ${fmtMoney(inv.due)}` : "Paid"}
+                      <span className="font-medium tabular-nums text-sm">{fmtMoney(s.total)}</span>
+                      <span className={`tabular-nums text-xs ${s.due > 0 ? "text-[#a12b1f] font-medium" : "text-neutral-400"}`}>
+                        {s.due > 0 ? `Due ${fmtMoney(s.due)}` : "Paid"}
                       </span>
                     </div>
-                    {inv.due > 0 && (
+                    {s.due > 0 && (
                       <div className="mt-2 flex justify-end">
-                        <button onClick={(e) => { e.stopPropagation(); setPaySaleId(inv.id); }} className="btn-primary !py-1 !px-3 text-xs">
+                        <button onClick={(e) => { e.stopPropagation(); onReceive(s.id); }} className="btn-primary !py-1 !px-3 text-xs">
                           Receive Payment
                         </button>
                       </div>
@@ -320,9 +323,6 @@ export default function InvoicesPage() {
           ))}
         </div>
       )}
-
-      <SaleDetailModal saleId={viewId} onClose={() => setViewId(null)} />
-      <ReceivePaymentModal saleId={paySaleId} onClose={() => setPaySaleId(null)} />
-    </Page>
+    </>
   );
 }

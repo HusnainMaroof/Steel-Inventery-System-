@@ -55,6 +55,7 @@ export interface SaleLine {
   qty: number; // in the product's own unit (kg, bag, …)
   rate: number; // selling price per unit of that unit
   unit: string; // product's unit, shown on the invoice
+  quality?: string; // quality grade sold (e.g. "60 Grade")
   supplierId?: string; // which mill/supplier's stock this line came from
   purchaseId?: string; // the purchase lot this line was fulfilled from (exact source)
 }
@@ -62,7 +63,8 @@ export interface SaleLine {
 export interface Sale {
   id: string;
   invoiceNo: string;
-  date: string;
+  date: string; // sale date (ISO yyyy-mm-dd) — used for grouping/reports
+  createdAt: string; // ISO datetime when the sale was recorded
   customerId: string;
   lines: SaleLine[];
   discountPct?: number; // invoice-wide discount percent (0 if absent)

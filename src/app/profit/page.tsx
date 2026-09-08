@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { type ColumnDef } from "@tanstack/react-table";
 import { useStore, saleGrandTotal } from "@/lib/store";
-import { Page, PageTitle, BarChart, StatCard, Stagger, StaggerItem, EmptyState } from "@/components/ui";
+import { Page, PageTitle, Tabs, CustomSelect, StatCard, Stagger, StaggerItem, EmptyState } from "@/components/ui";
 import { fmtMoney, monthKey, monthLabel } from "@/lib/format";
+import { DataTable } from "@/components/DataTable";
 import CreditDebit from "@/components/CreditDebit";
 
 function Row({
@@ -34,13 +36,73 @@ function Row({
   );
 }
 
+type MonthRow = { label: string; revenue: number; cogs: number; expenses: number; net: number; margin: number };
+
+const monthCols: ColumnDef<MonthRow>[] = [
+  {
+    accessorKey: "label",
+    header: "Month",
+    meta: { card: { position: "primary" } },
+    cell: (c) => <span className="font-medium">{monthLabel(c.getValue<string>())}</span>,
+  },
+  {
+    accessorKey: "revenue",
+    header: "Revenue",
+    meta: { hiddenOnMobile: true, align: "right" },
+    cell: (c) => <span className="num">{fmtMoney(c.getValue<number>())}</span>,
+  },
+  {
+    accessorKey: "cogs",
+    header: "COGS",
+    meta: { hiddenOnMobile: true, align: "right" },
+    cell: (c) => <span className="num text-neutral-500">{fmtMoney(c.getValue<number>())}</span>,
+  },
+  {
+    accessorKey: "expenses",
+    header: "Expenses",
+    meta: { hiddenOnMobile: true, align: "right" },
+    cell: (c) => <span className="num text-neutral-500">{fmtMoney(c.getValue<number>())}</span>,
+  },
+  {
+    accessorKey: "net",
+    header: "Profit",
+    meta: { align: "right", card: { position: "amount" } },
+    cell: (c) => {
+      const v = c.getValue<number>();
+      return <span className={`num font-medium ${v < 0 ? "text-red-600" : ""}`}>{fmtMoney(v)}</span>;
+    },
+  },
+  {
+    accessorKey: "margin",
+    header: "Margin",
+    meta: { align: "right", card: { position: "badge" } },
+    cell: (c) => {
+      const { margin, revenue } = c.row.original;
+      return (
+        <span className={`num ${margin < 0 ? "text-red-600" : "text-neutral-500"}`}>
+          {revenue > 0 ? `${margin.toFixed(0)}%` : "—"}
+        </span>
+      );
+    },
+  },
+];
+
 export default function ProfitLossPage() {
   const { sales, byItem, lineUnitCost, expenses, purchases } = useStore();
   const [mode, setMode] = useState<"all" | "month">("all");
-  const [month, setMonth] = useState(
-    Object.keys(
-      sales.reduce((m, s) => ({ ...m, [monthKey(s.date)]: true }), {})
-    ).sort().pop() ?? ""
+
+  const allMonths = useMemo(() => {
+    const keys = Array.from(
+      new Set([...sales.map((s) => monthKey(s.date)), ...expenses.map((e) => monthKey(e.date)), ...purchases.map((p) => monthKey(p.date))])
+    ).sort();
+    return keys;
+  }, [sales, expenses, purchases]);
+
+  const [month, setMonth] = useState(() => allMonths[allMonths.length - 1] ?? "");
+
+  const monthOptions = useMemo(
+    () => allMonths.map((m) => ({ value: m, label: monthLabel(m) })),
+    [allMonths]
   );
 
   const scoped = useMemo(() => {
@@ -65,11 +127,9 @@ export default function ProfitLossPage() {
     return { revenue, cogs, totalExpenses, purchaseSpend, grossProfit: revenue - cogs, net: revenue - cogs - totalExpenses };
   }, [mode, month, sales, expenses, purchases, byItem, lineUnitCost]);
 
-  const months = useMemo(() => {
-    const keys = Array.from(
-      new Set([...sales.map((s) => monthKey(s.date)), ...expenses.map((e) => monthKey(e.date))])
-    ).sort();
-    return keys.map((k) => {
+  const monthlyBreakdown = useMemo(() => {
+    if (mode !== "month") return null;
+    return allMonths.map((k) => {
       const ss = sales.filter((s) => monthKey(s.date) === k);
       const es = expenses.filter((e) => monthKey(e.date) === k);
       const revenue = ss.reduce((a, s) => a + saleGrandTotal(s), 0);
@@ -83,9 +143,11 @@ export default function ProfitLossPage() {
         0
       );
       const exp = es.reduce((a, e) => a + e.amount, 0);
-      return { label: k, revenue, net: revenue - cogs - exp };
+      const net = revenue - cogs - exp;
+      const margin = revenue > 0 ? (net / revenue) * 100 : 0;
+      return { label: k, revenue, cogs, expenses: exp, net, margin };
     });
-  }, [sales, expenses, byItem, lineUnitCost]);
+  }, [mode, allMonths, sales, expenses, byItem, lineUnitCost]);
 
   return (
     <Page>
@@ -93,29 +155,22 @@ export default function ProfitLossPage() {
         title="Profit & Loss"
         sub="How much money you made and what you spent"
         action={
-          <div className="flex gap-2">
-            <button
-              onClick={() => setMode("all")}
-              className={mode === "all" ? "btn-primary" : "btn-ghost"}
-            >
-              All time
-            </button>
-            <button
-              onClick={() => setMode("month")}
-              className={mode === "month" ? "btn-primary" : "btn-ghost"}
-            >
-              By month
-            </button>
+          <div className="flex items-center gap-3">
+            <Tabs
+              tabs={[
+                { key: "all", label: "All time" },
+                { key: "month", label: "By month" },
+              ]}
+              value={mode}
+              onChange={(k) => setMode(k as "all" | "month")}
+            />
             {mode === "month" && (
-              <select
-                className="w-40 sm:w-44"
+              <CustomSelect
                 value={month}
-                onChange={(e) => setMonth(e.target.value)}
-              >
-                {months.map((m) => (
-                  <option key={m.label} value={m.label}>{monthLabel(m.label)}</option>
-                ))}
-              </select>
+                onChange={setMonth}
+                options={monthOptions}
+                placeholder="Pick a month"
+              />
             )}
           </div>
         }
@@ -134,69 +189,61 @@ export default function ProfitLossPage() {
         />
       ) : (
       <>
-      {/* the four big numbers, same style as the dashboard */}
+      {/* Summary cards */}
       <Stagger className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
         <StaggerItem><StatCard label="Money in (sales)" value={scoped.revenue} /></StaggerItem>
         <StaggerItem><StatCard label="Cost of stock sold" value={-scoped.cogs} /></StaggerItem>
         <StaggerItem><StatCard label="Shop expenses" value={-scoped.totalExpenses} /></StaggerItem>
-        <StaggerItem><StatCard label="Profit left" value={scoped.net} /></StaggerItem>
+        <StaggerItem><StatCard label="Profit left" value={scoped.net} invert={scoped.net > 0} /></StaggerItem>
       </Stagger>
 
+      {/* P&L statement + Credit/Debit */}
       <div className="grid md:grid-cols-2 gap-10">
         <div>
-          <Row label="Money in — from sales" value={scoped.revenue} />
-          <Row label="Less — cost of the stock you sold" value={scoped.cogs} minus />
-          <Row label="Profit from trading" value={scoped.grossProfit} strong />
-          <Row label="Less — shop expenses" value={scoped.totalExpenses} minus />
-          <div className="flex justify-between py-4 mt-2 bg-black text-white px-4 -mx-4">
-            <span className="text-xs uppercase tracking-widest">Profit left</span>
-            <motion.span
-              key={scoped.net}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="tabular-nums text-lg"
-            >
-              {fmtMoney(scoped.net)}
-            </motion.span>
+          <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mb-4">
+            {mode === "month" ? `Statement — ${monthLabel(month)}` : "All-time statement"}
+          </h2>
+          <div className="border border-neutral-200 p-4">
+            <Row label="Revenue — from sales" value={scoped.revenue} />
+            <Row label="Less — cost of stock sold (COGS)" value={scoped.cogs} minus />
+            <Row label="Gross profit" value={scoped.grossProfit} strong />
+            <Row label="Less — shop expenses" value={scoped.totalExpenses} minus />
+            <div className="flex justify-between py-4 mt-1 bg-black text-white px-4 -mx-4">
+              <span className="text-xs uppercase tracking-widest">Net profit</span>
+              <motion.span
+                key={scoped.net}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="tabular-nums text-lg font-medium"
+              >
+                {fmtMoney(scoped.net)}
+              </motion.span>
+            </div>
           </div>
           {scoped.revenue > 0 && (
-            <p className="text-xs text-neutral-500 mt-4">
+            <p className="text-xs text-neutral-500 mt-3">
               On every ₨100 of sales you keep about ₨{((scoped.net / scoped.revenue) * 100).toFixed(0)} of profit.
             </p>
           )}
         </div>
 
-        {/* credit & debit — who owes who */}
         <div>
           <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mb-4">
             Credit &amp; Debit — who owes who
           </h2>
           <CreditDebit />
-
-          <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mt-10 mb-4">
-            Profit by month
-          </h2>
-          <BarChart data={months.map((m) => ({ label: monthLabel(m.label).slice(0, 3), value: Math.max(0, m.net) }))} />
-          <table className="mt-6">
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th className="num">Money in</th>
-                <th className="num">Profit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {months.map((m) => (
-                <tr key={m.label}>
-                  <td>{monthLabel(m.label)}</td>
-                  <td className="num">{fmtMoney(m.revenue)}</td>
-                  <td className="num">{fmtMoney(m.net)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
+
+      {/* Monthly breakdown — only in monthly mode */}
+      {mode === "month" && monthlyBreakdown && (
+        <div className="mt-10">
+          <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mb-4">
+            Monthly breakdown
+          </h2>
+          <DataTable columns={monthCols} data={monthlyBreakdown} />
+        </div>
+      )}
       </>
       )}
     </Page>

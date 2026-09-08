@@ -4,6 +4,111 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import gsap from "gsap";
 
+/* ---------- Tabs (Shadcn-style segmented control) ---------- */
+export function Tabs({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { key: string; label: string }[];
+  value: string;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-neutral-100 border border-neutral-200">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          className={`relative px-4 py-2 text-xs font-medium rounded-md transition-all duration-200 ${
+            value === t.key
+              ? "bg-white text-black shadow-sm"
+              : "text-neutral-500 hover:text-neutral-800"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- Custom Select (Shadcn-style dropdown) ---------- */
+export function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder = "Select…",
+  className = "",
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between gap-2 w-full min-w-[180px] px-3 py-2 text-xs font-medium bg-white border border-neutral-200 rounded-lg hover:border-neutral-400 transition-colors text-left"
+      >
+        <span className={selected ? "text-black" : "text-neutral-400"}>
+          {selected?.label ?? placeholder}
+        </span>
+        <svg
+          className={`w-3.5 h-3.5 text-neutral-400 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden"
+          >
+            <div className="max-h-60 overflow-y-auto py-1">
+              {options.map((o) => (
+                <button
+                  key={o.value}
+                  onClick={() => { onChange(o.value); setOpen(false); }}
+                  className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                    o.value === value
+                      ? "bg-neutral-100 text-black font-medium"
+                      : "text-neutral-600 hover:bg-neutral-50"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 /* GSAP count-up number */
 export function CountUp({
   value,
@@ -233,12 +338,53 @@ export function StatCard({
   );
 }
 
-/* Simple monochrome bar chart (CSS bars, animated widths) */
+/* Simple monochrome bar chart (CSS bars, animated widths) — supports negative values */
 export function BarChart({
   data,
 }: {
   data: { label: string; value: number }[];
 }) {
+  const hasNegative = data.some((d) => d.value < 0);
+  if (hasNegative) {
+    const max = Math.max(...data.map((d) => Math.abs(d.value)), 1);
+    return (
+      <div className="flex items-center gap-3 sm:gap-4 h-40 sm:h-44">
+        {data.map((d, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-center">
+            <div className="text-[11px] text-neutral-500 tabular-nums">
+              {d.value >= 0
+                ? (d.value >= 1e6 ? (d.value / 1e6).toFixed(1) + "M" : Math.round(d.value).toLocaleString())
+                : ""}
+            </div>
+            {d.value >= 0 ? (
+              <motion.div
+                className="w-full bg-black"
+                initial={{ height: 0 }}
+                animate={{ height: `${(d.value / max) * 45}%` }}
+                transition={{ duration: 0.8, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] }}
+              />
+            ) : (
+              <motion.div
+                className="w-full bg-neutral-300"
+                initial={{ height: 0 }}
+                animate={{ height: `${(Math.abs(d.value) / max) * 45}%` }}
+                transition={{ duration: 0.8, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] }}
+              />
+            )}
+            <div className="w-full border-t border-neutral-300" />
+            {d.value < 0 && (
+              <div className="text-[11px] text-red-500 tabular-nums">
+                −{Math.abs(d.value) >= 1e6 ? (Math.abs(d.value) / 1e6).toFixed(1) + "M" : Math.round(Math.abs(d.value)).toLocaleString()}
+              </div>
+            )}
+            <div className="text-[11px] text-neutral-500 truncate w-full text-center">
+              {d.label}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
     <div className="flex items-end gap-3 sm:gap-4 h-36 sm:h-40">

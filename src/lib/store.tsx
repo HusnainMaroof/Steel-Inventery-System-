@@ -38,10 +38,10 @@ export const saleDiscount = (s: Sale) =>
 export const saleTaxable = (s: Sale) => saleTotal(s) - saleDiscount(s);
 export const saleTax = (s: Sale) => saleTaxable(s) * ((s.taxPct ?? 0) / 100);
 export const saleGrandTotal = (s: Sale) => saleTaxable(s) + saleTax(s);
+export type InvoiceStatus = "paid" | "unpaid";
 
-export type InvoiceStatus = "paid" | "partial" | "unpaid" | "advance";
 export const invoiceStatus = (paid: number, total: number): InvoiceStatus =>
-  paid <= 0 ? "unpaid" : paid >= total - 0.001 ? (paid > total + 0.001 ? "advance" : "paid") : "partial";
+  paid >= total - 0.001 ? "paid" : "unpaid";
 
 export interface DashboardStats {
   stockQty: number;
@@ -78,7 +78,7 @@ interface Store {
   addPurchase: (p: Omit<Purchase, "id">) => void;
   updatePurchase: (id: string, patch: Partial<Purchase>) => void;
   deletePurchase: (id: string) => void;
-  addSale: (s: Omit<Sale, "id" | "invoiceNo">) => string;
+  addSale: (s: Omit<Sale, "id" | "invoiceNo" | "createdAt">) => string;
   addPayment: (p: Omit<Payment, "id">) => void;
   addCustomer: (c: Omit<Customer, "id">) => string;
   addSupplier: (s: Omit<Supplier, "id">) => void;
@@ -105,8 +105,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [customers, setCustomers] = useState<Customer[]>(INITIAL.customers);
   const [purchases, setPurchases] = useState<Purchase[]>(INITIAL.purchases);
   const [sales, setSales] = useState<Sale[]>(INITIAL.sales);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [payments, setPayments] = useState<Payment[]>(INITIAL.payments ?? []);
+  const [expenses, setExpenses] = useState<Expense[]>(INITIAL.expenses ?? []);
   const [products, setProducts] = useState<Product[]>(INITIAL.products);
   const [productItems, setProductItems] = useState<ProductItem[]>(INITIAL.productItems);
   const [qualities, setQualities] = useState<Quality[]>(INITIAL.qualities);
@@ -373,16 +373,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const supplierBalance = useMemo(() => {
     const map: Record<string, number> = {};
-    // dues are tracked per purchase: STEEL amount only minus what was already paid
-    // (transport & other costs are our own expense, never owed to the mill)
+    // Canonical rule: mill dues come ONLY from each purchase's paid amount
+    // (steel amount only — transport & other costs are ours, never owed).
+    // `payments[]` rows of type "supplier" are the readable journal copy of
+    // those same payments (recorded by the Pay-Supplier flow & seed) and must
+    // NOT be subtracted again, or dues would be double-counted.
     for (const p of purchases)
       map[p.supplierId] =
         (map[p.supplierId] ?? 0) + Math.max(0, steelAmount(p) - (p.paid ?? 0));
-    for (const p of payments)
-      if (p.type === "supplier")
-        map[p.partyId] = (map[p.partyId] ?? 0) - p.amount;
     return (id: string) => map[id] ?? 0;
-  }, [purchases, payments]);
+  }, [purchases]);
 
   const stats = useMemo<DashboardStats>(() => {
     let revenue = 0;
@@ -446,8 +446,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setPurchases((prev) => prev.filter((p) => p.id !== id)),
     addSale: (s) => {
       const id = nextId();
-      const invoiceNo = `INV-${String(sales.length + 1).padStart(3, "0")}`;
-      setSales((prev) => [{ ...s, id, invoiceNo }, ...prev]);
+      // invoice numbers must never repeat — pick one past the largest so far,
+      // even if earlier invoices were deleted
+      let max = 0;
+      for (const x of sales) {
+        const m = /^INV-(\d+)$/.exec(x.invoiceNo);
+        if (m) max = Math.max(max, Number(m[1]));
+      }
+      const invoiceNo = `INV-${String(max + 1).padStart(3, "0")}`;
+      // record the exact time the sale was made — shown on lists and the printed bill
+      setSales((prev) => [{ ...s, id, invoiceNo, createdAt: new Date().toISOString() }, ...prev]);
       return id;
     },
     addPayment: (p) => setPayments((prev) => [{ ...p, id: nextId() }, ...prev]),

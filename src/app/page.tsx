@@ -23,7 +23,9 @@ const inPeriod = (date: string, period: Period) => {
       d.getDate() === now.getDate()
     );
   if (period === "monthly")
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    return (
+      d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    );
   return d.getFullYear() === now.getFullYear();
 };
 
@@ -89,7 +91,10 @@ function Kpi({
   money?: boolean;
 }) {
   return (
-    <Card dark={dark} className="p-5 h-full flex flex-col justify-between gap-5">
+    <Card
+      dark={dark}
+      className="p-5 h-full flex flex-col justify-between gap-5"
+    >
       <p
         className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${
           dark ? "text-neutral-400" : "text-neutral-500"
@@ -147,8 +152,15 @@ export default function DashboardPage() {
         month: "long",
         year: "numeric",
       }),
-    []
+    [],
   );
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good Morning";
+    if (h < 17) return "Good Afternoon";
+    return "Good Evening";
+  }, []);
 
   /* item -> product category map (drives which sales belong to a product) */
   const productOf = useMemo(() => {
@@ -159,29 +171,32 @@ export default function DashboardPage() {
 
   /* scope inventory + sales down to the selected product */
   const invRows = useMemo(
-    () => (isAll ? inventory : inventory.filter((r) => r.product === product!.name)),
-    [inventory, isAll, product]
+    () =>
+      isAll ? inventory : inventory.filter((r) => r.product === product!.name),
+    [inventory, isAll, product],
   );
   const saleRows = useMemo(
     () =>
       isAll
         ? sales
-        : sales.filter((s) => s.lines.some((l) => productOf[l.item] === product!.name)),
-    [sales, isAll, product, productOf]
+        : sales.filter((s) =>
+            s.lines.some((l) => productOf[l.item] === product!.name),
+          ),
+    [sales, isAll, product, productOf],
   );
 
   /* period-scoped sales / payments / expenses */
   const pSales = useMemo(
     () => saleRows.filter((x) => inPeriod(x.date, period)),
-    [saleRows, period]
+    [saleRows, period],
   );
   const pPayments = useMemo(
     () => payments.filter((x) => inPeriod(x.date, period)),
-    [payments, period]
+    [payments, period],
   );
   const pExpenses = useMemo(
     () => expenses.filter((x) => inPeriod(x.date, period)),
-    [expenses, period]
+    [expenses, period],
   );
 
   const moneyIn = pPayments
@@ -190,7 +205,7 @@ export default function DashboardPage() {
 
   const salesTotal = useMemo(
     () => pSales.reduce((a, s) => a + saleGrandTotal(s), 0),
-    [pSales]
+    [pSales],
   );
 
   /* gross profit for the period */
@@ -218,8 +233,16 @@ export default function DashboardPage() {
   /* all products can have different units (kg vs bag) — only a single product has a meaningful qty sum */
   const unitSuffix = isAll ? "" : qtyUnitLabel(product?.unit);
   const stockCard = isAll
-    ? { value: inStockItems, suffix: "", hint: `${itemCount} tracked item${itemCount === 1 ? "" : "s"} in the depot` }
-    : { value: stockQty, suffix: unitSuffix ? ` ${unitSuffix}` : "", hint: `Worth ${fmtCompact(stockValue)}` };
+    ? {
+        value: inStockItems,
+        suffix: "",
+        hint: `${itemCount} tracked item${itemCount === 1 ? "" : "s"} in the depot`,
+      }
+    : {
+        value: stockQty,
+        suffix: unitSuffix ? ` ${unitSuffix}` : "",
+        hint: `Worth ${fmtCompact(stockValue)}`,
+      };
 
   /* dues are whole-depot figures — what customers owe us + what we owe mills */
   const dues = useMemo(() => {
@@ -250,7 +273,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-[22px] sm:text-2xl font-semibold tracking-tight">
-            Good Morning, M. Kashif
+            {greeting}
           </h1>
           <p className="text-[13px] text-neutral-500 mt-1.5">{day}</p>
         </div>
@@ -279,7 +302,9 @@ export default function DashboardPage() {
               MK
             </div>
             <div className="leading-tight">
-              <p className="text-[13px] font-semibold text-[#171717]">M. Kashif</p>
+              <p className="text-[13px] font-semibold text-[#171717]">
+                M. Kashif
+              </p>
               <p className="text-[10px] text-neutral-500">Owner</p>
             </div>
           </div>
@@ -327,7 +352,11 @@ export default function DashboardPage() {
           />
         </StaggerItem>
         <StaggerItem>
-          <Kpi label="Stock Worth" value={stockValue} hint="At average landed cost" />
+          <Kpi
+            label="Stock Worth"
+            value={stockValue}
+            hint="At average landed cost"
+          />
         </StaggerItem>
         <StaggerItem>
           <Kpi

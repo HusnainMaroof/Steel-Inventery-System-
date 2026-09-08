@@ -34,6 +34,12 @@ export const fmtDate = (iso: string) =>
     month: "short",
     year: "numeric",
   });
+// clock time of a recorded event (e.g. when a sale was made) — "11:30 AM"
+export const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 // for full ISO timestamps — shows date and clock time
 export const fmtDateTime = (iso: string) => {
   const d = new Date(iso);

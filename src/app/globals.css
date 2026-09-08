@@ -260,6 +260,18 @@ a {
   }
 }
 
+/* DataTable responsive toggle — desktop table hidden on mobile, mobile cards hidden on desktop */
+@media (max-width: 640px) {
+  .dt-desktop { display: none; }
+}
+@media (min-width: 641px) {
+  .dt-mobile { display: none; }
+}
+/* Mobile card padding compact on phones */
+@media (max-width: 640px) {
+  .dt-mobile > div + div { border-top: 1px solid var(--line); }
+}
+
 /* print — invoice only */
 @media print {
   body * {
@@ -272,10 +284,30 @@ a {
   .print-area {
     position: absolute;
     inset: 0;
-    padding: 24px;
+    padding: 20mm 15mm;
+    border: none !important;
+    background: white !important;
   }
   .no-print {
     display: none !important;
+  }
+  /* ensure black backgrounds print */
+  .print-area .bg-black {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+  /* clean table borders for print */
+  .print-area table {
+    border-collapse: collapse;
+  }
+  .print-area th,
+  .print-area td {
+    border-bottom-color: #ccc !important;
+  }
+  @page {
+    margin: 0;
+    size: A4;
   }
 }
 

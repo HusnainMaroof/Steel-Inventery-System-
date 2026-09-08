@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useStore, saleTotal, saleDiscount, saleTax, saleGrandTotal } from "@/lib/store";
-import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate } from "@/lib/format";
+import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtTime } from "@/lib/format";
 
 export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
@@ -52,7 +52,7 @@ export default function InvoiceDetailPage() {
           <div className="sm:text-right">
             <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">Invoice</div>
             <div className="text-xl font-medium mt-1">{sale.invoiceNo}</div>
-            <div className="text-xs text-neutral-500 mt-1">{fmtDate(sale.date)}</div>
+            <div className="text-xs text-neutral-500 mt-1">{fmtDate(sale.date)} · {fmtTime(sale.createdAt)}</div>
           </div>
         </div>
 
