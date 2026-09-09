@@ -8,18 +8,27 @@ import React, {
   type ReactNode,
 } from "react";
 import type {
+  AttributeDef,
+  AttributeOption,
   Customer,
   Expense,
   InventoryRow,
   Payment,
   Product,
+  ProductCategory,
   ProductItem,
   Purchase,
   Quality,
   Sale,
   StockLot,
+  StockMovementView,
   Supplier,
+  Variant,
+  Warehouse,
+  WarehouseLocation,
 } from "./types";
+import { BUSINESS_ID } from "./types";
+import { defaultShortName, variantKey } from "./catalogue";
 import { seedInitialState } from "./seed";
 
 export const purchaseTotal = (p: Purchase) =>
@@ -55,6 +64,27 @@ export interface DashboardStats {
   supplierDues: number;
 }
 
+/* stock grouped at variant level — the unit a business actually stocks/sells */
+export interface VariantStockRow {
+  variantId: string; // "item:<name>" for pre-dynamic records with no variant
+  legacyItem?: string; // legacy item mirror when no variant exists
+  productId?: string;
+  product?: string; // product name
+  categoryId?: string;
+  category?: string; // category name
+  shortName: string; // variant short name (or legacy item name)
+  attributeSnapshot?: Record<string, string>;
+  unit: string;
+  purchasedQty: number;
+  soldQty: number;
+  stockQty: number;
+  totalCost: number;
+  landedAvg: number;
+  stockValue: number;
+  avgSellRate: number;
+  sellRate?: number;
+}
+
 interface Store {
   suppliers: Supplier[];
   customers: Customer[];
@@ -65,7 +95,16 @@ interface Store {
   products: Product[];
   productItems: ProductItem[];
   qualities: Quality[];
+  // dynamic catalogue configuration
+  categories: ProductCategory[];
+  attributeDefs: AttributeDef[];
+  attributeOptions: AttributeOption[];
+  variants: Variant[];
+  warehouses: Warehouse[];
+  locations: WarehouseLocation[];
   inventory: InventoryRow[];
+  inventoryByVariant: VariantStockRow[]; // stock grouped per variant
+  stockMovements: StockMovementView[]; // derived + in / − out journal
   byItem: Record<string, number>; // item -> weighted avg landed cost
   byItemSource: Record<string, Record<string, number>>; // item -> supplierId -> landed cost
   inventoryBySource: InventoryRow[]; // per item+source rows
@@ -83,17 +122,41 @@ interface Store {
   addCustomer: (c: Omit<Customer, "id">) => string;
   addSupplier: (s: Omit<Supplier, "id">) => void;
   addExpense: (e: Omit<Expense, "id">) => void;
-  addProduct: (name: string, unit: string) => void;
+  addProduct: (name: string, unit: string) => string;
   updateProduct: (id: string, patch: Partial<Product>) => void;
   addProductItem: (productId: string, name: string) => void;
   addQuality: (productId: string, name: string, specOnly?: boolean) => void;
   deleteProduct: (id: string) => void;
   deleteProductItem: (id: string) => void;
   deleteQuality: (id: string) => void;
+  // --- dynamic catalogue configuration ---
+  addCategory: (productId: string, name: string) => string;
+  renameCategory: (id: string, name: string) => void;
+  setCategoryActive: (id: string, active: boolean) => void;
+  addAttribute: (
+    categoryId: string,
+    def: { name: string; type: AttributeDef["type"]; required: boolean; unit?: string; options?: string[] }
+  ) => string; // returns the new def id (also creates its options)
+  patchAttribute: (id: string, patch: Partial<AttributeDef>) => void;
+  addOption: (attributeDefId: string, label: string) => void;
+  patchOption: (id: string, patch: Partial<AttributeOption>) => void;
+  addWarehouse: (name: string) => void;
+  renameWarehouse: (id: string, name: string) => void;
+  setWarehouseActive: (id: string, active: boolean) => void;
+  addLocation: (warehouseId: string, name: string) => void;
+  renameLocation: (id: string, name: string) => void;
+  setLocationActive: (id: string, active: boolean) => void;
+  /** find-or-create the variant for an attribute combination (deduped by key) */
+  ensureVariant: (categoryId: string, attributes: Record<string, string>, shortName?: string) => Variant;
+  setVariantShortName: (id: string, shortName: string) => void;
+  setVariantActive: (id: string, active: boolean) => void;
+  deleteVariant: (id: string) => void; // only safe when no transaction references it
   deleteCustomer: (id: string) => void;
   deleteSupplier: (id: string) => void;
   deleteInventoryItem: (item: string) => void;
   hideInventoryItem: (item: string) => void; // removes a sold-out row from the inventory list only — records & numbers stay
+  deleteInventoryVariant: (variantId: string) => void; // cascade: that variant's purchases + sales + their payments
+  hideInventoryVariant: (variantId: string) => void; // cosmetic removal of a sold-out variant row
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -114,7 +177,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>(INITIAL.products);
   const [productItems, setProductItems] = useState<ProductItem[]>(INITIAL.productItems);
   const [qualities, setQualities] = useState<Quality[]>(INITIAL.qualities);
+  const [categories, setCategories] = useState<ProductCategory[]>(INITIAL.categories);
+  const [attributeDefs, setAttributeDefs] = useState<AttributeDef[]>(INITIAL.attributeDefs);
+  const [attributeOptions, setAttributeOptions] = useState<AttributeOption[]>(INITIAL.attributeOptions);
+  const [variants, setVariants] = useState<Variant[]>(INITIAL.variants);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(INITIAL.warehouses);
+  const [locations, setLocations] = useState<WarehouseLocation[]>(INITIAL.locations);
   const [hiddenItems, setHiddenItems] = useState<string[]>([]);
+  const [hiddenVariants, setHiddenVariants] = useState<string[]>([]);
 
   const {
     inventory,
@@ -238,6 +308,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         } else {
           let elig = lots.filter((x) => x.p.item === l.item);
           if (l.supplierId) elig = elig.filter((x) => x.p.supplierId === l.supplierId);
+          // dynamic records: consume only same-variant stock (FIFO within it)
+          if (l.variantId) elig = elig.filter((x) => x.p.variantId === l.variantId);
           const c = consume(elig, l.qty);
           unit = c >= 0 ? c : fallback(l.item);
         }
@@ -331,6 +403,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         product: l.p.product,
         spec: l.p.spec,
         quality: l.p.quality,
+        categoryId: l.p.categoryId,
+        variantId: l.p.variantId,
+        attributeSnapshot: l.p.attributeSnapshot,
+        lotNumber: l.p.lotNumber,
+        heatNumber: l.p.heatNumber,
+        batchNumber: l.p.batchNumber,
+        warehouseId: l.p.warehouseId,
+        locationId: l.p.locationId,
         supplierId: l.p.supplierId,
         unit: l.p.unit || (l.p.product && productUnit[l.p.product]) || "",
         remainingQty: l.remaining,
@@ -346,6 +426,151 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return { inventory: rows, byItem: itemMap, byItemSource, stockLots, inventoryBySource, lineUnitCost };
   }, [purchases, sales, products, suppliers, hiddenItems]);
+
+  /* ---- variant-level stock (the unit a business stocks/sells) ----
+     Same derivation rule (purchases − sales), grouped by variant instead of
+     the legacy item string. Records without a variant keep an "item:" key so
+     nothing is lost. */
+  const inventoryByVariant = useMemo<VariantStockRow[]>(() => {
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const catById = new Map(categories.map((c) => [c.id, c]));
+    const varById = new Map(variants.map((v) => [v.id, v]));
+    type Acc = {
+      variantId: string;
+      legacyItem?: string;
+      categoryId?: string;
+      snapshot?: Record<string, string>;
+      unit: string;
+      pq: number; cost: number; sq: number; rev: number; sr: number; srq: number;
+    };
+    const acc: Record<string, Acc> = {};
+    const productNameOfItem: Record<string, string> = {};
+    for (const p of purchases) if (p.product) productNameOfItem[p.item] = p.product;
+    const ensure = (variantId: string, from: { item: string; categoryId?: string; snapshot?: Record<string, string>; unit?: string }) => {
+      acc[variantId] ??= {
+        variantId,
+        legacyItem: variantId.startsWith("item:") ? from.item : undefined,
+        categoryId: from.categoryId,
+        snapshot: from.snapshot,
+        unit: from.unit ?? "",
+        pq: 0, cost: 0, sq: 0, rev: 0, sr: 0, srq: 0,
+      };
+      return acc[variantId];
+    };
+    for (const p of purchases) {
+      const k = p.variantId ?? `item:${p.item}`;
+      const a = ensure(k, { item: p.item, categoryId: p.categoryId, snapshot: p.attributeSnapshot, unit: p.unit });
+      a.pq += p.qty;
+      a.cost += purchaseTotal(p);
+      if (p.sellRate) { a.sr += p.qty * p.sellRate; a.srq += p.qty; }
+    }
+    for (const s of sales)
+      for (const l of s.lines) {
+        const k = l.variantId ?? `item:${l.item}`;
+        const a = ensure(k, { item: l.item, categoryId: l.categoryId, snapshot: l.attributeSnapshot, unit: l.unit });
+        a.sq += l.qty;
+        a.rev += l.qty * l.rate;
+      }
+    const rows: VariantStockRow[] = Object.values(acc).map((a) => {
+      const v = a.variantId.startsWith("item:") ? undefined : varById.get(a.variantId);
+      const cat = v ? catById.get(v.categoryId) : a.categoryId ? catById.get(a.categoryId) : undefined;
+      const prod = cat ? productById.get(cat.productId) : undefined;
+      const landedAvg = a.pq > 0 ? a.cost / a.pq : 0;
+      const stockQty = a.pq - a.sq;
+      return {
+        variantId: a.variantId,
+        legacyItem: a.legacyItem,
+        productId: prod?.id,
+        product: prod?.name ?? (a.legacyItem ? productNameOfItem[a.legacyItem] : undefined),
+        categoryId: cat?.id,
+        category: cat?.name,
+        shortName: v?.shortName ?? a.legacyItem ?? a.variantId,
+        attributeSnapshot: a.snapshot,
+        unit: (prod?.unit ?? a.unit) || "kg",
+        purchasedQty: a.pq,
+        soldQty: a.sq,
+        stockQty,
+        totalCost: a.cost,
+        landedAvg,
+        stockValue: stockQty * landedAvg,
+        avgSellRate: a.sq > 0 ? a.rev / a.sq : 0,
+        sellRate: a.srq > 0 ? a.sr / a.srq : undefined,
+      };
+    });
+    rows.sort(
+      (a, b) =>
+        (a.product ?? "").localeCompare(b.product ?? "") ||
+        (a.category ?? "").localeCompare(b.category ?? "") ||
+        a.shortName.localeCompare(b.shortName)
+    );
+    // sold-out rows that were cleaned off the inventory list stay hidden
+    for (let i = rows.length - 1; i >= 0; i--)
+      if (rows[i].stockQty <= 0.000001 && hiddenVariants.includes(rows[i].variantId))
+        rows.splice(i, 1);
+    return rows;
+  }, [purchases, sales, products, categories, variants, hiddenVariants]);
+
+  /* ---- stock movements: a derived +/− journal of every stock change.
+     Purchases and sales stay the authoritative records, so this projection
+     can never drift from the ledger. */
+  const stockMovements = useMemo<StockMovementView[]>(() => {
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const catById = new Map(categories.map((c) => [c.id, c]));
+    const varById = new Map(variants.map((v) => [v.id, v]));
+    const productNameOfItem: Record<string, string> = {};
+    for (const p of purchases) if (p.product) productNameOfItem[p.item] = p.product;
+    const mv: StockMovementView[] = [];
+    const resolve = (l: { variantId?: string; categoryId?: string; item: string }) => {
+      const v = l.variantId ? varById.get(l.variantId) : undefined;
+      const cat = v ? catById.get(v.categoryId) : l.categoryId ? catById.get(l.categoryId) : undefined;
+      const prod = cat ? productById.get(cat.productId) : undefined;
+      return {
+        productId: prod?.id,
+        categoryId: cat?.id ?? l.categoryId,
+        variantId: l.variantId,
+        productName: prod?.name ?? productNameOfItem[l.item],
+      };
+    };
+    for (const p of purchases) {
+      const r = resolve({ variantId: p.variantId, categoryId: p.categoryId, item: p.item });
+      mv.push({
+        id: `mv-p-${p.id}`,
+        type: "PURCHASE_RECEIPT",
+        date: p.date,
+        productId: r.productId,
+        categoryId: r.categoryId,
+        variantId: r.variantId,
+        attributeSnapshot: p.attributeSnapshot,
+        unit: p.unit,
+        qty: p.qty,
+        purchaseId: p.id,
+        supplierId: p.supplierId,
+        warehouseId: p.warehouseId,
+        locationId: p.locationId,
+        refLabel: [p.lotNumber, p.heatNumber, p.batchNumber].filter(Boolean).join(" / ") || undefined,
+      });
+    }
+    for (const s of sales)
+      s.lines.forEach((l, i) => {
+        const r = resolve({ variantId: l.variantId, categoryId: l.categoryId, item: l.item });
+        mv.push({
+          id: `mv-s-${s.id}-${i}`,
+          type: "SALE",
+          date: s.date,
+          productId: r.productId,
+          categoryId: r.categoryId,
+          variantId: l.variantId,
+          attributeSnapshot: l.attributeSnapshot,
+          unit: l.unit,
+          qty: -l.qty,
+          saleId: s.id,
+          saleLineIndex: i,
+          supplierId: l.supplierId,
+          refLabel: s.invoiceNo,
+        });
+      });
+    return mv.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+  }, [purchases, sales, products, categories, variants]);
 
   /* per-invoice allocation: explicit payments settle their invoice first,
      then a customer's unallocated payments settle their oldest unpaid invoices (FIFO) */
@@ -447,7 +672,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     products,
     productItems,
     qualities,
+    categories,
+    attributeDefs,
+    attributeOptions,
+    variants,
+    warehouses,
+    locations,
     inventory,
+    inventoryByVariant,
+    stockMovements,
     byItem,
     byItemSource,
     inventoryBySource,
@@ -486,12 +719,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     addSupplier: (s) => setSuppliers((prev) => [...prev, { ...s, id: nextId() }]),
     addExpense: (e) => setExpenses((prev) => [{ ...e, id: nextId() }, ...prev]),
-    addProduct: (name, unit) =>
-      setProducts((prev) =>
-        prev.some((p) => p.name.toLowerCase() === name.toLowerCase())
-          ? prev
-          : [...prev, { id: nextId(), name, unit }]
-      ),
+    addProduct: (name, unit) => {
+      const clean = name.trim();
+      if (!clean) return "";
+      const existing = products.find((p) => p.name.toLowerCase() === clean.toLowerCase());
+      if (existing) return existing.id;
+      const id = nextId();
+      setProducts((prev) => [...prev, { id, businessId: BUSINESS_ID, name: clean, unit, active: true }]);
+      return id;
+    },
     updateProduct: (id, patch) =>
       setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p))),
     addProductItem: (productId, name) =>
@@ -511,8 +747,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 : { id: nextId(), productId, name },
             ]
       ),
-    // deleting a product also removes all of its items and its qualities
+    // deleting a product also removes all of its categories, attributes,
+    // options, variants and (legacy) items/qualities — callers guard history
     deleteProduct: (id) => {
+      const catIds = categories.filter((c) => c.productId === id).map((c) => c.id);
+      setCategories((prev) => prev.filter((c) => c.productId !== id));
+      setAttributeDefs((prev) => prev.filter((d) => !catIds.includes(d.categoryId)));
+      const defIds = attributeDefs.filter((d) => catIds.includes(d.categoryId)).map((d) => d.id);
+      setAttributeOptions((prev) => prev.filter((o) => !defIds.includes(o.attributeDefId)));
+      setVariants((prev) => prev.filter((v) => !catIds.includes(v.categoryId)));
       setProductItems((prev) => prev.filter((i) => i.productId !== id));
       setQualities((prev) => prev.filter((q) => q.productId !== id));
       setProducts((prev) => prev.filter((p) => p.id !== id));
@@ -521,6 +764,147 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setProductItems((prev) => prev.filter((i) => i.id !== id)),
     deleteQuality: (id) =>
       setQualities((prev) => prev.filter((q) => q.id !== id)),
+
+    // --- dynamic catalogue configuration ---
+    addCategory: (productId, name) => {
+      const clean = name.trim();
+      if (!clean) return "";
+      const existing = categories.find(
+        (c) => c.productId === productId && c.name.toLowerCase() === clean.toLowerCase()
+      );
+      if (existing) return existing.id;
+      const id = nextId();
+      setCategories((prev) => [...prev, { id, businessId: BUSINESS_ID, productId, name: clean, active: true }]);
+      return id;
+    },
+    renameCategory: (id, name) =>
+      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, name: name.trim() || c.name } : c))),
+    setCategoryActive: (id, active) =>
+      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, active } : c))),
+    addAttribute: (categoryId, def) => {
+      const name = def.name.trim();
+      if (!name) return "";
+      if (attributeDefs.some((d) => d.categoryId === categoryId && d.name.toLowerCase() === name.toLowerCase()))
+        return "";
+      const id = nextId();
+      let key = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      if (!key) key = `attr-${id}`;
+      const taken = new Set(attributeDefs.filter((d) => d.categoryId === categoryId).map((d) => d.key));
+      let k = key;
+      let n = 2;
+      while (taken.has(k)) k = `${key}_${n++}`;
+      const sortOrder =
+        attributeDefs.filter((d) => d.categoryId === categoryId).reduce((mx, d) => Math.max(mx, d.sortOrder), 0) + 1;
+      setAttributeDefs((prev) => [
+        ...prev,
+        {
+          id,
+          businessId: BUSINESS_ID,
+          categoryId,
+          name,
+          key: k,
+          type: def.type,
+          required: def.required,
+          unit: def.unit?.trim() || undefined,
+          sortOrder,
+          active: true,
+        },
+      ]);
+      if (def.type === "select" && def.options?.length) {
+        const options = def.options
+          .map((label) => label.trim())
+          .filter(Boolean)
+          .map((label, i) => ({
+            id: `${id}-o${i}`,
+            attributeDefId: id,
+            label,
+            sortOrder: i,
+            active: true,
+          }));
+        setAttributeOptions((prev) => [...prev, ...options]);
+      }
+      return id;
+    },
+    patchAttribute: (id, patch) =>
+      setAttributeDefs((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d))),
+    addOption: (attributeDefId, label) => {
+      const clean = label.trim();
+      if (!clean) return;
+      setAttributeOptions((prev) =>
+        prev.some((o) => o.attributeDefId === attributeDefId && o.label.toLowerCase() === clean.toLowerCase())
+          ? prev
+          : [
+              ...prev,
+              {
+                id: nextId(),
+                attributeDefId,
+                label: clean,
+                sortOrder:
+                  prev.filter((o) => o.attributeDefId === attributeDefId).reduce((mx, o) => Math.max(mx, o.sortOrder), -1) + 1,
+                active: true,
+              },
+            ]
+      );
+    },
+    patchOption: (id, patch) =>
+      setAttributeOptions((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o))),
+    addWarehouse: (name) => {
+      const clean = name.trim();
+      if (!clean) return;
+      setWarehouses((prev) =>
+        prev.some((w) => w.name.toLowerCase() === clean.toLowerCase())
+          ? prev
+          : [...prev, { id: nextId(), businessId: BUSINESS_ID, name: clean, active: true }]
+      );
+    },
+    renameWarehouse: (id, name) =>
+      setWarehouses((prev) => prev.map((w) => (w.id === id ? { ...w, name: name.trim() || w.name } : w))),
+    setWarehouseActive: (id, active) =>
+      setWarehouses((prev) => prev.map((w) => (w.id === id ? { ...w, active } : w))),
+    addLocation: (warehouseId, name) => {
+      const clean = name.trim();
+      if (!clean) return;
+      setLocations((prev) =>
+        prev.some((l) => l.warehouseId === warehouseId && l.name.toLowerCase() === clean.toLowerCase())
+          ? prev
+          : [...prev, { id: nextId(), warehouseId, name: clean, active: true }]
+      );
+    },
+    renameLocation: (id, name) =>
+      setLocations((prev) => prev.map((l) => (l.id === id ? { ...l, name: name.trim() || l.name } : l))),
+    setLocationActive: (id, active) =>
+      setLocations((prev) => prev.map((l) => (l.id === id ? { ...l, active } : l))),
+    ensureVariant: (categoryId, attributes, shortName) => {
+      const clean: Record<string, string> = {};
+      for (const [key, val] of Object.entries(attributes))
+        if (val !== undefined && val.trim() !== "") clean[key] = val.trim();
+      const key = variantKey(categoryId, clean);
+      const existing = variants.find((v) => v.key === key);
+      if (existing) {
+        if (!existing.active)
+          setVariants((prev) => prev.map((v) => (v.id === existing.id ? { ...v, active: true } : v)));
+        return existing;
+      }
+      const cat = categories.find((c) => c.id === categoryId);
+      const defs = attributeDefs.filter((d) => d.categoryId === categoryId);
+      const variant: Variant = {
+        id: nextId(),
+        businessId: BUSINESS_ID,
+        categoryId,
+        key,
+        attributes: clean,
+        shortName: shortName?.trim() || defaultShortName(cat?.name ?? "Item", clean, defs),
+        active: true,
+        createdAt: new Date().toISOString(),
+      };
+      setVariants((prev) => [...prev, variant]);
+      return variant;
+    },
+    setVariantShortName: (id, shortName) =>
+      setVariants((prev) => prev.map((v) => (v.id === id ? { ...v, shortName: shortName.trim() || v.shortName } : v))),
+    setVariantActive: (id, active) =>
+      setVariants((prev) => prev.map((v) => (v.id === id ? { ...v, active } : v))),
+    deleteVariant: (id) => setVariants((prev) => prev.filter((v) => v.id !== id)),
     // removing a customer also removes their sales and the payments made by them
     deleteCustomer: (id) => {
       const saleIds = new Set(
@@ -580,6 +964,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // list but its purchases, sales, dues and profit records are untouched
     hideInventoryItem: (item) =>
       setHiddenItems((prev) => (prev.includes(item) ? prev : [...prev, item])),
+    // variant-level cascade: removing a variant wipes its purchases, its
+    // sales and the payments against those sales (mirrors deleteInventoryItem)
+    deleteInventoryVariant: (variantId) => {
+      const saleIds = new Set(
+        sales.filter((s) => s.lines.some((l) => l.variantId === variantId)).map((s) => s.id)
+      );
+      setPurchases((prev) => prev.filter((p) => p.variantId !== variantId));
+      setSales((prev) => prev.filter((s) => !saleIds.has(s.id)));
+      setPayments((prev) => prev.filter((p) => !(p.saleId && saleIds.has(p.saleId))));
+    },
+    hideInventoryVariant: (variantId) =>
+      setHiddenVariants((prev) => (prev.includes(variantId) ? prev : [...prev, variantId])),
   };
 
   return <StoreCtx.Provider value={store}>{children}</StoreCtx.Provider>;

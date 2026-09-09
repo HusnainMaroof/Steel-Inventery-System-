@@ -5,26 +5,7 @@ import { Modal } from "@/components/ui";
 import AddItemBar from "./AddItemBar";
 import LineItemsTable from "./LineItemsTable";
 import SaleSummaryPanel from "./SaleSummaryPanel";
-
-interface LineForm {
-  product: string;
-  item: string;
-  spec?: string;
-  quality: string;
-  supplierId: string;
-  purchaseId?: string;
-  qty: number;
-  rate: number;
-}
-
-interface Draft {
-  product: string;
-  item: string;
-  spec?: string;
-  quality: string;
-  supplierId: string;
-  qty: number;
-}
+import type { SaleDraftApi } from "./useSaleDraft";
 
 export default function NewSaleModal({
   open,
@@ -36,34 +17,10 @@ export default function NewSaleModal({
   existingId,
   setExistingId,
   onNewCustOpen,
-  draft,
-  setDraft,
-  onDraftProduct,
-  onDraftItem,
-  onDraftSpec,
-  onDraftQuality,
-  productsWithStock,
-  itemsOf,
-  specsOf,
-  qualitiesOf,
-  sourcesOf,
-  productSpecLabel,
-  sourceUnits,
-  availOf,
-  supplierName,
-  unitOf,
-  draftAvail,
-  draftUnit,
-  draftPrice,
-  draftOver,
-  canAdd,
-  onAddItem,
-  lines,
-  setLine,
-  removeLine,
-  lineOver,
+  api,
   entSummary,
   itemsCount,
+  showOptionalDetails = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -74,32 +31,7 @@ export default function NewSaleModal({
   existingId: string;
   setExistingId: (id: string) => void;
   onNewCustOpen: () => void;
-  draft: Draft;
-  setDraft: (patch: Partial<Draft>) => void;
-  onDraftProduct: (p: string) => void;
-  onDraftItem: (i: string) => void;
-  onDraftSpec: (s: string) => void;
-  onDraftQuality: (q: string) => void;
-  productsWithStock: string[];
-  itemsOf: (product: string) => { item: string }[];
-  specsOf: (item: string) => string[];
-  qualitiesOf: (item: string, spec?: string) => string[];
-  sourcesOf: (item: string, quality?: string, spec?: string) => { supplierId?: string; stockQty: number; unit?: string }[];
-  productSpecLabel: (product: string) => string;
-  sourceUnits: (item: string, spec: string | undefined, supplierId: string) => string;
-  availOf: (item: string, quality: string, spec: string | undefined, supplierId: string) => number;
-  supplierName: (id: string) => string;
-  unitOf: (item: string) => string;
-  draftAvail: number;
-  draftUnit: string;
-  draftPrice?: number;
-  draftOver: boolean;
-  canAdd: boolean;
-  onAddItem: () => void;
-  lines: LineForm[];
-  setLine: (i: number, patch: Partial<LineForm>) => void;
-  removeLine: (i: number) => void;
-  lineOver: (l: LineForm) => boolean;
+  api: SaleDraftApi;
   entSummary: {
     subtotal: number;
     discountPct: number;
@@ -117,25 +49,30 @@ export default function NewSaleModal({
     canSave: boolean;
   };
   itemsCount: number;
+  showOptionalDetails?: boolean;
 }) {
   return (
-    <Modal open={open} onClose={onClose} title="New Sale" full>
-      <form onSubmit={onSubmit}>
-        {/* header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <h1 className="text-[22px] sm:text-2xl font-semibold tracking-tight">New Sale</h1>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="New Sale"
+      subtitle="Build an invoice — stock is deducted when you save"
+      full
+      footer={
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-[12px] text-neutral-400 tabular-nums">{itemsCount} item{itemsCount === 1 ? "" : "s"} on invoice</span>
           <div className="flex gap-2.5">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={!entSummary.canSave}>Save Sale</button>
+            <button type="submit" form="new-sale-form" className="btn-primary" disabled={!entSummary.canSave}>Save Sale</button>
           </div>
         </div>
-
-        {/* two-column workspace */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-8 items-start">
+      }
+    >
+      <form id="new-sale-form" onSubmit={onSubmit}>
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 xl:gap-8 items-start">
           {/* left: customer + items */}
-          <div className="min-w-0">
-            {/* customer & date */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl">
+          <div className="min-w-0 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
               <div>
                 <label>Date</label>
                 <input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} required />
@@ -143,8 +80,8 @@ export default function NewSaleModal({
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="!mb-0">Customer</label>
-                  <button type="button" onClick={onNewCustOpen} className="text-xs underline underline-offset-2 hover:text-neutral-500">
-                    + New Customer
+                  <button type="button" onClick={onNewCustOpen} className="text-[12px] font-medium text-neutral-500 hover:text-black">
+                    + New customer
                   </button>
                 </div>
                 <select value={existingId} onChange={(e) => setExistingId(e.target.value)} className="w-full">
@@ -156,51 +93,19 @@ export default function NewSaleModal({
               </div>
             </div>
 
-            {/* find-stock + add */}
-            <AddItemBar
-              draft={draft}
-              setDraft={setDraft}
-              onDraftProduct={onDraftProduct}
-              onDraftItem={onDraftItem}
-              onDraftSpec={onDraftSpec}
-              onDraftQuality={onDraftQuality}
-              productsWithStock={productsWithStock}
-              itemsOf={itemsOf}
-              specsOf={specsOf}
-              qualitiesOf={qualitiesOf}
-              sourcesOf={sourcesOf}
-              productSpecLabel={productSpecLabel}
-              sourceUnits={sourceUnits}
-              availOf={availOf}
-              supplierName={supplierName}
-              draftAvail={draftAvail}
-              draftUnit={draftUnit}
-              draftPrice={draftPrice}
-              draftOver={draftOver}
-              canAdd={canAdd}
-              onAdd={onAddItem}
-              hasStock={productsWithStock.length > 0}
-            />
+            <AddItemBar api={api} onAdd={api.addDraftItem} showOptionalDetails={showOptionalDetails} />
 
-            {/* line items */}
-            <div className="mt-8">
+            <div>
               <div className="flex items-center justify-between gap-2 mb-3">
-                <label className="!mb-0 text-[12px]">Items on this invoice</label>
-                <span className="text-xs text-neutral-400 tabular-nums">{itemsCount} item{itemsCount === 1 ? "" : "s"}</span>
+                <p className="text-[13px] font-semibold text-neutral-800">Items on this invoice</p>
+                <span className="text-[12px] text-neutral-400 tabular-nums">{itemsCount} item{itemsCount === 1 ? "" : "s"}</span>
               </div>
-              <LineItemsTable
-                lines={lines}
-                setLine={setLine}
-                removeLine={removeLine}
-                unitOf={unitOf}
-                supplierName={supplierName}
-                lineOver={lineOver}
-              />
+              <LineItemsTable api={api} />
             </div>
           </div>
 
-          {/* right: summary panel */}
-          <div className="min-w-0">
+          {/* right: summary */}
+          <div className="min-w-0 xl:sticky xl:top-0">
             <SaleSummaryPanel
               subtotal={entSummary.subtotal}
               discountPct={entSummary.discountPct}
@@ -216,6 +121,7 @@ export default function NewSaleModal({
               payError={entSummary.payError}
               customerName={entSummary.customerName}
               canSave={entSummary.canSave}
+              hideSubmit
             />
           </div>
         </div>

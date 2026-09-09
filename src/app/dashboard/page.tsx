@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { Page, Stagger, StaggerItem, CountUp } from "@/components/ui";
-import { fmtCompact, qtyUnitLabel } from "@/lib/format";
+import { fmtCompact, fmtMoney, qtyUnitLabel } from "@/lib/format";
 
 type Period = "today" | "monthly" | "yearly";
 
@@ -69,6 +70,81 @@ function KpiNumber({
       <CountUp value={value} compact={compact} />
       {suffix}
     </span>
+  );
+}
+
+/* sales + profit hero — one prominent card, profit leads */
+function SalesProfitHero({
+  salesTotal,
+  profitValue,
+  salesHint,
+  profitHint,
+}: {
+  salesTotal: number;
+  profitValue: number;
+  salesHint: string;
+  profitHint: string;
+}) {
+  return (
+    <Card dark className="p-6 sm:p-8 h-full min-h-[220px] flex flex-col justify-between gap-6">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+          Net profit
+        </p>
+        <div className="mt-3 text-white">
+          <span className="text-[38px] sm:text-[48px] lg:text-[56px] font-bold leading-none tracking-tight tabular-nums">
+            ₨ <CountUp value={profitValue} compact />
+          </span>
+        </div>
+        <p className="mt-3 text-[12px] text-neutral-500 leading-relaxed max-w-md">{profitHint}</p>
+      </div>
+      <div className="pt-5 border-t border-neutral-800">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+          Sales in period
+        </p>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <span className="text-[26px] sm:text-[32px] font-bold text-white tabular-nums leading-none">
+            ₨ <CountUp value={salesTotal} compact />
+          </span>
+          <p className="text-[11px] text-neutral-500 max-w-[200px] text-right leading-snug">{salesHint}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* dues card — always visible */
+function DueCard({
+  label,
+  value,
+  count,
+  names,
+  emptyLabel,
+  tone,
+}: {
+  label: string;
+  value: number;
+  count: number;
+  names: { name: string; bal: number }[];
+  emptyLabel: string;
+  tone: "in" | "out";
+}) {
+  const accent = tone === "in" ? "text-[#2e6b2e]" : "text-[#a12b1f]";
+  const hint =
+    count > 0
+      ? names.slice(0, 3).map((d) => `${d.name} ${fmtCompact(d.bal)}`).join(" · ")
+      : emptyLabel;
+
+  return (
+    <Card className="p-5 h-full flex flex-col justify-between gap-4 min-h-[140px]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">{label}</p>
+      <div>
+        <p className={`text-[28px] sm:text-[32px] font-bold tabular-nums leading-none ${value > 0 ? accent : "text-neutral-400"}`}>
+          {value > 0 ? fmtMoney(value) : "—"}
+        </p>
+        <p className="mt-2.5 text-[11px] text-neutral-400 leading-relaxed line-clamp-2">{hint}</p>
+      </div>
+    </Card>
   );
 }
 
@@ -138,6 +214,13 @@ export default function DashboardPage() {
     customerBalance,
     supplierBalance,
   } = useStore();
+  const { user } = useAuth();
+  const initials = (user?.name ?? "O")
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   const [period, setPeriod] = useState<Period>("monthly");
   const [productId, setProductId] = useState<string>("all");
@@ -354,13 +437,15 @@ export default function DashboardPage() {
           {/* profile */}
           <div className="flex items-center gap-2.5 pl-1 pr-3 py-1.5 rounded-lg bg-white border border-neutral-200">
             <div className="w-7 h-7 rounded-full bg-[#171717] text-white flex items-center justify-center text-[10px] font-semibold tracking-wide">
-              MK
+              {initials}
             </div>
             <div className="leading-tight">
               <p className="text-[13px] font-semibold text-[#171717]">
-                M. Kashif
+                {user?.name}
               </p>
-              <p className="text-[10px] text-neutral-500">Owner</p>
+              <p className="text-[10px] text-neutral-500">
+                {user?.businessName || "Owner"}
+              </p>
             </div>
           </div>
         </div>
@@ -394,9 +479,47 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ===== Stats — the dashboard is stats only ===== */}
-      <Stagger className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-        <StaggerItem>
+      {/* ===== Stats — profit & sales first, dues always visible ===== */}
+      <Stagger className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
+        <StaggerItem className="lg:col-span-12 xl:col-span-6">
+          <SalesProfitHero
+            salesTotal={salesTotal}
+            profitValue={profitValue}
+            salesHint={
+              isAll
+                ? `${fmtCompact(moneyIn)} collected · ${pSales.length} invoice${pSales.length === 1 ? "" : "s"}`
+                : `${pSales.length} invoice${pSales.length === 1 ? "" : "s"} in period`
+            }
+            profitHint={
+              realized.received > 0
+                ? isAll
+                  ? `Collected ${fmtCompact(realized.received)} · net after shop expenses`
+                  : `${Math.round((realized.profit / realized.received) * 100)}% margin on ${fmtCompact(realized.received)} collected`
+                : "Profit counts when customer payments are received"
+            }
+          />
+        </StaggerItem>
+        <StaggerItem className="lg:col-span-6 xl:col-span-3">
+          <DueCard
+            label="Customer dues"
+            value={dues.receivable}
+            count={dues.owingCustomers}
+            names={dues.custDues}
+            emptyLabel="No outstanding customer balances"
+            tone="in"
+          />
+        </StaggerItem>
+        <StaggerItem className="lg:col-span-6 xl:col-span-3">
+          <DueCard
+            label="Mill dues"
+            value={dues.payable}
+            count={dues.owingMills}
+            names={dues.millDues}
+            emptyLabel="Nothing owed to mills"
+            tone="out"
+          />
+        </StaggerItem>
+        <StaggerItem className="lg:col-span-6 xl:col-span-3">
           <Kpi
             dark
             label={isAll ? "Items in Stock" : "Stock in Hand"}
@@ -406,59 +529,13 @@ export default function DashboardPage() {
             hint={stockCard.hint}
           />
         </StaggerItem>
-        <StaggerItem>
+        <StaggerItem className="lg:col-span-6 xl:col-span-3">
           <Kpi
             label="Stock Worth"
             value={stockValue}
             hint="At average landed cost"
           />
         </StaggerItem>
-        <StaggerItem>
-          <Kpi
-            label="Sales"
-            value={salesTotal}
-            hint={
-              isAll
-                ? `${fmtCompact(moneyIn)} collected in period`
-                : `${pSales.length} invoice${pSales.length === 1 ? "" : "s"} in period`
-            }
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Kpi
-            label="Net Profit"
-            value={profitValue}
-            hint={
-              realized.received > 0
-                ? isAll
-                  ? `Collected ${fmtCompact(realized.received)} · net after shop expenses`
-                  : `${Math.round((realized.profit / realized.received) * 100)}% net margin on ${fmtCompact(realized.received)} collected`
-                : "Counts as customers clear their dues"
-            }
-          />
-        </StaggerItem>
-        {dues.owingCustomers > 0 && (
-          <StaggerItem>
-            <Kpi
-              label="Customer Payment Dues"
-              value={dues.receivable}
-              hint={dues.custDues
-                .map((d) => `${d.name} owes ${fmtCompact(d.bal)}`)
-                .join(" · ")}
-            />
-          </StaggerItem>
-        )}
-        {dues.owingMills > 0 && (
-          <StaggerItem>
-            <Kpi
-              label="Mills Payment Dues"
-              value={dues.payable}
-              hint={dues.millDues
-                .map((d) => `pay ${d.name} ${fmtCompact(d.bal)}`)
-                .join(" · ")}
-            />
-          </StaggerItem>
-        )}
       </Stagger>
 
       <p className="text-xs text-neutral-500 mt-6">

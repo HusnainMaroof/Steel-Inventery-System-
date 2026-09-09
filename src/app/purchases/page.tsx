@@ -2,12 +2,57 @@
 
 import { useState, useMemo } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
-import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
+import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, OptionalSection } from "@/components/ui";
+import { useUiPreferences } from "@/lib/preferences";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtDateTime, qtyUnitLabel, perUnitLabel } from "@/lib/format";
-import type { Purchase } from "@/lib/types";
+import { AttributeFields, validateAttributes } from "@/components/catalogue/AttributeFields";
+import { attrsValuesLine } from "@/lib/catalogue";
+import type { AttributeDef, AttributeOption, Purchase } from "@/lib/types";
+
+/* identity of a purchase line: short name on top, its attribute values (or
+   legacy spec/quality) beneath — rendered generically from the snapshot */
+function Identity({
+  item,
+  snapshot,
+  categoryId,
+  defsByCategory,
+  spec,
+  quality,
+}: {
+  item: string;
+  snapshot?: Record<string, string>;
+  categoryId?: string;
+  defsByCategory: Record<string, AttributeDef[]>;
+  spec?: string;
+  quality?: string;
+}) {
+  const defs = categoryId ? defsByCategory[categoryId] ?? [] : [];
+  const attrLine = snapshot ? attrsValuesLine(defs, snapshot) : [spec, quality].filter(Boolean).join(" · ");
+  return (
+    <span className="block min-w-0">
+      <span className="block font-medium text-xs truncate">{item}</span>
+      {attrLine ? <span className="block text-[11px] text-neutral-400 truncate">{attrLine}</span> : null}
+    </span>
+  );
+}
 
 export default function PurchasesPage() {
-  const { purchases, suppliers, inventory, products, productItems, qualities, sales, addPurchase, updatePurchase, deletePurchase, addPayment, addQuality } = useStore();
+  const {
+    purchases,
+    suppliers,
+    products,
+    categories,
+    attributeDefs,
+    attributeOptions,
+    warehouses,
+    locations,
+    sales,
+    addPurchase,
+    updatePurchase,
+    deletePurchase,
+    addPayment,
+    ensureVariant,
+  } = useStore();
   const { open, onOpen, onClose } = useToggle();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | "dues">("all");
@@ -15,15 +60,21 @@ export default function PurchasesPage() {
   const [payAmount, setPayAmount] = useState(0);
   const [payError, setPayError] = useState("");
   const [formError, setFormError] = useState("");
+  const { prefs } = useUiPreferences();
+  const [showLot, setShowLot] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Purchase | null>(null);
 
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     supplierId: suppliers[0]?.id ?? "",
     productId: products[0]?.id ?? "",
-    item: "",
-    spec: "",
-    quality: "",
+    categoryId: "",
+    attrs: {} as Record<string, string>,
+    lotNumber: "",
+    heatNumber: "",
+    batchNumber: "",
+    warehouseId: "",
+    locationId: "",
     qty: 0,
     rate: 0,
     transport: 0,
@@ -32,29 +83,72 @@ export default function PurchasesPage() {
     paidNow: 0,
   });
 
-  const formProduct = products.find((p) => p.id === form.productId);
-  const productUnit = formProduct?.unit ?? "";
-  // what the secondary picker means for this product — "Quality" by default,
-  // "Factory / Mill" when buying Cement
-  const specLabelOf = (productName?: string) => {
-    const pr = products.find((x) => x.name === productName);
-    const custom = pr?.specLabel ?? (productName?.toLowerCase().includes("cement") ? "Factory / Mill" : undefined);
-    return custom ?? "Quality";
-  };
-  const specLabel = formProduct
-    ? specLabelOf(formProduct.name)
-    : "Quality";
+  const product = products.find((p) => p.id === form.productId && p.active !== false) ?? products.find((p) => p.active !== false);
+  const productUnit = product?.unit ?? "kg";
+  const catsOfProduct = categories.filter((c) => c.productId === product?.id && c.active);
+  const category = categories.find((c) => c.id === form.categoryId) ?? catsOfProduct[0];
+  const defsOfCategory = attributeDefs
+    .filter((d) => d.categoryId === category?.id && d.active)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const defsByCategory = useMemo(() => {
+    const m: Record<string, AttributeDef[]> = {};
+    for (const d of attributeDefs.filter((x) => x.active))
+      (m[d.categoryId] ??= []).push(d);
+    for (const k of Object.keys(m)) m[k].sort((a, b) => a.sortOrder - b.sortOrder);
+    return m;
+  }, [attributeDefs]);
+  const attrErrors = validateAttributes(defsOfCategory, form.attrs);
+
+  const defsOptions = useMemo(() => {
+    const m: Record<string, AttributeOption[]> = {};
+    for (const o of attributeOptions) (m[o.attributeDefId] ??= []).push(o);
+    for (const k of Object.keys(m)) m[k].sort((a, b) => a.sortOrder - b.sortOrder);
+    return m;
+  }, [attributeOptions]);
   const qtyLabel = qtyUnitLabel(productUnit);
   const perLabel = perUnitLabel(productUnit);
   const totalStock = form.qty * form.rate;
   const totalCost = totalStock + form.transport + form.otherCost;
   const landedPerUnit = form.qty > 0 ? totalCost / form.qty : 0;
   const marginPerUnit = form.sellRate > 0 ? form.sellRate - landedPerUnit : 0;
+  const warehouse = warehouses.find((w) => w.id === form.warehouseId && w.active);
+  const whLocations = locations.filter((l) => l.warehouseId === form.warehouseId && l.active);
+  const supplierName = (id: string) => suppliers.find((s) => s.id === id)?.name ?? id;
+  const numVal = (v: number) => (v === 0 ? "" : v);
+  const openPay = (id: string) => { setPayId(id); setPayAmount(0); setPayError(""); };
+  const closePay = () => { setPayId(null); setPayError(""); };
+  const remainingOf = (p: Purchase) => Math.max(0, steelAmount(p) - (p.paid ?? 0));
+  const duePurchases = purchases.filter((p) => remainingOf(p) > 0);
+  const totalDue = duePurchases.reduce((a, p) => a + remainingOf(p), 0);
 
   const openAdd = () => {
     setFormError("");
+    setShowLot(prefs.showOptionalDetails);
     onOpen();
   };
+
+  const resetMoney = () =>
+    setForm((f) => ({
+      ...f,
+      attrs: {},
+      lotNumber: "",
+      heatNumber: "",
+      batchNumber: "",
+      warehouseId: "",
+      locationId: "",
+      qty: 0,
+      rate: 0,
+      transport: 0,
+      otherCost: 0,
+      sellRate: 0,
+      paidNow: 0,
+    }));
+
+  const onProductChange = (productId: string) => {
+    const cats = categories.filter((c) => c.productId === productId && c.active);
+    setForm((f) => ({ ...f, productId, categoryId: cats[0]?.id ?? "", attrs: {} }));
+  };
+  const onCategoryChange = (categoryId: string) => setForm((f) => ({ ...f, categoryId, attrs: {} }));
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,27 +157,25 @@ export default function PurchasesPage() {
       setFormError(`Amount paid (${fmtMoney(paidNow)}) can't be more than this purchase's total of ${fmtMoney(totalStock)}.`);
       return;
     }
+    if (!form.supplierId) return setFormError("Pick the supplier you bought from.");
+    if (!category) return setFormError("Pick a category — add one under Products if this product has none yet.");
+    const errors = validateAttributes(defsOfCategory, form.attrs);
+    if (Object.keys(errors).length > 0) return setFormError(Object.values(errors)[0]);
     setFormError("");
-    // type-in support: whatever spec / quality the user typed and is not on
-    // the list yet is saved against this product on the spot
-    const isCustomSpec = specLabel !== "Quality";
-    const specName = form.spec.trim();
-    const qualName = form.quality.trim();
-    const known = (name: string) =>
-      qualities.some(
-        (q) =>
-          q.name.toLowerCase() === name.toLowerCase() &&
-          (!q.productId || q.productId === form.productId)
-      );
-    if (specName && isCustomSpec && !known(specName)) addQuality(form.productId, specName, true);
-    if (qualName && !known(qualName)) addQuality(form.productId, qualName);
+    const variant = ensureVariant(category.id, form.attrs);
     addPurchase({
       date: form.date,
       supplierId: form.supplierId,
-      product: products.find((p) => p.id === form.productId)?.name ?? "",
-      item: form.item,
-      spec: isCustomSpec ? specName || undefined : undefined,
-      quality: qualName || undefined,
+      product: product?.name,
+      item: variant.shortName,
+      categoryId: category.id,
+      variantId: variant.id,
+      attributeSnapshot: variant.attributes,
+      lotNumber: form.lotNumber.trim() || undefined,
+      heatNumber: form.heatNumber.trim() || undefined,
+      batchNumber: form.batchNumber.trim() || undefined,
+      warehouseId: form.warehouseId || undefined,
+      locationId: form.locationId || undefined,
       qty: Number(form.qty),
       unit: productUnit,
       rate: Number(form.rate),
@@ -96,16 +188,8 @@ export default function PurchasesPage() {
       paymentHistory: paidNow > 0 ? [{ date: new Date().toISOString(), amount: paidNow }] : [],
     });
     onClose();
-    setForm((f) => ({ ...f, item: "", spec: "", quality: "", qty: 0, rate: 0, transport: 0, otherCost: 0, sellRate: 0, paidNow: 0 }));
+    resetMoney();
   };
-
-  const supplierName = (id: string) => suppliers.find((s) => s.id === id)?.name ?? id;
-  const numVal = (v: number) => (v === 0 ? "" : v);
-  const openPay = (id: string) => { setPayId(id); setPayAmount(0); setPayError(""); };
-  const closePay = () => { setPayId(null); setPayError(""); };
-  const remainingOf = (p: Purchase) => Math.max(0, steelAmount(p) - (p.paid ?? 0));
-  const duePurchases = purchases.filter((p) => remainingOf(p) > 0);
-  const totalDue = duePurchases.reduce((a, p) => a + remainingOf(p), 0);
 
   const confirmDeletePurchase = () => {
     if (!deleteTarget) return;
@@ -129,23 +213,11 @@ export default function PurchasesPage() {
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([date, items]) => ({
         date,
-        rows: items.map((p) => ({
-          id: p.id,
-          product: p.product,
-          quality: p.quality,
-          spec: p.spec,
-          supplier: supplierName(p.supplierId),
-          item: p.item,
-          qty: p.qty,
-          unit: p.unit,
-          rate: p.rate,
-          sellRate: p.sellRate,
-        })),
+        rows: items,
         dayTotal: items.reduce((a, p) => a + steelAmount(p), 0),
       }));
-  }, [purchases, suppliers]);
+  }, [purchases]);
 
-  // Date-grouped dues
   const dueDateGroups = useMemo(() => {
     const sorted = [...duePurchases].sort((a, b) => b.date.localeCompare(a.date));
     const map = new Map<string, Purchase[]>();
@@ -158,24 +230,16 @@ export default function PurchasesPage() {
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([date, items]) => ({
         date,
-        rows: items.map((p) => ({
-          id: p.id,
-          product: p.product,
-          quality: p.quality,
-          spec: p.spec,
-          supplier: supplierName(p.supplierId),
-          item: p.item,
-          totalPayable: steelAmount(p),
-          paid: p.paid ?? 0,
-          remaining: remainingOf(p),
-          lastPaidAt: p.lastPaidAt,
-        })),
+        rows: items,
         dayTotal: items.reduce((a, p) => a + steelAmount(p), 0),
         dayPaid: items.reduce((a, p) => a + (p.paid ?? 0), 0),
       }));
-  }, [duePurchases, suppliers]);
+  }, [duePurchases]); // eslint-disable-line react-hooks/preserve-manual-memoization
 
   const selected = purchases.find((p) => p.id === selectedId) ?? null;
+
+  const warehouseName = (id?: string) => warehouses.find((w) => w.id === id)?.name;
+  const locationName = (id?: string) => locations.find((l) => l.id === id)?.name;
 
   return (
     <Page>
@@ -226,13 +290,15 @@ export default function PurchasesPage() {
                       onClick={() => setSelectedId(r.id)}
                       className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_120px_140px_150px_120px] gap-3 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors"
                     >
-                      <span className="min-w-0">
-                        <span className="block font-medium text-xs truncate">{r.item}</span>
-                        <span className="block text-[11px] text-neutral-400 truncate">
-                          {[r.product, r.spec, r.quality].filter(Boolean).join(" · ") || "—"}
-                        </span>
-                      </span>
-                      <span className="self-center text-neutral-600 text-xs truncate">{r.supplier}</span>
+                      <Identity
+                        item={r.item}
+                        snapshot={r.attributeSnapshot}
+                        categoryId={r.categoryId}
+                        defsByCategory={defsByCategory}
+                        spec={r.spec}
+                        quality={r.quality}
+                      />
+                      <span className="self-center text-neutral-600 text-xs truncate">{supplierName(r.supplierId)}</span>
                       <span className="self-center text-right text-xs tabular-nums">{fmtQtyWithUnit(r.qty, r.unit)}</span>
                       <span className="self-center text-right text-xs tabular-nums">{fmtRateWithUnit(r.rate, r.unit)}</span>
                       <span className="self-center text-right text-xs tabular-nums">
@@ -242,7 +308,7 @@ export default function PurchasesPage() {
                         <button onClick={(e) => { e.stopPropagation(); setSelectedId(r.id); }} className="btn-ghost !py-1 !px-3 text-xs">
                           View
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(purchases.find((p) => p.id === r.id)!); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">
+                        <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(r); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">
                           Delete
                         </button>
                       </span>
@@ -259,8 +325,14 @@ export default function PurchasesPage() {
                         <span className="shrink-0 font-medium text-sm tabular-nums">{fmtQtyWithUnit(r.qty, r.unit)}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
-                        <span className="truncate">{([r.product, r.spec, r.quality].filter(Boolean).join(" · ") || "—")}</span>
-                        <span className="shrink-0 text-neutral-400 truncate">{r.supplier}</span>
+                        <span className="truncate">
+                          {(() => {
+                            const defs = r.categoryId ? defsByCategory[r.categoryId] ?? [] : [];
+                            const attrLine = r.attributeSnapshot ? attrsValuesLine(defs, r.attributeSnapshot) : [r.spec, r.quality].filter(Boolean).join(" · ");
+                            return attrLine || "—";
+                          })()}
+                        </span>
+                        <span className="shrink-0 text-neutral-400 truncate">{supplierName(r.supplierId)}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-1.5 text-xs">
                         <span className="tabular-nums text-neutral-600">Buy {fmtRateWithUnit(r.rate, r.unit)}</span>
@@ -316,22 +388,24 @@ export default function PurchasesPage() {
                         onClick={() => { openPay(r.id); }}
                         className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_130px_100px_110px_100px_150px] gap-3 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors min-w-[820px]"
                       >
-                        <span className="min-w-0">
-                          <span className="block font-medium text-xs truncate">{r.item}</span>
-                          <span className="block text-[11px] text-neutral-400 truncate">
-                            {[r.product, r.spec, r.quality].filter(Boolean).join(" · ") || "—"}
-                          </span>
-                        </span>
-                        <span className="self-center text-neutral-600 text-xs truncate">{r.supplier}</span>
-                        <span className="self-center text-right text-xs tabular-nums">{fmtMoney(r.totalPayable)}</span>
-                        <span className="self-center text-right text-xs text-neutral-500 tabular-nums">{fmtMoney(r.paid)}</span>
-                        <span className="self-center text-right font-medium text-xs text-[#a12b1f] tabular-nums">{fmtMoney(r.remaining)}</span>
+                        <Identity
+                          item={r.item}
+                          snapshot={r.attributeSnapshot}
+                          categoryId={r.categoryId}
+                          defsByCategory={defsByCategory}
+                          spec={r.spec}
+                          quality={r.quality}
+                        />
+                        <span className="self-center text-neutral-600 text-xs truncate">{supplierName(r.supplierId)}</span>
+                        <span className="self-center text-right text-xs tabular-nums">{fmtMoney(steelAmount(r))}</span>
+                        <span className="self-center text-right text-xs text-neutral-500 tabular-nums">{fmtMoney(r.paid ?? 0)}</span>
+                        <span className="self-center text-right font-medium text-xs text-[#a12b1f] tabular-nums">{fmtMoney(remainingOf(r))}</span>
                         <span className="self-center text-xs text-neutral-500">
                           {r.lastPaidAt ? fmtDate(r.lastPaidAt) : <span className="text-neutral-400">—</span>}
                         </span>
                         <span className="self-center text-right whitespace-nowrap">
                           <button onClick={(e) => { e.stopPropagation(); openPay(r.id); }} className="btn-primary !py-1 !px-3 text-xs">Pay</button>
-                          <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(purchases.find((p) => p.id === r.id)!); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
+                          <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(r); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
                         </span>
                       </div>
                     ))}
@@ -343,19 +417,25 @@ export default function PurchasesPage() {
                       <div key={r.id} className="p-3">
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <span className="font-medium text-sm truncate">{r.item}</span>
-                          <span className="shrink-0 font-medium text-sm text-[#a12b1f] tabular-nums">Due {fmtMoney(r.remaining)}</span>
+                          <span className="shrink-0 font-medium text-sm text-[#a12b1f] tabular-nums">Due {fmtMoney(remainingOf(r))}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
-                          <span className="truncate">{([r.product, r.spec, r.quality].filter(Boolean).join(" · ") || "—")}</span>
-                          <span className="shrink-0 text-neutral-400 truncate">{r.supplier}</span>
+                          <span className="truncate">
+                            {(() => {
+                              const defs = r.categoryId ? defsByCategory[r.categoryId] ?? [] : [];
+                              const attrLine = r.attributeSnapshot ? attrsValuesLine(defs, r.attributeSnapshot) : [r.spec, r.quality].filter(Boolean).join(" · ");
+                              return attrLine || "—";
+                            })()}
+                          </span>
+                          <span className="shrink-0 text-neutral-400 truncate">{supplierName(r.supplierId)}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-1.5 text-xs text-neutral-500">
-                          <span className="tabular-nums">Paid {fmtMoney(r.paid)} of {fmtMoney(r.totalPayable)}</span>
+                          <span className="tabular-nums">Paid {fmtMoney(r.paid ?? 0)} of {fmtMoney(steelAmount(r))}</span>
                           <span className="tabular-nums shrink-0">{r.lastPaidAt ? `Last ${fmtDate(r.lastPaidAt)}` : "No payments yet"}</span>
                         </div>
                         <div className="flex justify-end gap-2 mt-2">
                           <button onClick={() => { openPay(r.id); }} className="btn-primary !py-1 !px-3 text-xs">Pay</button>
-                          <button onClick={() => setDeleteTarget(purchases.find((p) => p.id === r.id)!)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
+                          <button onClick={() => setDeleteTarget(r)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
                         </div>
                       </div>
                     ))}
@@ -367,150 +447,223 @@ export default function PurchasesPage() {
         </div>
       )}
 
-      {/* Add Purchase Modal */}
-      <Modal open={open} onClose={() => { onClose(); setFormError(""); }} title="Add Purchase">
-        <form onSubmit={submit} className="grid grid-cols-2 gap-4">
-          <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required /></div>
-          <div><label>Supplier</label><select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-          <div><label>Product</label><select value={form.productId} onChange={(e) => { const v = e.target.value; const firstItem = productItems.find((i) => i.productId === v)?.name ?? ""; setForm({ ...form, productId: v, item: firstItem, spec: "", quality: "" }); }}>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-          <div><label>Product Item</label><select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} required><option value="" disabled>Select item…</option>{productItems.filter((i) => i.productId === form.productId).map((i) => <option key={i.id} value={i.name}>{i.name}</option>)}</select></div>
-          {/* Cement and friends: factory/mill + quality as two fields */}
-          {specLabel !== "Quality" ? (
-            <>
-              <div>
-                <label>{specLabel}</label>
-                <input
-                  list="spec-options"
-                  placeholder="Pick or type a factory…"
-                  value={form.spec}
-                  onChange={(e) => setForm({ ...form, spec: e.target.value })}
-                />
-                <datalist id="spec-options">
-                  {qualities
-                    .filter(
-                      (q) =>
-                        q.specOnly &&
-                        (!q.productId || q.productId === form.productId)
-                    )
-                    .map((q) => (
-                      <option key={q.id} value={q.name} />
-                    ))}
-                </datalist>
-              </div>
-              <div>
-                <label>Quality</label>
-                <input
-                  list="quality-options"
-                  placeholder="Pick or type a quality…"
-                  value={form.quality}
-                  onChange={(e) => setForm({ ...form, quality: e.target.value })}
-                />
-                <datalist id="quality-options">
-                  {qualities
-                    .filter(
-                      (q) =>
-                        !q.specOnly &&
-                        (!q.productId || q.productId === form.productId)
-                    )
-                    .map((q) => (
-                      <option key={q.id} value={q.name} />
-                    ))}
-                </datalist>
-              </div>
-            </>
-          ) : (
-            <div>
-              <label>{specLabel}</label>
-              <input
-                list="quality-options"
-                placeholder="Pick or type a quality…"
-                value={form.quality}
-                onChange={(e) => setForm({ ...form, quality: e.target.value })}
-              />
-              <datalist id="quality-options">
-                {qualities
-                  .filter(
-                    (q) =>
-                      !q.specOnly &&
-                      (!q.productId || q.productId === form.productId)
-                  )
-                  .map((q) => (
-                    <option key={q.id} value={q.name} />
-                  ))}
-              </datalist>
-            </div>
-          )}
-          <div><label>Unit</label><input value={qtyUnitLabel(productUnit) || "—"} disabled className="!bg-neutral-50 !text-neutral-600" /></div>
-          <div><label>Quantity ({qtyLabel})</label><input type="number" min="0.1" step="any" placeholder="0" value={numVal(form.qty)} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} required /></div>
-          <div><label>Buying Price ({perLabel})</label><input type="number" min="0" placeholder="0" value={numVal(form.rate)} onChange={(e) => setForm({ ...form, rate: Number(e.target.value) })} required /></div>
-          <div><label>Transport Cost</label><input type="number" min="0" placeholder="0" value={numVal(form.transport)} onChange={(e) => setForm({ ...form, transport: Number(e.target.value) })} /></div>
-          <div><label>Other Expenses</label><input type="number" min="0" placeholder="0" value={numVal(form.otherCost)} onChange={(e) => setForm({ ...form, otherCost: Number(e.target.value) })} /></div>
-          <div className="col-span-2 grid grid-cols-2 gap-4">
-            <div><label>Your Selling Price ({perLabel})</label><input type="number" min="0" placeholder="0" value={numVal(form.sellRate)} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} /></div>
-            <div><label>Paid Now (to supplier)</label><input type="number" min="0" placeholder="0" value={numVal(form.paidNow)} onChange={(e) => setForm({ ...form, paidNow: Number(e.target.value) })} /></div>
-          </div>
-          <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
-            <div><span className="block text-xs uppercase tracking-widest text-neutral-500">Total Amount</span><span className="block text-xs text-neutral-400 mt-1">{form.qty || 0} {qtyLabel} × {fmtMoney(form.rate)}{perLabel}</span></div>
-            <span className="font-medium tabular-nums text-right shrink-0">{fmtMoney(totalStock).replace("₨ ", "")}<span className="text-neutral-400 text-xs ml-1">₨</span></span>
-          </div>
-          {form.sellRate > 0 && (
-            <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
-              <div><span className="block text-xs uppercase tracking-widest text-neutral-500">Expected Profit ({perLabel})</span><span className="block text-xs text-neutral-400 mt-1">sell {fmtMoney(form.sellRate)}{perLabel} − cost {fmtMoney(landedPerUnit)}{perLabel}</span></div>
-              <span className={`font-medium tabular-nums text-right shrink-0 ${marginPerUnit < 0 ? "text-red-600" : ""}`}>{marginPerUnit < 0 ? "− " : ""}{fmtMoney(Math.abs(marginPerUnit)).replace("₨ ", "")}<span className="text-neutral-400 text-xs ml-1">₨</span></span>
-            </div>
-          )}
-          <div className="col-span-2 border border-dashed border-neutral-400 p-3 flex justify-between items-center">
-            <div><span className="block text-xs uppercase tracking-widest text-neutral-500">Actual Cost ({perLabel})</span><span className="block text-xs text-neutral-400 mt-1">product + transport + expenses, per {qtyUnitLabel(productUnit) || "unit"}</span></div>
-            <span className="font-medium tabular-nums text-right shrink-0">{fmtMoney(landedPerUnit).replace("₨ ", "")}<span className="text-neutral-400 text-xs ml-1">₨</span></span>
-          </div>
-          <div className="col-span-2 border border-dashed border-neutral-800 p-3 flex justify-between items-center bg-black text-white">
-            <div><span className="block text-xs uppercase tracking-widest text-neutral-400">Remaining Due to Supplier</span><span className="block text-xs text-neutral-500 mt-1">total {fmtMoney(totalStock)} − paid {fmtMoney(Number(form.paidNow) || 0)}</span></div>
-            <span className="font-medium tabular-nums text-right shrink-0">{fmtMoney(Math.max(0, totalStock - Number(form.paidNow || 0))).replace("₨ ", "")}<span className="text-neutral-500 text-xs ml-1">₨</span></span>
-          </div>
-          {formError && (
-            <div className="col-span-2 border border-red-200 bg-red-50 text-red-700 text-xs px-3 py-2">{formError}</div>
-          )}
-          <div className="col-span-2 flex justify-end gap-3">
+      {/* ============ Add Purchase Modal ============ */}
+      <Modal
+        open={open}
+        onClose={() => { onClose(); setFormError(""); }}
+        title="Add Purchase"
+        subtitle="Record stock from a supplier — inventory updates automatically"
+        full
+        footer={
+          <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={() => { onClose(); setFormError(""); }}>Cancel</button>
-            <button type="submit" className="btn-primary">Save Purchase</button>
+            <button type="submit" form="purchase-form" className="btn-primary">Save Purchase</button>
+          </div>
+        }
+      >
+        <form id="purchase-form" onSubmit={submit}>
+          {formError && (
+            <div role="alert" className="border border-red-200 bg-red-50 text-red-700 text-[13px] px-4 py-3 rounded-lg mb-5">{formError}</div>
+          )}
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6 xl:gap-8 items-start">
+            {/* left — identity & quantities */}
+            <div className="space-y-5 min-w-0">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required /></div>
+                <div>
+                  <label>Supplier</label>
+                  <select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} required>
+                    <option value="" disabled>Select supplier…</option>
+                    {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label>Product</label>
+                  <select value={product?.id ?? ""} onChange={(e) => onProductChange(e.target.value)} required>
+                    <option value="" disabled>Select product…</option>
+                    {products.filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label>Category</label>
+                  <select value={category?.id ?? ""} onChange={(e) => onCategoryChange(e.target.value)} required>
+                    <option value="" disabled>Select category…</option>
+                    {catsOfProduct.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {category && defsOfCategory.length > 0 && (
+                <div className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/50">
+                  <p className="text-[12px] font-medium text-neutral-600 mb-3">Attributes — {category.name}</p>
+                  <AttributeFields
+                    defs={defsOfCategory}
+                    value={form.attrs}
+                    onChange={(patch) => setForm((f) => ({ ...f, attrs: { ...f.attrs, ...patch } }))}
+                    optionsOf={(defId) => defsOptions[defId] ?? []}
+                    requiredError={Object.keys(attrErrors).length ? attrErrors : undefined}
+                  />
+                </div>
+              )}
+
+              <OptionalSection
+                title="Lot & location details"
+                hint="Optional — heat, batch, warehouse for traceability in Inventory"
+                open={showLot}
+                onToggle={() => setShowLot((s) => !s)}
+              >
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div><label>Lot number</label><input value={form.lotNumber} onChange={(e) => setForm({ ...form, lotNumber: e.target.value })} placeholder="e.g. LOT-001" /></div>
+                  <div><label>Heat number</label><input value={form.heatNumber} onChange={(e) => setForm({ ...form, heatNumber: e.target.value })} placeholder="Steel heats, e.g. H92831" /></div>
+                  <div><label>Batch number</label><input value={form.batchNumber} onChange={(e) => setForm({ ...form, batchNumber: e.target.value })} placeholder="Cement batches" /></div>
+                  {warehouses.length > 0 && (
+                    <>
+                      <div>
+                        <label>Warehouse</label>
+                        <select value={form.warehouseId} onChange={(e) => setForm({ ...form, warehouseId: e.target.value, locationId: "" })}>
+                          <option value="">—</option>
+                          {warehouses.filter((w) => w.active !== false).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label>Location</label>
+                        <select value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })} disabled={!warehouse}>
+                          <option value="">—</option>
+                          {whLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </OptionalSection>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div><label>Quantity ({qtyLabel})</label><input type="number" min="0.1" step="any" placeholder="0" value={numVal(form.qty)} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} required /></div>
+                <div><label>Buying Price ({perLabel})</label><input type="number" min="0" placeholder="0" value={numVal(form.rate)} onChange={(e) => setForm({ ...form, rate: Number(e.target.value) })} required /></div>
+                <div><label>Transport Cost</label><input type="number" min="0" placeholder="0" value={numVal(form.transport)} onChange={(e) => setForm({ ...form, transport: Number(e.target.value) })} /></div>
+                <div><label>Other Expenses</label><input type="number" min="0" placeholder="0" value={numVal(form.otherCost)} onChange={(e) => setForm({ ...form, otherCost: Number(e.target.value) })} /></div>
+                <div><label>Your Selling Price ({perLabel})</label><input type="number" min="0" placeholder="0" value={numVal(form.sellRate)} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} /></div>
+                <div><label>Paid Now (to supplier)</label><input type="number" min="0" placeholder="0" value={numVal(form.paidNow)} onChange={(e) => setForm({ ...form, paidNow: Number(e.target.value) })} /></div>
+              </div>
+            </div>
+
+            {/* right — summary (sticky on desktop) */}
+            <div className="xl:sticky xl:top-0 space-y-3">
+              <p className="text-[12px] font-medium text-neutral-500 uppercase tracking-wider">Summary</p>
+              <div className="border border-neutral-200 rounded-lg p-4 space-y-3 bg-white">
+                <div className="flex justify-between items-start gap-3 text-sm">
+                  <div className="min-w-0">
+                    <span className="block text-neutral-500">Total amount</span>
+                    <span className="block text-[12px] text-neutral-400 mt-0.5 tabular-nums">
+                      {fmtQtyWithUnit(form.qty || 0, productUnit)} × {fmtMoney(form.rate)}{perLabel}
+                    </span>
+                  </div>
+                  <span className="font-semibold tabular-nums shrink-0">{fmtMoney(totalStock)}</span>
+                </div>
+                <div className="flex justify-between items-start gap-3 text-sm border-t border-neutral-100 pt-3">
+                  <div className="min-w-0">
+                    <span className="block text-neutral-500">Landed cost {perLabel}</span>
+                    <span className="block text-[12px] text-neutral-400 mt-0.5">buying + transport + expenses</span>
+                  </div>
+                  <span className="font-semibold tabular-nums shrink-0">{fmtMoney(landedPerUnit)}</span>
+                </div>
+                {form.sellRate > 0 && marginPerUnit > 0 && (
+                  <div className="rounded-lg border border-[#cfe3cd] bg-[#f0f7ef] px-3.5 py-3 flex justify-between items-center gap-3">
+                    <div>
+                      <p className="text-[12px] font-semibold text-[#2e6b2e]">Expected profit {perLabel}</p>
+                      <p className="text-[11px] text-[#4a7c48] mt-0.5">Selling above landed cost</p>
+                    </div>
+                    <span className="text-[15px] font-bold tabular-nums text-[#2e6b2e] shrink-0">{fmtMoney(marginPerUnit)}</span>
+                  </div>
+                )}
+                {form.sellRate > 0 && marginPerUnit < 0 && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 flex justify-between items-center gap-3">
+                    <div>
+                      <p className="text-[12px] font-semibold text-red-700">Loss per unit {perLabel}</p>
+                      <p className="text-[11px] text-red-600/80 mt-0.5">Sell price is below landed cost</p>
+                    </div>
+                    <span className="text-[15px] font-bold tabular-nums text-red-700 shrink-0">{fmtMoney(marginPerUnit)}</span>
+                  </div>
+                )}
+                {form.sellRate > 0 && marginPerUnit === 0 && (
+                  <div className="flex justify-between items-start gap-3 text-sm border-t border-neutral-100 pt-3">
+                    <span className="text-neutral-500">Expected profit {perLabel}</span>
+                    <span className="font-semibold tabular-nums text-neutral-400 shrink-0">{fmtMoney(0)}</span>
+                  </div>
+                )}
+                <div className={`flex justify-between items-center gap-3 text-sm px-3 py-3 -mx-1 rounded-lg mt-2 ${
+                  Math.max(0, totalStock - Number(form.paidNow || 0)) === 0 && totalStock > 0
+                    ? "bg-[#f0f7ef] border border-[#cfe3cd] text-[#2e6b2e]"
+                    : "bg-[#171717] text-white"
+                }`}>
+                  <div>
+                    <span className={`block text-[11px] uppercase tracking-wider ${Math.max(0, totalStock - Number(form.paidNow || 0)) === 0 && totalStock > 0 ? "text-[#4a7c48]" : "text-neutral-400"}`}>
+                      {Math.max(0, totalStock - Number(form.paidNow || 0)) === 0 && totalStock > 0 ? "Fully paid" : "Due to supplier"}
+                    </span>
+                    <span className={`block text-[11px] mt-0.5 ${Math.max(0, totalStock - Number(form.paidNow || 0)) === 0 && totalStock > 0 ? "text-[#4a7c48]/80" : "text-neutral-500"}`}>
+                      {Math.max(0, totalStock - Number(form.paidNow || 0)) === 0 && totalStock > 0 ? "Nothing owed to mill" : "after paid now"}
+                    </span>
+                  </div>
+                  <span className="font-semibold tabular-nums">{fmtMoney(Math.max(0, totalStock - Number(form.paidNow || 0)))}</span>
+                </div>
+              </div>
+              {!prefs.showOptionalDetails && (
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Tip: enable &quot;Show optional details&quot; on the Products page to open lot fields automatically.
+                </p>
+              )}
+            </div>
           </div>
         </form>
       </Modal>
 
-      {/* Purchase Details Modal */}
-      <Modal open={!!selected} onClose={() => setSelectedId(null)} title={selected ? `Purchase · ${selected.item}` : "Purchase Details"}>
+      {/* ============ Purchase Details Modal ============ */}
+      <Modal open={!!selected} onClose={() => setSelectedId(null)} title={selected ? `Purchase · ${selected.item}` : "Purchase Details"} size="3xl">
         {selected && (() => {
-          const total = purchaseTotal(selected);
-          const costPerUnit = selected.qty > 0 ? total / selected.qty : 0;
-          const transportShare = selected.qty > 0 ? selected.transport / selected.qty : 0;
-          const otherShare = selected.qty > 0 ? selected.otherCost / selected.qty : 0;
-          const avgSellPerUnit = inventory.find((r) => r.item === selected.item)?.avgSellRate ?? 0;
-          const usedSell = selected.sellRate ?? avgSellPerUnit;
-          const perUnit = perUnitLabel(selected.unit);
+          const p = selected;
+          const total = purchaseTotal(p);
+          const costPerUnit = p.qty > 0 ? total / p.qty : 0;
+          const transportShare = p.qty > 0 ? p.transport / p.qty : 0;
+          const otherShare = p.qty > 0 ? p.otherCost / p.qty : 0;
+          const usedSell = p.sellRate ?? 0;
+          const perUnit = perUnitLabel(p.unit);
           const profitPerUnit = usedSell > 0 ? usedSell - costPerUnit : 0;
-          const payable = steelAmount(selected);
-          const paid = selected.paid ?? 0;
+          const payable = steelAmount(p);
+          const paid = p.paid ?? 0;
           const remaining = Math.max(0, payable - paid);
+          const defs = p.categoryId ? defsByCategory[p.categoryId] ?? [] : [];
+          const catName = categories.find((c) => c.id === p.categoryId)?.name;
           const detailRows = [
-            { label: "Purchase Date", value: fmtDate(selected.date) },
-            { label: "Supplier", value: supplierName(selected.supplierId) },
-            { label: "Product", value: selected.product || "—" },
-            { label: "Product Item", value: selected.item },
-            ...(selected.spec
-              ? [{ label: specLabelOf(selected.product), value: selected.spec }]
+            { label: "Purchase Date", value: fmtDate(p.date) },
+            { label: "Supplier", value: supplierName(p.supplierId) },
+            { label: "Product", value: p.product || "—" },
+            ...(catName ? [{ label: "Category", value: catName }] : []),
+            ...(p.attributeSnapshot
+              ? defs.filter((d) => p.attributeSnapshot![d.key]).map((d) => ({ label: d.name, value: p.attributeSnapshot![d.key] }))
+              : [
+                  ...(p.spec ? [{ label: "Spec", value: p.spec }] : []),
+                  { label: "Quality", value: p.quality || "—" },
+                ]),
+            ...(p.lotNumber || p.heatNumber || p.batchNumber
+              ? [{ label: "Lot / Heat / Batch", value: [p.lotNumber, p.heatNumber, p.batchNumber].filter(Boolean).join(" / ") }]
               : []),
-            { label: selected.spec ? "Quality" : specLabelOf(selected.product), value: selected.quality || "—" },
-            { label: "Quantity", value: fmtQtyWithUnit(selected.qty, selected.unit) },
-            { label: "Buying Price" + perUnit, value: fmtMoney(selected.rate) },
-            { label: "+ Transport" + perUnit, value: selected.transport > 0 ? fmtMoney(transportShare) : "—", muted: true },
-            { label: "+ Other Expenses" + perUnit, value: selected.otherCost > 0 ? fmtMoney(otherShare) : "—", muted: true },
+            ...(warehouseName(p.warehouseId)
+              ? [{ label: "Warehouse", value: `${warehouseName(p.warehouseId)}${locationName(p.locationId) ? " / " + locationName(p.locationId) : ""}` }]
+              : []),
+            { label: "Quantity", value: fmtQtyWithUnit(p.qty, p.unit) },
+            { label: "Buying Price" + perUnit, value: fmtMoney(p.rate) },
+            { label: "+ Transport" + perUnit, value: p.transport > 0 ? fmtMoney(transportShare) : "—", muted: true },
+            { label: "+ Other Expenses" + perUnit, value: p.otherCost > 0 ? fmtMoney(otherShare) : "—", muted: true },
             { label: "Landed Cost" + perUnit, value: fmtMoney(costPerUnit), strong: true },
-            { label: "Transport (total)", value: fmtMoney(selected.transport), muted: true },
-            { label: "Other Expenses (total)", value: fmtMoney(selected.otherCost), muted: true },
+            { label: "Transport (total)", value: fmtMoney(p.transport), muted: true },
+            { label: "Other Expenses (total)", value: fmtMoney(p.otherCost), muted: true },
             { label: "Total Payable to Mill", value: fmtMoney(payable) },
             { label: "Already Paid", value: fmtMoney(paid), muted: true },
             { label: "Remaining Due", value: fmtMoney(remaining), strong: remaining > 0, muted: remaining === 0 },
-            { label: "Your Selling Price", value: usedSell ? fmtRateWithUnit(usedSell, selected.unit) : "—" },
+            { label: "Your Selling Price", value: usedSell ? fmtRateWithUnit(usedSell, p.unit) : "—" },
             { label: "Profit" + perUnit, value: fmtMoney(profitPerUnit), strong: true },
           ];
           return (
@@ -523,7 +676,7 @@ export default function PurchasesPage() {
               ))}
               <div className="flex justify-between items-center mt-4">
                 <p className="text-xs text-neutral-500">Landed cost = buying price + transport + other expenses, spread per unit. Profit = Your Selling Price − Landed Cost.</p>
-                <button onClick={() => setDeleteTarget(selected)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50 shrink-0">Delete</button>
+                <button onClick={() => setDeleteTarget(p)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50 shrink-0">Delete</button>
               </div>
             </div>
           );
@@ -540,15 +693,12 @@ export default function PurchasesPage() {
       >
         {deleteTarget && (() => {
           const p = deleteTarget;
-          const due = Math.max(0, steelAmount(p) - (p.paid ?? 0));
-          const otherPurchases = purchases.some((x) => x.item === p.item && x.id !== p.id);
-          const soldAny = sales.some((s) => s.lines.some((l) => l.item === p.item));
+          const due = remainingOf(p);
+          const otherPurchases = purchases.some((x) => x.variantId === p.variantId && x.id !== p.id) ||
+            (p.variantId ? false : purchases.some((x) => x.item === p.item && x.id !== p.id));
+          const soldAny = sales.some((s) => s.lines.some((l) => (p.variantId ? l.variantId === p.variantId : l.item === p.item)));
           const soldFrom = sales.reduce(
-            (a, s) =>
-              a +
-              s.lines
-                .filter((l) => l.purchaseId === p.id)
-                .reduce((x, l) => x + l.qty, 0),
+            (a, s) => a + s.lines.filter((l) => l.purchaseId === p.id).reduce((x, l) => x + l.qty, 0),
             0
           );
           const vanishes = !otherPurchases && !soldAny;
@@ -608,7 +758,7 @@ export default function PurchasesPage() {
       </ConfirmModal>
 
       {/* Pay Due Modal */}
-      <Modal open={!!payId} onClose={closePay} title="Pay Supplier">
+      <Modal open={!!payId} onClose={closePay} title="Pay Supplier" size="lg">
         {(() => {
           const p = purchases.find((x) => x.id === payId);
           if (!p) return null;

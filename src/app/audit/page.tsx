@@ -29,6 +29,8 @@ export default function AuditPage() {
     inventory,
     stockLots,
     inventoryBySource,
+    inventoryByVariant,
+    stockMovements,
     byItem,
     salePaid,
     customerBalance,
@@ -89,6 +91,54 @@ export default function AuditPage() {
       if (r.stockQty < -eps) srcOk = false;
     }
     check("Per-source inventory = Σ its remaining lots", srcOk);
+
+    /* variant-level conservation + movement journal (derived from the same
+       purchases/sales — must always match, never a second truth) */
+    let varOk = true;
+    let moveOk = true;
+    let moveTotal = 0;
+    const moveByPurchase = new Map<string, number>();
+    const moveBySaleLine = new Map<string, number>();
+    for (const m of stockMovements) {
+      if (m.type === "PURCHASE_RECEIPT" && m.purchaseId) moveByPurchase.set(m.purchaseId, (moveByPurchase.get(m.purchaseId) ?? 0) + m.qty);
+      if (m.type === "SALE" && m.saleId && m.saleLineIndex !== undefined)
+        moveBySaleLine.set(`${m.saleId}:${m.saleLineIndex}`, (moveBySaleLine.get(`${m.saleId}:${m.saleLineIndex}`) ?? 0) + m.qty);
+      moveTotal += m.qty;
+    }
+    for (const p of purchases) if (Math.abs((moveByPurchase.get(p.id) ?? 0) - p.qty) > eps) moveOk = false;
+    for (const s of sales)
+      s.lines.forEach((l, i) => {
+        if (Math.abs((moveBySaleLine.get(`${s.id}:${i}`) ?? 0) + l.qty) > eps) moveOk = false;
+      });
+    check("Every purchase has one +qty movement, every sale line one −qty movement", moveOk);
+    check(
+      "Movement journal sums to zero net change at row level",
+      Math.abs(moveTotal - (purchases.reduce((a, p) => a + p.qty, 0) - sales.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0))) < 0.5,
+      `+${qty(purchases.reduce((a, p) => a + p.qty, 0))} in − ${qty(sales.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0))} out`
+    );
+    const byVariant: Record<string, { bought: number; sold: number; stockQty: number }> = {};
+    for (const p of purchases)
+      if (p.variantId) {
+        (byVariant[p.variantId] ??= { bought: 0, sold: 0, stockQty: 0 }).bought += p.qty;
+      }
+    for (const s of sales)
+      for (const l of s.lines)
+        if (l.variantId) (byVariant[l.variantId] ??= { bought: 0, sold: 0, stockQty: 0 }).sold += l.qty;
+    for (const r of inventoryByVariant) {
+      if (r.variantId.startsWith("item:")) continue; // legacy rows (no variant)
+      const b = byVariant[r.variantId];
+      const expect = (b?.bought ?? 0) - (b?.sold ?? 0);
+      if (Math.abs(expect - r.stockQty) > eps || r.stockQty < -eps) varOk = false;
+      const lotQty = stockLots
+        .filter((l) => l.variantId === r.variantId)
+        .reduce((a, l) => a + l.remainingQty, 0);
+      if (Math.abs(lotQty - r.stockQty) > eps) varOk = false;
+    }
+    check(
+      "Variant stock = Σ its purchases − Σ its sales = Σ its remaining lots",
+      varOk,
+      `checked ${inventoryByVariant.filter((r) => !r.variantId.startsWith("item:")).length} variants`
+    );
 
     /* simulate: buy one more +100 of a stocked item, then sell 25 */
     const demo = inventory.find((r) => r.stockQty > 0);
@@ -197,8 +247,8 @@ export default function AuditPage() {
     return L.join("\n");
   }, [
     customers, suppliers, purchases, sales, payments, expenses, inventory,
-    stockLots, inventoryBySource, byItem, salePaid, customerBalance,
-    supplierBalance, lineUnitCost, stats,
+    stockLots, inventoryBySource, inventoryByVariant, stockMovements, byItem,
+    salePaid, customerBalance, supplierBalance, lineUnitCost, stats,
   ]);
 
   return (

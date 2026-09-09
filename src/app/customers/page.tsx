@@ -15,7 +15,7 @@ type DateGroup = {
 };
 
 export default function CustomersPage() {
-  const { customers, sales, salePaid, addCustomer, deleteCustomer } = useStore();
+  const { customers, sales, salePaid, attributeDefs, addCustomer, deleteCustomer } = useStore();
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const { open, onOpen, onClose } = useToggle();
   const [form, setForm] = useState({ name: "", shop: "", phone: "" });
@@ -258,14 +258,26 @@ export default function CustomersPage() {
                               <span className="text-[13px] font-bold text-neutral-800 text-right">{s.invoiceNo}</span>
                             </div>
                             {/* Row: Items */}
-                            {s.lines.map((l, i) => (
-                              <div key={i} className="flex items-baseline justify-between gap-4">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">{i === 0 ? "Items" : ""}</span>
-                                <span className="text-[12px] text-neutral-700 text-right">
-                                  {l.item} — {fmtQtyWithUnit(l.qty, l.unit)} × {fmtMoney(l.rate)}
-                                </span>
-                              </div>
-                            ))}
+                            {s.lines.map((l, i) => {
+                              const attrLine = l.attributeSnapshot
+                                ? attributeDefs
+                                    .filter((d) => d.categoryId === l.categoryId && d.active)
+                                    .sort((a, b) => a.sortOrder - b.sortOrder)
+                                    .filter((d) => l.attributeSnapshot![d.key])
+                                    .map((d) => l.attributeSnapshot![d.key])
+                                    .join(" · ")
+                                : "";
+                              return (
+                                <div key={i} className="flex items-baseline justify-between gap-4">
+                                  <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">{i === 0 ? "Items" : ""}</span>
+                                  <span className="text-[12px] text-neutral-700 text-right">
+                                    {l.item}
+                                    {attrLine ? <span className="block text-[11px] text-neutral-400">{attrLine}</span> : null}
+                                    <span className="block tabular-nums">{fmtQtyWithUnit(l.qty, l.unit)} × {fmtMoney(l.rate)}</span>
+                                  </span>
+                                </div>
+                              );
+                            })}
                             {/* Row: Total */}
                             <div className="flex items-baseline justify-between gap-4 pt-2 border-t border-neutral-100">
                               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Total</span>

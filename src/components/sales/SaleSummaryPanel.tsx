@@ -19,6 +19,7 @@ export default function SaleSummaryPanel({
   payError,
   customerName,
   canSave,
+  hideSubmit = false,
 }: {
   subtotal: number;
   discountPct: number;
@@ -34,6 +35,7 @@ export default function SaleSummaryPanel({
   payError?: string;
   customerName: string;
   canSave: boolean;
+  hideSubmit?: boolean;
 }) {
   return (
     <div className="border border-neutral-200 rounded-xl bg-white p-5 xl:sticky xl:top-6">
@@ -97,18 +99,34 @@ export default function SaleSummaryPanel({
           )}
         </div>
 
-        <div className={`flex justify-between items-center px-3 py-2.5 border border-dashed -mx-3 ${remaining > 0 ? "border-neutral-400" : "border-neutral-300"}`}>
-          <span className="text-xs uppercase tracking-widest text-neutral-500">Remaining Due</span>
-          <span className={`tabular-nums font-semibold ${remaining > 0 ? "" : "text-neutral-400"}`}>{fmtMoney(remaining)}</span>
-        </div>
+        {remaining === 0 && grandTotal > 0 ? (
+          <div className="flex justify-between items-center px-3 py-2.5 -mx-1 rounded-lg border border-[#cfe3cd] bg-[#f0f7ef]">
+            <span className="text-xs uppercase tracking-widest text-[#2e6b2e] font-medium">Remaining Due</span>
+            <span className="tabular-nums font-semibold text-[#2e6b2e]">Fully paid</span>
+          </div>
+        ) : (
+          <div className={`flex justify-between items-center px-3 py-2.5 border border-dashed -mx-3 ${remaining > 0 ? "border-neutral-400" : "border-neutral-300"}`}>
+            <span className="text-xs uppercase tracking-widest text-neutral-500">Remaining Due</span>
+            <span className={`tabular-nums font-semibold ${remaining > 0 ? "" : "text-neutral-400"}`}>{fmtMoney(remaining)}</span>
+          </div>
+        )}
       </div>
 
-      <button type="submit" className="btn-primary w-full mt-5" disabled={!canSave}>
-        Save Sale
-      </button>
-      <p className="text-[11px] text-neutral-400 text-center mt-2.5">
-        Invoice for {customerName} created on save
-      </p>
+      {!hideSubmit && (
+        <>
+          <button type="submit" className="btn-primary w-full mt-5" disabled={!canSave}>
+            Save Sale
+          </button>
+          <p className="text-[11px] text-neutral-400 text-center mt-2.5">
+            Invoice for {customerName} created on save
+          </p>
+        </>
+      )}
+      {hideSubmit && (
+        <p className="text-[11px] text-neutral-400 text-center mt-4">
+          Invoice for {customerName} · save with the button below
+        </p>
+      )}
     </div>
   );
 }

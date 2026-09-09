@@ -12,11 +12,15 @@ export default function PurchaseDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { purchases, suppliers, inventory } = useStore();
+  const { purchases, suppliers, inventory, categories, attributeDefs, warehouses, locations } = useStore();
 
   const purchase = purchases.find((p) => p.id === id);
   const supplier = suppliers.find((s) => s.id === purchase?.supplierId);
   const inv = inventory.find((r) => r.item === purchase?.item);
+  const defs = (purchase?.categoryId ? attributeDefs.filter((d) => d.categoryId === purchase!.categoryId && d.active).sort((a, b) => a.sortOrder - b.sortOrder) : []);
+  const catName = categories.find((c) => c.id === purchase?.categoryId)?.name;
+  const whName = warehouses.find((w) => w.id === purchase?.warehouseId)?.name;
+  const locName = locations.find((l) => l.id === purchase?.locationId)?.name;
 
   if (!purchase) {
     return (
@@ -41,8 +45,17 @@ export default function PurchaseDetailPage({
     { label: "Purchase Date", value: fmtDate(purchase.date) },
     { label: "Supplier", value: supplier?.name ?? purchase.supplierId },
     { label: "Product", value: purchase.product || "—" },
-    { label: "Product Item", value: purchase.item },
-    { label: "Quality", value: purchase.quality || "—" },
+    ...(catName ? [{ label: "Category", value: catName }] : []),
+    ...(purchase.attributeSnapshot
+      ? defs.filter((d) => purchase.attributeSnapshot![d.key]).map((d) => ({ label: d.name, value: purchase.attributeSnapshot![d.key] }))
+      : [
+          ...(purchase.spec ? [{ label: "Spec", value: purchase.spec }] : []),
+          { label: "Quality", value: purchase.quality || "—" },
+        ]),
+    ...(purchase.lotNumber || purchase.heatNumber || purchase.batchNumber
+      ? [{ label: "Lot / Heat / Batch", value: [purchase.lotNumber, purchase.heatNumber, purchase.batchNumber].filter(Boolean).join(" / ") }]
+      : []),
+    ...(whName ? [{ label: "Warehouse", value: `${whName}${locName ? " / " + locName : ""}` }] : []),
     { label: "Quantity", value: fmtQtyWithUnit(purchase.qty, purchase.unit) },
     { label: "Buying Price", value: fmtRateWithUnit(purchase.rate, purchase.unit) },
     { label: "Transport Cost", value: fmtMoney(purchase.transport), muted: true },

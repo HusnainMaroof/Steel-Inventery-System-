@@ -291,8 +291,14 @@ a {
   .no-print {
     display: none !important;
   }
-  /* ensure black backgrounds print */
-  .print-area .bg-black {
+  /* ensure dark / tinted backgrounds print */
+  .print-area .bg-black,
+  .print-area .bg-\[\#171717\],
+  .print-area .bg-\[\#f0f7ef\],
+  .print-area .bg-amber-50,
+  .print-area .bg-\[\#fdf1ef\],
+  .print-area .bg-neutral-50\/80,
+  .print-area .bg-neutral-50\/50 {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     color-adjust: exact;

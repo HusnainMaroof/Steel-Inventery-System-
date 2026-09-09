@@ -2,259 +2,245 @@
 
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
+import { attrsValuesLine } from "@/lib/catalogue";
+import type { AttributeDef } from "@/lib/types";
 
-export interface LineForm {
-  product: string;
-  item: string;
-  spec?: string;
-  quality: string;
-  supplierId: string;
-  purchaseId?: string;
+/* a line on the current sale */
+export interface SaleDraftLine {
+  categoryId?: string;
+  variantId: string;
+  item: string; // variant short name (mirror)
+  snapshot?: Record<string, string>;
+  unit: string;
   qty: number;
   rate: number;
+  supplierId?: string; // set when a specific source lot is chosen
+  purchaseId?: string; // exact lot, when chosen
 }
 
-export interface Draft {
-  product: string;
-  item: string;
-  spec?: string;
-  quality: string;
-  supplierId: string;
+export interface DraftPick {
+  productId: string;
+  categoryId: string;
+  variantId: string;
+  lotId: string; // "" = any lot of the variant (FIFO)
   qty: number;
 }
 
-/* source rows can carry a spec (e.g. Cement factory). treat blank == no spec */
-const specKey = (spec?: string) => spec ?? "";
+export interface VariantPickRow {
+  variantId: string;
+  shortName: string;
+  attrText: string;
+  unit: string;
+  stockQty: number;
+  sellPrice?: number;
+  landedAvg: number;
+}
+
+export interface LotOption {
+  purchaseId: string;
+  supplierId: string;
+  label: string; // supplier + heat/lot + location
+  remaining: number;
+  unit: string;
+  sellPrice?: number;
+  landedPerUnit: number;
+}
 
 export function useSaleDraft() {
-  const { customers, inventory, suppliers, products, inventoryBySource, stockLots } = useStore();
+  const {
+    customers,
+    products,
+    categories,
+    attributeDefs,
+    variants,
+    suppliers,
+    warehouses,
+    locations,
+    inventory,
+    inventoryByVariant,
+    stockLots,
+  } = useStore();
 
-  /* what the secondary field means for a product — "Quality" by default,
-     "Factory / Mill" when selling Cement */
-  const productSpecLabel = (name: string) => {
-    const pr = products.find((p) => p.name === name);
-    return pr?.specLabel ?? (name.toLowerCase().includes("cement") ? "Factory / Mill" : "Quality");
-  };
+  const supplierName = (id?: string) => suppliers.find((s) => s.id === id)?.name ?? "";
+  const locationName = (id?: string) => locations.find((l) => l.id === id)?.name;
+  const warehouseName = (id?: string) => warehouses.find((w) => w.id === id)?.name;
 
-  /* ---- sellable stock rows ---- */
-  const invMap = useMemo(() => Object.fromEntries(inventory.map((r) => [r.item, r])), [inventory]);
-  const unitOf = (item: string) => invMap[item]?.unit ?? "";
-  const supplierName = (id: string) => suppliers.find((s) => s.id === id)?.name ?? "—";
+  const defsByCategory = useMemo(() => {
+    const m: Record<string, AttributeDef[]> = {};
+    for (const d of attributeDefs.filter((x) => x.active)) (m[d.categoryId] ??= []).push(d);
+    for (const k of Object.keys(m)) m[k].sort((a, b) => a.sortOrder - b.sortOrder);
+    return m;
+  }, [attributeDefs]);
 
-  const sourceRows = inventoryBySource.filter((r) => r.stockQty > 0);
+  const varById = useMemo(() => new Map(variants.map((v) => [v.id, v])), [variants]);
+  const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const prodById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
-  /* distinct specs (factories) of an item, from real stock */
-  const specsOf = (item: string) =>
-    Array.from(new Set(sourceRows.filter((r) => r.item === item && r.spec).map((r) => r.spec as string))).sort();
-
-  const sourceRowOf = (item: string, spec: string | undefined, supplierId: string) =>
-    inventoryBySource.find(
-      (r) =>
-        r.item === item &&
-        specKey(r.spec) === specKey(spec) &&
-        r.supplierId === supplierId
-    );
-
-  const sourceStockOf = (item: string, spec: string | undefined, supplierId: string) =>
-    sourceRowOf(item, spec, supplierId)?.stockQty ?? 0;
-  const sourceUnitCostOf = (item: string, spec: string | undefined, supplierId: string) =>
-    sourceRowOf(item, spec, supplierId)?.landedAvg ?? 0;
-  const sourceUnitOf = (item: string, spec: string | undefined, supplierId: string) =>
-    sourceRowOf(item, spec, supplierId)?.unit ?? unitOf(item);
-  const sellPriceOf = (item: string, spec: string | undefined, quality: string, supplierId: string) =>
-    stockLots.find(
-      (l) =>
-        l.item === item &&
-        specKey(l.spec) === specKey(spec) &&
-        l.quality === quality &&
-        l.supplierId === supplierId &&
-        l.sellPrice
-    )?.sellPrice;
-
-  const productsWithStock = useMemo(
-    () =>
-      Array.from(new Set(sourceRows.map((r) => r.product))).filter((p): p is string => !!p).sort(),
-    [sourceRows]
+  /* ---- what's sellable (has stock) ---- */
+  const stocked = useMemo(
+    () => inventoryByVariant.filter((r) => r.stockQty > 0.000001),
+    [inventoryByVariant]
   );
-  const itemsOf = (product: string) => sourceRows.filter((r) => r.product === product);
-  const qualitiesOf = (item: string, spec: string | undefined = "") =>
-    Array.from(
-      new Set(
-        sourceRows
-          .filter((r) => r.item === item && specKey(r.spec) === specKey(spec) && r.quality)
-          .map((r) => r.quality as string)
-      )
-    );
-  const sourcesOf = (item: string, quality = "", spec: string | undefined = "") =>
-    sourceRows.filter(
-      (r) =>
-        r.item === item &&
-        specKey(r.spec) === specKey(spec) &&
-        (!quality || r.quality === quality)
-    );
 
-  /* ---- the "add item" draft ---- */
-  const freshDraft = (): Draft => {
-    const prod = productsWithStock[0] ?? "";
-    const itemRow = itemsOf(prod)[0];
-    const item = itemRow?.item ?? "";
-    const spec = (itemRow?.spec ?? "") || undefined;
-    const qual = (itemRow?.quality ?? "") || "";
-    const src = sourcesOf(item, qual, spec)[0];
-    return {
-      product: prod,
-      item,
-      spec,
-      quality: qual,
-      supplierId: src?.supplierId ?? "",
-      qty: 1,
-    };
-  };
-  const [draft, setDraftState] = useState<Draft>(freshDraft);
-  const setDraft = (patch: Partial<Draft>) => setDraftState((d) => ({ ...d, ...patch }));
+  const attrTextOf = (variantId: string, snapshot?: Record<string, string>) =>
+    attrsValuesLine(defsByCategory[varById.get(variantId)?.categoryId ?? ""] ?? [], snapshot);
 
-  const onDraftProduct = (product: string) => {
-    const row = itemsOf(product)[0];
-    const item = row?.item ?? "";
-    const spec = (row?.spec ?? "") || undefined;
-    const qual = (row?.quality ?? "") || "";
-    setDraftState({
-      ...freshDraft(),
-      product,
-      item,
-      spec,
-      quality: qual,
-      supplierId: sourcesOf(item, qual, spec)[0]?.supplierId ?? "",
-      qty: 1,
-    });
+  const variantRowsOf = (categoryId: string): VariantPickRow[] =>
+    stocked
+      .filter((r) => r.categoryId === categoryId)
+      .map((r) => ({
+        variantId: r.variantId,
+        shortName: r.shortName,
+        attrText: attrTextOf(r.variantId, r.attributeSnapshot),
+        unit: r.unit,
+        stockQty: r.stockQty,
+        landedAvg: r.landedAvg,
+        sellPrice: r.sellRate,
+      }));
+
+  const lotsOf = (variantId: string): LotOption[] =>
+    stockLots
+      .filter((l) => l.variantId === variantId && l.remainingQty > 0.000001)
+      .sort((a, b) => a.purchasedAt.localeCompare(b.purchasedAt))
+      .map((l) => ({
+        purchaseId: l.purchaseId,
+        supplierId: l.supplierId,
+        label: [
+          supplierName(l.supplierId),
+          l.lotNumber || l.heatNumber || l.batchNumber,
+          [warehouseName(l.warehouseId), locationName(l.locationId)].filter(Boolean).join(" / "),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        remaining: l.remainingQty,
+        unit: l.unit,
+        sellPrice: l.sellPrice,
+        landedPerUnit: l.landedPerUnit,
+      }));
+
+  const stockTotalOf = (variantId: string) =>
+    inventoryByVariant.find((r) => r.variantId === variantId)?.stockQty ?? 0;
+
+  /* ---- draft pick ---- */
+  const productsWithStock = useMemo(() => {
+    const ids = new Set(stocked.map((r) => r.productId).filter(Boolean));
+    return products.filter((p) => ids.has(p.id) && p.active !== false);
+  }, [stocked, products]);
+
+  const categoriesOfProduct = (productId: string) => {
+    const catIds = new Set(stocked.filter((r) => r.productId === productId).map((r) => r.categoryId).filter(Boolean));
+    return categories.filter((c) => catIds.has(c.id) && c.productId === productId && c.active !== false);
   };
-  const onDraftItem = (item: string) => {
-    const specs = specsOf(item);
-    const spec = specs[0];
-    const qual = qualitiesOf(item, spec)[0] ?? "";
-    setDraftState((d) => ({
-      ...d,
-      item,
-      spec,
-      quality: qual,
-      supplierId: sourcesOf(item, qual, spec)[0]?.supplierId ?? "",
-      qty: 1,
-    }));
+
+  const freshPick = (): DraftPick => {
+    const p = productsWithStock[0];
+    const c = p ? categoriesOfProduct(p.id)[0] : undefined;
+    const v = c ? variantRowsOf(c.id)[0] : undefined;
+    return { productId: p?.id ?? "", categoryId: c?.id ?? "", variantId: v?.variantId ?? "", lotId: "", qty: 1 };
   };
-  const onDraftSpec = (spec: string) => {
-    setDraftState((d) => ({
-      ...d,
-      spec: spec || undefined,
-      quality: qualitiesOf(d.item, spec || undefined)[0] ?? "",
-      supplierId: sourcesOf(d.item, "", spec || undefined)[0]?.supplierId ?? "",
-      qty: 1,
-    }));
+
+  const [pick, setPickState] = useState<DraftPick>(freshPick);
+  const setPick = (patch: Partial<DraftPick>) => setPickState((d) => ({ ...d, ...patch }));
+
+  const onProduct = (productId: string) => {
+    const c = categoriesOfProduct(productId)[0];
+    const v = c ? variantRowsOf(c.id)[0] : undefined;
+    setPickState({ productId, categoryId: c?.id ?? "", variantId: v?.variantId ?? "", lotId: "", qty: 1 });
   };
-  const onDraftQuality = (quality: string) => {
-    setDraftState((d) => ({
-      ...d,
-      quality,
-      supplierId: sourcesOf(d.item, quality, d.spec)[0]?.supplierId ?? "",
-      qty: 1,
-    }));
+  const onCategory = (categoryId: string) => {
+    const v = variantRowsOf(categoryId)[0];
+    setPickState((d) => ({ ...d, categoryId, variantId: v?.variantId ?? "", lotId: "", qty: 1 }));
   };
+  const onVariant = (variantId: string) =>
+    setPickState((d) => ({ ...d, variantId, lotId: "", qty: 1 }));
+
+  const pickVariant = varById.get(pick.variantId) ?? null;
+  const pickCategory = pickVariant ? catById.get(pickVariant.categoryId) : null;
+  const pickRow = stocked.find((r) => r.variantId === pick.variantId) ?? null;
+  const pickLots = pick.variantId ? lotsOf(pick.variantId) : [];
+  const pickLot = pickLots.find((l) => l.purchaseId === pick.lotId);
 
   /* ---- added lines ---- */
-  const [lines, setLines] = useState<LineForm[]>([]);
+  const [lines, setLines] = useState<SaleDraftLine[]>([]);
 
-  const setLine = (i: number, patch: Partial<LineForm>) =>
+  const draftUnit = pickRow?.unit ?? "";
+  /* stock left for the current pick (minus what's already on the invoice) */
+  const draftAvail = (() => {
+    if (!pick.variantId) return 0;
+    const used = pick.lotId
+      ? lines.filter((l) => l.purchaseId === pick.lotId).reduce((a, l) => a + (Number(l.qty) || 0), 0)
+      : lines.filter((l) => l.variantId === pick.variantId).reduce((a, l) => a + (Number(l.qty) || 0), 0);
+    const total = pickLot ? pickLot.remaining : stockTotalOf(pick.variantId);
+    return Math.max(0, total - used);
+  })();
+  const draftOver = (Number(pick.qty) || 0) > draftAvail;
+  const draftPrice = pickLot?.sellPrice ?? pickLots.find((l) => l.sellPrice)?.sellPrice ?? pickRow?.sellRate;
+  const draftLanded = pickLot?.landedPerUnit ?? pickRow?.landedAvg ?? 0;
+  const canAdd = !!pick.variantId && !draftOver && (Number(pick.qty) || 0) > 0;
+
+  const setLine = (i: number, patch: Partial<SaleDraftLine>) =>
     setLines((prev) => prev.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines((prev) => prev.filter((_, j) => j !== i));
 
-  // stock still available for a draft combo = source stock minus what's already on the sale
-  const availOf = (item: string, quality: string, spec: string | undefined, supplierId: string) => {
-    const total = sourceStockOf(item, spec, supplierId);
-    const used = lines
-      .filter(
-        (l) =>
-          l.item === item &&
-          specKey(l.spec) === specKey(spec) &&
-          l.quality === quality &&
-          l.supplierId === supplierId
-      )
-      .reduce((a, l) => a + (Number(l.qty) || 0), 0);
-    return Math.max(0, total - used);
-  };
-  const draftAvail = availOf(draft.item, draft.quality, draft.spec, draft.supplierId);
-  const draftOver = (Number(draft.qty) || 0) > draftAvail;
-  const draftUnit = unitOf(draft.item);
-  const draftPrice =
-    draft.item && draft.supplierId
-      ? sellPriceOf(draft.item, draft.spec, draft.quality, draft.supplierId)
-      : undefined;
-  const canAdd =
-    !!draft.item && !!draft.supplierId && !draftOver && (Number(draft.qty) || 0) > 0;
-  const lineOver = (l: LineForm) => {
-    const stock = sourceStockOf(l.item, l.spec, l.supplierId);
-    const otherLinesQty = lines
-      .filter(
-        (ol) =>
-          ol !== l &&
-          ol.item === l.item &&
-          specKey(ol.spec) === specKey(l.spec) &&
-          ol.supplierId === l.supplierId
-      )
-      .reduce((a, ol) => a + (Number(ol.qty) || 0), 0);
-    return (Number(l.qty) || 0) > stock - otherLinesQty;
-  };
-
   const addDraftItem = () => {
-    if (!canAdd) return;
-    const unitCost = sourceUnitCostOf(draft.item, draft.spec, draft.supplierId);
-    const price = sellPriceOf(draft.item, draft.spec, draft.quality, draft.supplierId);
+    if (!canAdd || !pickVariant) return;
+    const source = pickLot ?? pickLots[0];
     setLines((prev) => [
       ...prev,
       {
-        product: draft.product,
-        item: draft.item,
-        spec: draft.spec,
-        quality: draft.quality,
-        supplierId: draft.supplierId,
-        purchaseId:
-          stockLots.find(
-            (l) =>
-              l.item === draft.item &&
-              specKey(l.spec) === specKey(draft.spec) &&
-              l.quality === draft.quality &&
-              l.supplierId === draft.supplierId
-          )?.purchaseId ?? undefined,
-        qty: Number(draft.qty) || 1,
-        rate: Math.round(price ?? (unitCost * 1.15)) || 0,
+        categoryId: pickVariant.categoryId,
+        variantId: pickVariant.id,
+        item: pickVariant.shortName,
+        snapshot: pickVariant.attributes,
+        unit: draftUnit,
+        qty: Number(pick.qty) || 1,
+        rate: Math.round(draftPrice ?? (draftLanded * 1.15)) || 0,
+        // explicit lot only when the operator picks one; otherwise leave unset
+        // so the store consumes FIFO across the variant's lots
+        supplierId: pick.lotId ? source?.supplierId : undefined,
+        purchaseId: pick.lotId ? source?.purchaseId : undefined,
       },
     ]);
-    setDraftState((d) => ({ ...d, qty: 1 }));
+    setPickState((d) => ({ ...d, qty: 1 }));
   };
 
-  const resetDraft = () => setDraftState(freshDraft());
+  const unitOf = (item: string) => inventory.find((r) => r.item === item)?.unit ?? "";
+  const lineOver = (l: SaleDraftLine) => {
+    const used = lines
+      .filter((ol) => ol !== l && ol.variantId === l.variantId && (!l.purchaseId || ol.purchaseId === l.purchaseId))
+      .reduce((a, ol) => a + (Number(ol.qty) || 0), 0);
+    const avail = l.purchaseId
+      ? lotsOf(l.variantId).find((x) => x.purchaseId === l.purchaseId)?.remaining ?? 0
+      : stockTotalOf(l.variantId);
+    return (Number(l.qty) || 0) > avail - used;
+  };
+
+  const resetDraft = () => setPickState(freshPick());
   const removeAll = () => setLines([]);
 
   return {
     customers,
-    inventory,
-    sourceRows,
-    productSpecLabel,
     productsWithStock,
-    itemsOf,
-    specsOf,
-    qualitiesOf,
-    sourcesOf,
-    availOf,
-    sourceUnits: sourceUnitOf,
+    categoriesOfProduct,
+    variantRowsOf,
+    lotsOf,
     supplierName,
+    defsByCategory,
+    varById,
+    catById,
+    prodById,
+    attrTextOf,
     unitOf,
-    draft,
-    setDraft,
-    onDraftProduct,
-    onDraftItem,
-    onDraftSpec,
-    onDraftQuality,
-    draftAvail,
+    hasStock: stocked.length > 0,
+    pick,
+    setPick,
+    onProduct,
+    onCategory,
+    onVariant,
+    pickCategory,
+    pickVariant,
     draftUnit,
+    draftAvail,
     draftPrice,
     draftOver,
     canAdd,
@@ -267,3 +253,5 @@ export function useSaleDraft() {
     removeAll,
   };
 }
+
+export type SaleDraftApi = ReturnType<typeof useSaleDraft>;

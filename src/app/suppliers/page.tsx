@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
 import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
+import { attrsValuesLine } from "@/lib/catalogue";
 import type { Purchase, Supplier } from "@/lib/types";
 
 type DateGroup = {
@@ -14,7 +15,7 @@ type DateGroup = {
 };
 
 export default function SuppliersPage() {
-  const { suppliers, purchases, sales, products, addSupplier, deleteSupplier } = useStore();
+  const { suppliers, purchases, sales, products, attributeDefs, addSupplier, deleteSupplier } = useStore();
   const { open, onOpen, onClose } = useToggle();
   const [form, setForm] = useState({ name: "", mill: "", phone: "" });
 
@@ -60,6 +61,15 @@ export default function SuppliersPage() {
     const custom = pr?.specLabel ?? (productName?.toLowerCase().includes("cement") ? "Factory / Mill" : undefined);
     return custom ?? "Quality";
   };
+  const attrLineOf = (p: { categoryId?: string; attributeSnapshot?: Record<string, string>; spec?: string; quality?: string }) =>
+    p.attributeSnapshot
+      ? attrsValuesLine(
+          p.categoryId
+            ? attributeDefs.filter((d) => d.categoryId === p.categoryId && d.active).sort((a, b) => a.sortOrder - b.sortOrder)
+            : [],
+          p.attributeSnapshot
+        )
+      : [p.spec, p.quality].filter(Boolean).join(" · ");
 
   const formatPhone = (v: string) => {
     const digits = v.replace(/\D/g, "").slice(0, 11);
@@ -272,13 +282,16 @@ export default function SuppliersPage() {
                                 {p.item}
                               </span>
                             </div>
-                            {/* Row: Quality */}
-                            {p.quality && (
-                              <div className="flex items-baseline justify-between gap-4">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">{specLabelOf(p.product)}</span>
-                                <span className="text-[13px] font-medium text-neutral-700 text-right">{p.quality}</span>
-                              </div>
-                            )}
+                            {/* Row: Attributes (dynamic) */}
+                            {(() => {
+                              const attrLine = attrLineOf(p);
+                              return attrLine ? (
+                                <div className="flex items-baseline justify-between gap-4">
+                                  <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">{p.attributeSnapshot ? "Attributes" : specLabelOf(p.product)}</span>
+                                  <span className="text-[13px] font-medium text-neutral-700 text-right">{attrLine}</span>
+                                </div>
+                              ) : null;
+                            })()}
                             {/* Row: Quantity */}
                             <div className="flex items-baseline justify-between gap-4">
                               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Quantity</span>

@@ -9,10 +9,13 @@ import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import SalesTable from "@/components/sales/SalesTable";
 import NewSaleModal from "@/components/sales/NewSaleModal";
 import { useSaleDraft } from "@/components/sales/useSaleDraft";
+import { groupDefsByCategory, attrsValuesLine } from "@/lib/catalogue";
+import { useUiPreferences } from "@/lib/preferences";
 
 export default function SalesPage() {
-  const { sales, customers, inventory, addSale, addPayment, addCustomer, salePaid } = useStore();
-  const draft = useSaleDraft();
+  const { sales, customers, inventory, products, categories, attributeDefs, addSale, addPayment, addCustomer, salePaid } = useStore();
+  const api = useSaleDraft();
+  const { prefs } = useUiPreferences();
   const [viewId, setViewId] = useState<string | null>(null);
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
@@ -30,20 +33,20 @@ export default function SalesPage() {
   const [payError, setPayError] = useState("");
 
   /* ---- money on the current draft ---- */
-  const subtotal = draft.lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
+  const subtotal = api.lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
   const discAmt = subtotal * (discountPct / 100);
   const taxable = subtotal - discAmt;
   const taxAmt = taxable * (taxPct / 100);
   const grandTotal = taxable + taxAmt;
   const remaining = Math.max(0, grandTotal - (Number(paidNow) || 0));
   const canSave =
-    draft.lines.length > 0 &&
-    draft.lines.every((l) => l.item && l.supplierId && (Number(l.qty) || 0) > 0 && (Number(l.rate) || 0) > 0 && !draft.lineOver(l)) &&
+    api.lines.length > 0 &&
+    api.lines.every((l) => l.variantId && (Number(l.qty) || 0) > 0 && (Number(l.rate) || 0) > 0 && !api.lineOver(l)) &&
     !!existingId;
 
   const startNewSale = () => {
-    draft.resetDraft();
-    draft.removeAll();
+    api.resetDraft();
+    api.removeAll();
     setDiscountPct(0);
     setTaxPct(0);
     setPaidNow(0);
@@ -80,13 +83,14 @@ export default function SalesPage() {
       customerId: existingId,
       discountPct,
       taxPct,
-      lines: draft.lines.map((l) => ({
+      lines: api.lines.map((l) => ({
         item: l.item,
         qty: Number(l.qty),
         rate: Number(l.rate),
-        unit: draft.unitOf(l.item),
-        spec: l.spec || undefined,
-        quality: l.quality || undefined,
+        unit: l.unit,
+        categoryId: l.categoryId || undefined,
+        variantId: l.variantId || undefined,
+        attributeSnapshot: l.snapshot,
         supplierId: l.supplierId || undefined,
         purchaseId: l.purchaseId || undefined,
       })),
@@ -102,17 +106,31 @@ export default function SalesPage() {
         saleId,
       });
     }
-    draft.removeAll();
+    api.removeAll();
     setNewOpen(false);
     setViewId(saleId);
   };
 
   const customerName = (id: string) => customers.find((c) => c.id === id)?.name ?? id;
   const customer = customers.find((c) => c.id === existingId);
-  // which product category an item belongs to (e.g. "3 Sutar" → "Steel")
+  // legacy fallbacks (pre-dynamic records have no snapshot)
   const productOf = (item: string) => inventory.find((r) => r.item === item)?.product ?? "";
-  // the quality grade bought for that item (fallback when the line has none saved)
   const qualityOf = (item: string) => inventory.find((r) => r.item === item)?.quality ?? "";
+  // snapshot-aware display helpers for sale rows
+  const productOfLine = (l: { categoryId?: string; item: string }) => {
+    if (l.categoryId) {
+      const cat = categories.find((c) => c.id === l.categoryId);
+      if (cat) {
+        const p = products.find((x) => x.id === cat.productId);
+        if (p) return p.name;
+      }
+    }
+    return productOf(l.item);
+  };
+  const attrTextOf = (l: { categoryId?: string; attributeSnapshot?: Record<string, string>; quality?: string; item: string }) =>
+    l.attributeSnapshot
+      ? attrsValuesLine(groupDefsByCategory(attributeDefs)[l.categoryId ?? ""] ?? [], l.attributeSnapshot)
+      : l.quality || qualityOf(l.item) || "";
 
   return (
     <Page>
@@ -131,9 +149,9 @@ export default function SalesPage() {
         sales={sales}
         customerName={customerName}
         customers={customers}
-        hasInventory={draft.inventory.length > 0}
-        productOf={productOf}
-        qualityOf={qualityOf}
+        hasInventory={api.hasStock}
+        productOfLine={productOfLine}
+        attrTextOf={attrTextOf}
         salePaid={salePaid}
         onView={(id) => setViewId(id)}
         onReceive={(id) => setPaySaleId(id)}
@@ -154,32 +172,7 @@ export default function SalesPage() {
         existingId={existingId}
         setExistingId={setExistingId}
         onNewCustOpen={onNewCustOpen}
-        draft={draft.draft}
-        setDraft={draft.setDraft}
-        onDraftProduct={draft.onDraftProduct}
-        onDraftItem={draft.onDraftItem}
-        onDraftSpec={draft.onDraftSpec}
-        onDraftQuality={draft.onDraftQuality}
-        productsWithStock={draft.productsWithStock}
-        itemsOf={draft.itemsOf}
-        specsOf={draft.specsOf}
-        qualitiesOf={draft.qualitiesOf}
-        sourcesOf={draft.sourcesOf}
-        productSpecLabel={draft.productSpecLabel}
-        sourceUnits={draft.sourceUnits}
-        availOf={draft.availOf}
-        supplierName={draft.supplierName}
-        unitOf={draft.unitOf}
-        draftAvail={draft.draftAvail}
-        draftUnit={draft.draftUnit}
-        draftPrice={draft.draftPrice}
-        draftOver={draft.draftOver}
-        canAdd={draft.canAdd}
-        onAddItem={draft.addDraftItem}
-        lines={draft.lines}
-        setLine={draft.setLine}
-        removeLine={draft.removeLine}
-        lineOver={draft.lineOver}
+        api={api}
         entSummary={{
           subtotal,
           discountPct,
@@ -196,7 +189,8 @@ export default function SalesPage() {
           customerName: customer?.name ?? "customer",
           canSave,
         }}
-        itemsCount={draft.lines.length}
+        itemsCount={api.lines.length}
+        showOptionalDetails={prefs.showOptionalDetails}
       />
 
       {/* add customer popup — the only popup left */}

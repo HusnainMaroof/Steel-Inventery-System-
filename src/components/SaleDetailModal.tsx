@@ -19,7 +19,7 @@ export default function SaleDetailModal({
   saleId: string | null;
   onClose: () => void;
 }) {
-  const { sales, customers, suppliers, payments, inventory, salePaid } = useStore();
+  const { sales, customers, suppliers, payments, inventory, products, categories, attributeDefs, salePaid } = useStore();
   const [payOpen, setPayOpen] = useState(false);
   const sale = sales.find((s) => s.id === saleId) ?? null;
   if (!sale) return null;
@@ -28,6 +28,20 @@ export default function SaleDetailModal({
     (id && suppliers.find((s) => s.id === id)?.name) || "";
   const productOf = (item: string) =>
     inventory.find((r) => r.item === item)?.product || "";
+  const lineCaption = (l: { categoryId?: string; attributeSnapshot?: Record<string, string>; item: string; spec?: string; quality?: string; supplierId?: string }) => {
+    const defs =
+      l.categoryId
+        ? attributeDefs
+            .filter((d) => d.categoryId === l.categoryId && d.active)
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+        : [];
+    const cat = l.categoryId ? categories.find((c) => c.id === l.categoryId) : undefined;
+    const prod = cat ? products.find((p) => p.id === cat.productId) : undefined;
+    const attrs = l.attributeSnapshot
+      ? defs.filter((d) => l.attributeSnapshot![d.key]).map((d) => l.attributeSnapshot![d.key])
+      : [l.spec, l.quality].filter(Boolean);
+    return [prod?.name ?? productOf(l.item), ...attrs, supplierName(l.supplierId)].filter(Boolean).join(" · ");
+  };
   const total = saleTotal(sale);
   const disc = saleDiscount(sale);
   const tax = saleTax(sale);
@@ -42,7 +56,6 @@ export default function SaleDetailModal({
   );
   const explicitTotal = explicitPayments.reduce((a, p) => a + p.amount, 0);
   const fifoExtra = paid - explicitTotal;
-  // reconstruct which unallocated payments were FIFO-allocated to this invoice
   const fifoPayments: { id: string; date: string; amount: number; method: string; note?: string }[] = [];
   if (fifoExtra > 0.01) {
     const custPayments = payments
@@ -58,170 +71,163 @@ export default function SaleDetailModal({
   }
 
   return (
-    <Modal open={!!sale} onClose={onClose} title={sale.invoiceNo} size="2xl">
-      {/* header — who, when, status */}
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
-        <div>
-          <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Customer</span>
-          <span className="block font-semibold text-base mt-1">{cust?.name ?? sale.customerId}</span>
-          <span className="block text-xs text-neutral-400">
-            {cust?.shop}
-            {cust?.phone ? ` · ${cust.phone}` : ""}
-          </span>
+    <Modal
+      open={!!sale}
+      onClose={onClose}
+      title={sale.invoiceNo}
+      subtitle={`${fmtDate(sale.date)} · ${cust?.name ?? sale.customerId}`}
+      size="4xl"
+      footer={
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/sales/${sale.id}`} className="btn-ghost !py-2 !px-4 text-[13px]">
+            Print / Save PDF
+          </Link>
+          {due > 0 && (
+            <button type="button" onClick={() => setPayOpen(true)} className="btn-primary !py-2 !px-4 text-[13px]">
+              Receive Payment
+            </button>
+          )}
         </div>
-        <div className="text-right">
-          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md border ${st.cls}`}>
-            {st.label}
-          </span>
-          <span className="block text-xs text-neutral-500 mt-1.5">{fmtDate(sale.date)} · {fmtTime(sale.createdAt)}</span>
-        </div>
-      </div>
+      }
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
+        <div className="min-w-0">
+          {/* header */}
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-5 pb-5 border-b border-neutral-100">
+            <div>
+              <span className="text-[11px] uppercase tracking-wider text-neutral-400">Customer</span>
+              <p className="font-semibold text-[15px] mt-1">{cust?.name ?? sale.customerId}</p>
+              <p className="text-[13px] text-neutral-400 mt-0.5">
+                {cust?.shop}
+                {cust?.phone ? ` · ${cust.phone}` : ""}
+              </p>
+            </div>
+            <div className="text-right">
+              <span className={`inline-flex items-center text-[12px] font-medium px-2.5 py-1 rounded-md border ${st.cls}`}>
+                {st.label}
+              </span>
+              <p className="text-[12px] text-neutral-400 mt-2">{fmtTime(sale.createdAt)}</p>
+            </div>
+          </div>
 
-      {/* items */}
-      <div className="border border-neutral-200 mb-4">
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th className="num">Qty</th>
-              <th className="num">Rate</th>
-              <th className="num">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sale.lines.map((l, i) => {
-              const source = [productOf(l.item), l.spec, supplierName(l.supplierId)].filter(Boolean).join(" · ");
-              return (
-                <tr key={i}>
-                  <td className="font-medium">
-                    {l.item}
-                    {source ? (
-                      <span className="block text-[10px] text-neutral-400 font-normal">
-                        {source}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="num">{fmtQtyWithUnit(l.qty, l.unit)}</td>
-                  <td className="num text-neutral-500">{fmtRateWithUnit(l.rate, l.unit)}</td>
-                  <td className="num">{fmtMoney(l.qty * l.rate)}</td>
+          {/* items table */}
+          <div className="border border-neutral-200 rounded-lg overflow-x-auto mb-5">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Rate</th>
+                  <th className="num">Amount</th>
                 </tr>
-              );
-            })}
-            <tr>
-              <td colSpan={3} className="num font-medium border-b-0">
-                Subtotal
-              </td>
-              <td className="num font-medium border-b-0">{fmtMoney(total)}</td>
-            </tr>
-            {disc > 0 && (
-              <tr>
-                <td colSpan={3} className="num text-neutral-500 border-b-0">
-                  Discount ({(sale.discountPct ?? 0)}%)
-                </td>
-                <td className="num text-neutral-500 border-b-0">− {fmtMoney(disc)}</td>
-              </tr>
-            )}
-            {tax > 0 && (
-              <tr>
-                <td colSpan={3} className="num text-neutral-500 border-b-0">
-                  Tax ({(sale.taxPct ?? 0)}%)
-                </td>
-                <td className="num text-neutral-500 border-b-0">+ {fmtMoney(tax)}</td>
-              </tr>
-            )}
-            <tr>
-              <td colSpan={3} className="num font-semibold border-b-0 bg-black">
-                <span className="text-white">Total</span>
-              </td>
-              <td className="num font-semibold border-b-0 bg-black">
-                <span className="text-white">{fmtMoney(grand)}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {sale.lines.map((l, i) => {
+                  const source = lineCaption(l);
+                  return (
+                    <tr key={i}>
+                      <td className="font-medium max-w-[200px]">
+                        <span className="block truncate">{l.item}</span>
+                        {source ? (
+                          <span className="block text-[11px] text-neutral-400 font-normal truncate">{source}</span>
+                        ) : null}
+                      </td>
+                      <td className="num">{fmtQtyWithUnit(l.qty, l.unit)}</td>
+                      <td className="num text-neutral-500">{fmtRateWithUnit(l.rate, l.unit)}</td>
+                      <td className="num font-medium">{fmtMoney(l.qty * l.rate)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-      {/* balance panel */}
-      <div className="border border-neutral-200 mb-4">
-        <div className="grid grid-cols-3">
-          <div className="p-3 border-r border-neutral-200">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Total</span>
-            <span className="block font-semibold tabular-nums mt-1">{fmtMoney(grand)}</span>
-          </div>
-          <div className="p-3 border-r border-neutral-200">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Paid</span>
-            <span className="block font-semibold tabular-nums mt-1 text-[#2e6b2e]">{fmtMoney(paid)}</span>
-          </div>
-          <div className={`p-3 ${due > 0 ? "bg-black text-white" : ""}`}>
-            <span className={`block text-[11px] uppercase tracking-widest ${due > 0 ? "text-neutral-300" : "text-neutral-500"}`}>Due</span>
-            <span className="block font-semibold tabular-nums mt-1">
-              {due > 0 ? fmtMoney(due) : <span className={due > 0 ? "" : "text-[#2e6b2e]"}>—</span>}
-            </span>
-          </div>
+          {/* payment timeline */}
+          {(explicitPayments.length > 0 || fifoPayments.length > 0) && (
+            <div>
+              <h3 className="text-[12px] font-medium text-neutral-500 uppercase tracking-wider mb-2">
+                Payments on this invoice
+              </h3>
+              <div className="border border-neutral-200 rounded-lg divide-y divide-neutral-100 max-h-48 overflow-y-auto">
+                {explicitPayments.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[13px] text-neutral-700">{fmtDate(p.date)} · {p.method}</p>
+                      {p.note ? <p className="text-[12px] text-neutral-400 truncate">{p.note}</p> : null}
+                    </div>
+                    <span className="shrink-0 text-[13px] font-medium tabular-nums">{fmtMoney(p.amount)}</span>
+                  </div>
+                ))}
+                {fifoPayments.map((p) => (
+                  <div key={`fifo-${p.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 bg-neutral-50">
+                    <div className="min-w-0">
+                      <p className="text-[13px] text-neutral-700">{fmtDate(p.date)} · {p.method}</p>
+                      <p className="text-[11px] text-neutral-400">Applied from unallocated payment</p>
+                    </div>
+                    <span className="shrink-0 text-[13px] font-medium tabular-nums">{fmtMoney(p.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        {/* paid progress */}
-        {grand > 0 && (
-          <div className="px-3 pb-3">
-            <div className="h-1.5 w-full bg-neutral-200 rounded-full overflow-hidden">
-              <div
-                className={`h-full ${due > 0 ? "bg-black" : "bg-[#2e6b2e]"}`}
-                style={{ width: `${paidPct}%` }}
-              />
+
+        {/* summary sidebar */}
+        <div className="space-y-4 lg:sticky lg:top-0">
+          <div className="border border-neutral-200 rounded-lg overflow-hidden">
+            <div className="px-4 py-3 border-b border-neutral-100 bg-neutral-50/50">
+              <p className="text-[12px] font-medium text-neutral-500 uppercase tracking-wider">Totals</p>
             </div>
-            <div className="flex justify-between mt-1 text-[10px] text-neutral-400 tabular-nums">
-              <span>{due > 0 ? "Partially paid" : "Fully paid"}</span>
-              <span>{Math.round(paidPct)}% paid</span>
+            <div className="p-4 space-y-2.5 text-[13px]">
+              <div className="flex justify-between"><span className="text-neutral-500">Subtotal</span><span className="tabular-nums font-medium">{fmtMoney(total)}</span></div>
+              {disc > 0 && (
+                <div className="flex justify-between"><span className="text-neutral-500">Discount ({sale.discountPct ?? 0}%)</span><span className="tabular-nums text-neutral-500">− {fmtMoney(disc)}</span></div>
+              )}
+              {tax > 0 && (
+                <div className="flex justify-between"><span className="text-neutral-500">Tax ({sale.taxPct ?? 0}%)</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(tax)}</span></div>
+              )}
+              <div className="flex justify-between items-center pt-2 mt-2 border-t border-neutral-100">
+                <span className="font-semibold">Total</span>
+                <span className="tabular-nums font-semibold text-[15px]">{fmtMoney(grand)}</span>
+              </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* actions */}
-      <div className="flex flex-wrap items-center gap-2 mb-5">
-        <Link href={`/sales/${sale.id}`} className="btn-ghost !py-1.5 !px-3 text-xs">
-          Print / Save PDF →
-        </Link>
-        {due > 0 && (
-          <button onClick={() => setPayOpen(true)} className="btn-primary !py-1.5 !px-3 text-xs">
-            Receive Payment
-          </button>
-        )}
-      </div>
-
-      {/* payment timeline for this invoice */}
-      {(explicitPayments.length > 0 || fifoPayments.length > 0) && (
-        <div>
-          <h3 className="text-xs uppercase tracking-widest text-neutral-500 mb-2">
-            Payments on this invoice
-          </h3>
-          <div className="border border-neutral-200 divide-y divide-neutral-100 max-h-44 overflow-y-auto">
-            {explicitPayments.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-neutral-700">{fmtDate(p.date)} <span className="text-neutral-300">·</span> <span className="text-neutral-500">{p.method}</span></p>
-                  {p.note ? <p className="text-xs text-neutral-400 truncate">{p.note}</p> : null}
-                </div>
-                <span className="shrink-0 text-sm font-medium tabular-nums text-neutral-800">
-                  {fmtMoney(p.amount)}
+          <div className="border border-neutral-200 rounded-lg overflow-hidden">
+            <div className="grid grid-cols-3 divide-x divide-neutral-200">
+              <div className="p-3 text-center">
+                <span className="block text-[10px] uppercase tracking-wider text-neutral-400">Total</span>
+                <span className="block font-semibold tabular-nums text-[13px] mt-1">{fmtMoney(grand)}</span>
+              </div>
+              <div className="p-3 text-center">
+                <span className="block text-[10px] uppercase tracking-wider text-neutral-400">Paid</span>
+                <span className="block font-semibold tabular-nums text-[13px] mt-1 text-[#2e6b2e]">{fmtMoney(paid)}</span>
+              </div>
+              <div className={`p-3 text-center ${due > 0 ? "bg-[#171717] text-white" : ""}`}>
+                <span className={`block text-[10px] uppercase tracking-wider ${due > 0 ? "text-neutral-400" : "text-neutral-400"}`}>Due</span>
+                <span className="block font-semibold tabular-nums text-[13px] mt-1">
+                  {due > 0 ? fmtMoney(due) : <span className="text-[#2e6b2e]">—</span>}
                 </span>
               </div>
-            ))}
-            {fifoPayments.map((p) => (
-              <div key={`fifo-${p.id}`} className="flex items-center justify-between gap-3 px-3 py-2 bg-neutral-50">
-                <div className="min-w-0">
-                  <p className="text-sm text-neutral-700">{fmtDate(p.date)} <span className="text-neutral-300">·</span> <span className="text-neutral-500">{p.method}</span></p>
-                  <p className="text-[10px] text-neutral-400">Applied from unallocated payment</p>
+            </div>
+            {grand > 0 && (
+              <div className="px-4 pb-3 pt-2">
+                <div className="h-1.5 w-full bg-neutral-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${due > 0 ? "bg-[#171717]" : "bg-[#2e6b2e]"}`}
+                    style={{ width: `${paidPct}%` }}
+                  />
                 </div>
-                <span className="shrink-0 text-sm font-medium tabular-nums text-neutral-800">
-                  {fmtMoney(p.amount)}
-                </span>
+                <div className="flex justify-between mt-1.5 text-[10px] text-neutral-400 tabular-nums">
+                  <span>{due > 0 ? "Partially paid" : "Fully paid"}</span>
+                  <span>{Math.round(paidPct)}%</span>
+                </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* nested receive-payment popup */}
       <ReceivePaymentModal saleId={payOpen ? sale.id : null} onClose={() => setPayOpen(false)} />
     </Modal>
   );
