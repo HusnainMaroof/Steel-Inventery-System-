@@ -1,5 +1,16 @@
-export const fmtMoney = (n: number) =>
-  "₨ " + Math.round(n).toLocaleString("en-US");
+/** Plain number with thousands separators — e.g. 1,234,567 */
+export const fmtNum = (n: number, decimals = 0) => {
+  if (!Number.isFinite(n)) return "0";
+  if (decimals > 0) {
+    return n.toLocaleString("en-US", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  }
+  return Math.round(n).toLocaleString("en-US");
+};
+
+export const fmtMoney = (n: number) => "₨ " + fmtNum(n);
 
 export const fmtCompact = (n: number) => {
   if (Math.abs(n) >= 1_000_000) return "₨ " + (n / 1_000_000).toFixed(2) + "M";

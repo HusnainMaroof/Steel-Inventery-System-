@@ -6,9 +6,9 @@ import { EmptyState } from "@/components/ui";
 import { fmtMoney, fmtDate, fmtTime, fmtQtyWithUnit } from "@/lib/format";
 
 type SoldLine = {
-  product: string; // highlighted product category (e.g. "Steel")
-  item: string; // the item name (e.g. "3 Sutar")
-  quality: string; // quality grade or ""
+  product: string; // highlighted product name (e.g. "Steel")
+  item: string; // the sold line's short name (e.g. "3 Sutar")
+  quality: string; // attribute text / quality, or ""
   qtyText: string; // e.g. "500 kg"
 };
 
@@ -29,19 +29,38 @@ export default function SalesTable({
   customerName,
   customers,
   hasInventory,
-  productOf,
-  qualityOf,
+  productOfLine,
+  attrTextOf,
   salePaid,
   onView,
   onReceive,
   onNewSale,
 }: {
-  sales: { id: string; invoiceNo: string; date: string; createdAt: string; customerId: string; lines: { item: string; qty: number; rate: number; unit: string; quality?: string; supplierId?: string }[]; discountPct?: number; taxPct?: number }[];
+  sales: {
+    id: string;
+    invoiceNo: string;
+    date: string;
+    createdAt: string;
+    customerId: string;
+    lines: {
+      item: string;
+      qty: number;
+      rate: number;
+      unit: string;
+      quality?: string;
+      categoryId?: string;
+      variantId?: string;
+      attributeSnapshot?: Record<string, string>;
+      supplierId?: string;
+    }[];
+    discountPct?: number;
+    taxPct?: number;
+  }[];
   customerName: (id: string) => string;
   customers: { id: string; name: string; phone: string }[];
   hasInventory: boolean;
-  productOf: (item: string) => string;
-  qualityOf: (item: string) => string;
+  productOfLine: (l: { categoryId?: string; item: string }) => string;
+  attrTextOf: (l: { categoryId?: string; attributeSnapshot?: Record<string, string>; quality?: string; item: string }) => string;
   salePaid: (saleId: string) => number;
   onView: (id: string) => void;
   onReceive: (id: string) => void;
@@ -53,6 +72,7 @@ export default function SalesTable({
   const [appliedSearch, setAppliedSearch] = useState("");
   const [appliedMode, setAppliedMode] = useState<"name" | "phone">("name");
   const [appliedDate, setAppliedDate] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "due" | "paid">("all");
 
   const formatPhone = (v: string) => {
     const digits = v.replace(/\D/g, "").slice(0, 11);
@@ -63,7 +83,8 @@ export default function SalesTable({
     setSearchInput(searchMode === "phone" ? formatPhone(v) : v);
   };
 
-  const hasFilters = appliedSearch.trim() !== "" || appliedDate !== "";
+  const hasFilters =
+    appliedSearch.trim() !== "" || appliedDate !== "" || statusFilter !== "all";
 
   const groups = useMemo(() => {
     const q = appliedSearch.toLowerCase().trim();
@@ -80,6 +101,11 @@ export default function SalesTable({
         }
       }
       if (appliedDate && s.date !== appliedDate) return false;
+      if (statusFilter !== "all") {
+        const due = Math.max(0, saleGrandTotal(s) - salePaid(s.id));
+        if (statusFilter === "due" && due <= 0.001) return false;
+        if (statusFilter === "paid" && due > 0.001) return false;
+      }
       return true;
     });
 
@@ -95,11 +121,11 @@ export default function SalesTable({
         createdAt: s.createdAt,
         time: fmtTime(s.createdAt),
         soldLines: s.lines.map((l) => {
-          const product = productOf(l.item);
+          const product = productOfLine(l);
           return {
             product: product || l.item,
             item: product ? l.item : "—",
-            quality: l.quality || qualityOf(l.item) || "",
+            quality: attrTextOf(l) || "",
             qtyText: fmtQtyWithUnit(l.qty, l.unit),
           };
         }),
@@ -116,7 +142,7 @@ export default function SalesTable({
         date,
         sales: sales.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       }));
-  }, [sales, customers, customerName, productOf, qualityOf, salePaid, appliedSearch, appliedMode, appliedDate]);
+  }, [sales, customers, customerName, productOfLine, attrTextOf, salePaid, appliedSearch, appliedMode, appliedDate, statusFilter]);
 
   const totalDue = groups.reduce((a, g) => a + g.sales.reduce((b, r) => b + r.due, 0), 0);
   const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
@@ -134,6 +160,7 @@ export default function SalesTable({
     setAppliedSearch("");
     setAppliedMode("name");
     setAppliedDate("");
+    setStatusFilter("all");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -153,6 +180,28 @@ export default function SalesTable({
 
   return (
     <>
+      {/* ── status filter: all / dues only / paid only ── */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="inline-flex border border-neutral-200 rounded-md overflow-hidden bg-white">
+          {([
+            { key: "all", label: "All invoices" },
+            { key: "due", label: "Dues only" },
+            { key: "paid", label: "Paid" },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setStatusFilter(t.key)}
+              className={`px-3.5 py-2 text-xs font-medium transition-colors ${
+                statusFilter === t.key ? "bg-black text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ── filters ── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
         <div className="flex flex-1 sm:max-w-96">

@@ -18,18 +18,54 @@ type PaymentRow = {
   amount: number;
 };
 
+type PeriodKey = "all" | "month" | "year" | "custom";
+
+const PERIOD_TABS: { key: PeriodKey; label: string }[] = [
+  { key: "all", label: "All time" },
+  { key: "month", label: "This month" },
+  { key: "year", label: "This year" },
+  { key: "custom", label: "Pick month" },
+];
+
 export default function PaymentsPage() {
   const { payments, customers, suppliers, sales } = useStore();
 
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "customer" | "supplier">("all");
+  const [period, setPeriod] = useState<PeriodKey>("all");
+  const [customMonth, setCustomMonth] = useState(""); // yyyy-mm
 
-  const rows: PaymentRow[] = useMemo(() => {
-    const q = appliedSearch.toLowerCase().trim();
-    return payments
-      .filter((p) => {
+  const periodLabel =
+    period === "all"
+      ? "All time"
+      : period === "month"
+        ? new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+        : period === "year"
+          ? String(new Date().getFullYear())
+          : customMonth
+            ? new Date(`${customMonth}-01`).toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+            : "Pick a month";
+
+  const inPeriod = (date: string) => {
+    if (period === "all") return true;
+    const d = new Date(date);
+    if (period === "month") {
+      const now = new Date();
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }
+    if (period === "year") return d.getFullYear() === new Date().getFullYear();
+    if (!customMonth) return true;
+    const [y, m] = customMonth.split("-").map(Number);
+    return d.getFullYear() === y && d.getMonth() === m - 1;
+  };
+
+  const filtered = useMemo(
+    () =>
+      payments.filter((p) => {
         if (typeFilter !== "all" && p.type !== typeFilter) return false;
+        if (!inPeriod(p.date)) return false;
+        const q = appliedSearch.toLowerCase().trim();
         if (q) {
           const name = p.type === "customer"
             ? customers.find((c) => c.id === p.partyId)?.name ?? ""
@@ -37,8 +73,14 @@ export default function PaymentsPage() {
           if (!name.toLowerCase().includes(q)) return false;
         }
         return true;
-      })
-      .map((p) => ({
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [payments, customers, suppliers, appliedSearch, typeFilter, period, customMonth]
+  );
+
+  const rows: PaymentRow[] = useMemo(
+    () =>
+      filtered.map((p) => ({
         id: p.id,
         date: p.date,
         type: p.type,
@@ -51,11 +93,22 @@ export default function PaymentsPage() {
         method: p.method,
         note: p.note,
         amount: p.amount,
-      }));
-  }, [payments, customers, suppliers, sales, appliedSearch, typeFilter]);
+      })),
+    [filtered, customers, suppliers, sales]
+  );
 
-  const totalReceived = payments.filter((p) => p.type === "customer").reduce((a, p) => a + p.amount, 0);
-  const totalPaid = payments.filter((p) => p.type === "supplier").reduce((a, p) => a + p.amount, 0);
+  const totalReceived = filtered.filter((p) => p.type === "customer").reduce((a, p) => a + p.amount, 0);
+  const totalPaid = filtered.filter((p) => p.type === "supplier").reduce((a, p) => a + p.amount, 0);
+
+  const clearAll = () => {
+    setSearchInput("");
+    setAppliedSearch("");
+    setTypeFilter("all");
+    setPeriod("all");
+    setCustomMonth("");
+  };
+  const hasActiveFilters =
+    appliedSearch.trim() !== "" || typeFilter !== "all" || period !== "all";
 
   const columns: ColumnDef<PaymentRow, unknown>[] = [
     {
@@ -117,25 +170,68 @@ export default function PaymentsPage() {
         sub="Money received from customers and paid to mills"
       />
 
-      {/* ── summary bar ── */}
+      {/* ── summary bar (follows the active filters) ── */}
       {payments.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <div className="border border-neutral-200 bg-white p-4">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Received from customers</span>
-            <span className="block text-xl font-semibold tabular-nums mt-1 text-[#2e6b2e]">{fmtMoney(totalReceived)}</span>
+        <div className="mb-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2.5">
+            <p className="text-[12px] text-neutral-500">
+              {filtered.length} payment{filtered.length === 1 ? "" : "s"} · <span className="font-medium text-neutral-700">{periodLabel}</span>
+            </p>
+            {hasActiveFilters && (
+              <button onClick={clearAll} className="text-[12px] text-neutral-400 hover:text-black underline underline-offset-2">
+                Clear all filters
+              </button>
+            )}
           </div>
-          <div className="border border-neutral-200 bg-white p-4">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Paid to mills</span>
-            <span className="block text-xl font-semibold tabular-nums mt-1 text-[#1f4e8c]">{fmtMoney(totalPaid)}</span>
-          </div>
-          <div className="border border-black bg-black text-white p-4">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-400">Net cash flow</span>
-            <span className="block text-xl font-semibold tabular-nums mt-1">{fmtMoney(totalReceived - totalPaid)}</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="border border-neutral-200 bg-white p-4">
+              <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Received from customers</span>
+              <span className="block text-xl font-semibold tabular-nums mt-1 text-[#2e6b2e]">{fmtMoney(totalReceived)}</span>
+            </div>
+            <div className="border border-neutral-200 bg-white p-4">
+              <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Paid to mills</span>
+              <span className="block text-xl font-semibold tabular-nums mt-1 text-[#1f4e8c]">{fmtMoney(totalPaid)}</span>
+            </div>
+            <div className={`p-4 ${totalReceived - totalPaid >= 0 ? "border border-black bg-black text-white" : "border border-[#f0d2cc] bg-[#fdf1ef]"}`}>
+              <span className={`block text-[11px] uppercase tracking-widest ${totalReceived - totalPaid >= 0 ? "text-neutral-400" : "text-[#a12b1f]/70"}`}>Net cash flow</span>
+              <span className={`block text-xl font-semibold tabular-nums mt-1 ${totalReceived - totalPaid >= 0 ? "" : "text-[#a12b1f]"}`}>
+                {fmtMoney(totalReceived - totalPaid)}
+              </span>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── filters ── */}
+      {/* ── period filter ── */}
+      {payments.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="inline-flex border border-neutral-200 rounded-md overflow-hidden bg-white">
+            {PERIOD_TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => { setPeriod(t.key); if (t.key !== "custom") setCustomMonth(""); }}
+                className={`px-3.5 py-2 text-xs font-medium transition-colors ${
+                  period === t.key ? "bg-black text-white" : "text-neutral-600 hover:bg-neutral-100"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {period === "custom" && (
+            <input
+              type="month"
+              value={customMonth}
+              max={new Date().toISOString().slice(0, 7)}
+              onChange={(e) => setCustomMonth(e.target.value)}
+              className="!w-auto !py-2 text-xs"
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── type + search filters ── */}
       {payments.length > 0 && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
           <div className="flex flex-1 sm:max-w-96">
@@ -165,11 +261,6 @@ export default function PaymentsPage() {
           <button onClick={() => setAppliedSearch(searchInput)} className="btn-primary !py-2 !px-4 text-xs whitespace-nowrap">
             Search
           </button>
-          {(appliedSearch.trim() !== "" || typeFilter !== "all") && (
-            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setTypeFilter("all"); }} className="btn-ghost !py-2 !px-4 text-xs whitespace-nowrap">
-              Clear
-            </button>
-          )}
         </div>
       )}
 
@@ -184,8 +275,8 @@ export default function PaymentsPage() {
         <EmptyState
           emoji="🔍"
           title="No payments match your filters"
-          hint="Try adjusting the search or type filter."
-          action={<button onClick={() => { setSearchInput(""); setAppliedSearch(""); setTypeFilter("all"); }} className="btn-primary">Clear filters</button>}
+          hint={period === "custom" && !customMonth ? "Pick a month to see its payments." : "Try a different period, type or search."}
+          action={<button onClick={clearAll} className="btn-primary">Clear filters</button>}
         />
       ) : (
         <DataTable columns={columns} data={rows} />

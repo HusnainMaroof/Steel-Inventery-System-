@@ -2,336 +2,420 @@
 
 import Link from "next/link";
 import { useState, useMemo } from "react";
-import { useStore } from "@/lib/store";
+import { useStore, type VariantStockRow } from "@/lib/store";
 import { Page, PageTitle, EmptyState, ConfirmModal } from "@/components/ui";
-import { fmtQtyWithUnit, fmtRateWithUnit, fmtMoney } from "@/lib/format";
+import { fmtQtyWithUnit, fmtRateWithUnit, fmtMoney, fmtDate } from "@/lib/format";
+import { groupDefsByCategory, attrsValuesLine } from "@/lib/catalogue";
 
-type InvRow = {
-  item: string;
-  product?: string;
-  spec?: string;
-  quality?: string;
-  unit?: string;
-  purchasedQty: number;
-  soldQty: number;
-  stockQty: number;
-  totalCost: number;
-  landedAvg: number;
-  stockValue: number;
-  avgSellRate: number;
-  sellRate?: number;
-};
-
-type ProductGroup = {
+type Group = {
   product: string;
-  items: InvRow[];
-  totalStockQty: number;
-  totalStockValue: number;
+  rows: VariantStockRow[];
+  qty: number;
+  value: number;
 };
 
 export default function InventoryPage() {
-  const { inventory, products, purchases, sales, deleteInventoryItem, hideInventoryItem } = useStore();
+  const {
+    products,
+    categories,
+    attributeDefs,
+    suppliers,
+    warehouses,
+    locations,
+    inventoryByVariant,
+    stockLots,
+    stockMovements,
+    purchases,
+    sales,
+    deleteInventoryItem,
+    hideInventoryItem,
+    deleteInventoryVariant,
+    hideInventoryVariant,
+  } = useStore();
+
   const [productFilter, setProductFilter] = useState("all");
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<InvRow | null>(null);
+  const [tab, setTab] = useState<"stock" | "movements">("stock");
+  const [openVariant, setOpenVariant] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<VariantStockRow | null>(null);
 
-  const confirmDeleteItem = () => {
+  const defsByCat = useMemo(() => groupDefsByCategory(attributeDefs), [attributeDefs]);
+  const supplierName = (id?: string) => suppliers.find((s) => s.id === id)?.name ?? "";
+  const whName = (id?: string) => warehouses.find((w) => w.id === id)?.name ?? "";
+  const locName = (id?: string) => locations.find((l) => l.id === id)?.name ?? "";
+  const catName = (id?: string) => categories.find((c) => c.id === id)?.name ?? "";
+
+  const attrText = (r: VariantStockRow) => attrsValuesLine(defsByCat[r.categoryId ?? ""] ?? [], r.attributeSnapshot);
+
+  const filtered = useMemo(() => {
+    let rows = inventoryByVariant;
+    if (productFilter !== "all") rows = rows.filter((r) => r.productId === productFilter);
+    const q = appliedSearch.toLowerCase().trim();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const hay: string[] = [
+        r.product ?? "",
+        r.category ?? "",
+        r.shortName,
+        attrText(r),
+        ...Object.values(r.attributeSnapshot ?? {}),
+      ];
+      // lot / heat / batch / supplier text
+      for (const l of stockLots)
+        if (l.variantId === r.variantId)
+          hay.push(supplierName(l.supplierId), l.lotNumber ?? "", l.heatNumber ?? "", l.batchNumber ?? "", locName(l.locationId));
+      return hay.some((x) => x.toLowerCase().includes(q));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inventoryByVariant, productFilter, appliedSearch, stockLots]);
+
+  const active = useMemo(() => filtered.filter((r) => r.stockQty > 0.000001), [filtered]);
+  const soldOut = useMemo(() => filtered.filter((r) => r.stockQty <= 0.000001), [filtered]);
+
+  const groups: Group[] = useMemo(() => {
+    const map = new Map<string, VariantStockRow[]>();
+    for (const r of active) {
+      const key = r.product || "Other";
+      const list = map.get(key) ?? [];
+      list.push(r);
+      map.set(key, list);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([product, rows]) => ({
+        product,
+        rows,
+        qty: rows.reduce((a, r) => a + r.stockQty, 0),
+        value: rows.reduce((a, r) => a + r.stockValue, 0),
+      }));
+  }, [active]);
+
+  const lotsOf = (variantId: string) =>
+    stockLots
+      .filter((l) => l.variantId === variantId)
+      .sort((a, b) => a.purchasedAt.localeCompare(b.purchasedAt));
+
+  const filteredMoves = useMemo(() => {
+    const q = appliedSearch.toLowerCase().trim();
+    const moves = stockMovements;
+    if (productFilter !== "all") return moves.filter((m) => m.productId === productFilter);
+    if (!q) return moves;
+    return moves.filter((m) => {
+      const cat = m.categoryId ? categories.find((c) => c.id === m.categoryId) : undefined;
+      const defs = m.categoryId ? defsByCat[m.categoryId] ?? [] : [];
+      const prod = cat ? products.find((p) => p.id === cat.productId)?.name : undefined;
+      const text = [
+        prod,
+        cat?.name,
+        m.attributeSnapshot ? attrsValuesLine(defs, m.attributeSnapshot) : "",
+        m.refLabel,
+        supplierName(m.supplierId),
+      ].join(" ");
+      return text.toLowerCase().includes(q);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockMovements, appliedSearch, productFilter]);
+
+  const totalQty = active.reduce((a, r) => a + r.stockQty, 0);
+  const totalValue = active.reduce((a, r) => a + r.stockValue, 0);
+  const hasFilters = appliedSearch.trim() !== "" || productFilter !== "all";
+
+  const confirmDelete = () => {
     if (!deleteTarget) return;
+    const legacy = deleteTarget.variantId.startsWith("item:");
     if (deleteTarget.stockQty <= 0.000001) {
-      // fully sold — just clean it off the list, leave every record intact
-      hideInventoryItem(deleteTarget.item);
+      if (legacy && deleteTarget.legacyItem) hideInventoryItem(deleteTarget.legacyItem);
+      else hideInventoryVariant(deleteTarget.variantId);
     } else {
-      deleteInventoryItem(deleteTarget.item);
+      if (legacy && deleteTarget.legacyItem) deleteInventoryItem(deleteTarget.legacyItem);
+      else deleteInventoryVariant(deleteTarget.variantId);
     }
     setDeleteTarget(null);
   };
 
-  const allRows: InvRow[] = useMemo(() => {
-    if (productFilter === "all") return inventory;
-    return inventory.filter((r) => r.product === productFilter);
-  }, [inventory, productFilter]);
-
-  const rows = useMemo(() => {
-    const q = appliedSearch.toLowerCase().trim();
-    if (!q) return allRows;
-    return allRows.filter((r) => {
-      const name = r.item.toLowerCase();
-      const quality = (r.quality ?? "").toLowerCase();
-      return name.includes(q) || quality.includes(q);
-    });
-  }, [allRows, appliedSearch]);
-
-  // what's still in stock vs what's fully sold
-  const activeRows = useMemo(
-    () => rows.filter((r) => r.stockQty > 0.000001),
-    [rows]
-  );
-  const soldOutRows = useMemo(
-    () => rows.filter((r) => r.stockQty <= 0.000001),
-    [rows]
-  );
-
-  // Group rows by product category
-  const groups: ProductGroup[] = useMemo(() => {
-    const map = new Map<string, InvRow[]>();
-    for (const row of activeRows) {
-      const product = row.product || "Other";
-      const list = map.get(product) ?? [];
-      list.push(row);
-      map.set(product, list);
-    }
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([product, items]) => ({
-        product,
-        items,
-        totalStockQty: items.reduce((a, r) => a + r.stockQty, 0),
-        totalStockValue: items.reduce((a, r) => a + r.stockValue, 0),
-      }));
-  }, [activeRows]);
-
-  const totalStockQty = rows.reduce((a, r) => a + r.stockQty, 0);
-  const totalStockValue = rows.reduce((a, r) => a + r.stockValue, 0);
-  const totalItems = rows.length;
-
-  const hasFilters = appliedSearch.trim() !== "" || productFilter !== "all";
+  const movementLabel = (v: { variantId?: string; productId?: string; categoryId?: string; attributeSnapshot?: Record<string, string>; refLabel?: string }) => {
+    if (!v.categoryId) return v.refLabel ?? "—";
+    const prod = products.find((p) => p.id === (categories.find((c) => c.id === v.categoryId)?.productId ?? ""))?.name ?? "";
+    const attrs = attrsValuesLine(defsByCat[v.categoryId] ?? [], v.attributeSnapshot);
+    return [prod, attrs].filter(Boolean).join(" · ");
+  };
 
   return (
     <Page>
       <PageTitle
         title="Inventory"
-        sub="Stock per product item at weighted-average actual cost"
+        sub="Stock at the variant level — each variant is its own sellable row, with its lots underneath"
         action={
-          <select
-            value={productFilter}
-            onChange={(e) => setProductFilter(e.target.value)}
-            className="!w-auto !text-xs"
-          >
+          <select value={productFilter} onChange={(e) => setProductFilter(e.target.value)} className="!w-auto !text-xs">
             <option value="all">All products</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.name}>{p.name}</option>
+            {products.filter((p) => p.active !== false).map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
         }
       />
 
-      {/* ── filters ── */}
-      {allRows.length > 0 && (
+      {/* tab + filters */}
+      <div className="flex gap-6 border-b border-neutral-200 mb-4">
+        {([
+          ["stock", `Stock${active.length > 0 ? ` (${active.length})` : ""}`],
+          ["movements", "Movements"],
+        ] as const).map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)} className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors ${tab === key ? "border-black text-black font-medium" : "border-transparent text-neutral-400 hover:text-neutral-600"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {inventoryByVariant.length > 0 && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-          <div className="relative flex-1 sm:max-w-80">
+          <div className="relative flex-1 sm:max-w-96">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               type="text"
-              placeholder="Search items..."
+              placeholder={tab === "stock" ? "Search product, variant, attribute, lot, heat, supplier…" : "Search movements…"}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") setAppliedSearch(searchInput); }}
-              className="!w-full !pl-9 !text-xs !py-1.5"
+              className="!w-full !pl-9 !text-xs !py-2"
             />
           </div>
-          <button onClick={() => setAppliedSearch(searchInput)} className="btn-primary !py-1.5 !px-3 !text-xs whitespace-nowrap">
+          <button onClick={() => setAppliedSearch(searchInput)} className="btn-primary !py-2 !px-3 !text-xs whitespace-nowrap">
             Search
           </button>
           {hasFilters && (
-            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setProductFilter("all"); }} className="btn-ghost !py-1.5 !px-3 !text-xs whitespace-nowrap">
+            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setProductFilter("all"); }} className="btn-ghost !py-2 !px-3 !text-xs whitespace-nowrap">
               Clear
             </button>
           )}
         </div>
       )}
 
-      {/* ── stats ── */}
-      {allRows.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <div className="border border-neutral-200 bg-white p-4">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Items</span>
-            <span className="block text-xl font-semibold tabular-nums mt-1">
-              {totalItems}
-              {hasFilters && <span className="text-sm font-normal text-neutral-400"> / {allRows.length}</span>}
-            </span>
+      {tab === "movements" ? (
+        /* ---------------- movement journal ---------------- */
+        filteredMoves.length === 0 ? (
+          <EmptyState emoji="📦" title="No movements yet" hint="Every purchase receipt and sale appears here automatically — it is a view of the ledger, not a second set of records." />
+        ) : (
+          <div className="panel overflow-hidden">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Item</th>
+                  <th className="num">Qty</th>
+                  <th>Lot / Ref</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMoves.slice(0, 300).map((m) => (
+                  <tr key={m.id}>
+                    <td className="text-neutral-500 whitespace-nowrap">{fmtDate(m.date)}</td>
+                    <td>
+                      <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded border ${m.type === "PURCHASE_RECEIPT" ? "text-[#2e6b2e] bg-[#f0f7ef] border-[#cfe3cd]" : "text-[#a12b1f] bg-[#fdf1ef] border-[#f0d2cc]"}`}>
+                        {m.type === "PURCHASE_RECEIPT" ? "In" : m.type === "SALE" ? "Out" : m.type}
+                      </span>
+                    </td>
+                    <td className="text-neutral-700">{movementLabel(m)}</td>
+                    <td className="num font-medium tabular-nums">{m.qty > 0 ? "+" : "−"}{fmtQtyWithUnit(Math.abs(m.qty), m.unit)}</td>
+                    <td className="text-neutral-500 text-xs">{m.refLabel ?? "—"}</td>
+                    <td className="text-neutral-500 text-xs">{m.supplierId ? supplierName(m.supplierId) : m.warehouseId ? [whName(m.warehouseId), locName(m.locationId)].filter(Boolean).join(" / ") : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredMoves.length > 300 && (
+              <p className="text-xs text-neutral-400 px-4 py-3">Showing the latest 300 of {filteredMoves.length} movements.</p>
+            )}
           </div>
-          <div className="border border-neutral-200 bg-white p-4">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Total stock</span>
-            <span className="block text-xl font-semibold tabular-nums mt-1">{fmtQtyWithUnit(totalStockQty)}</span>
-          </div>
-          <div className="border border-black bg-black text-white p-4">
-            <span className="block text-[11px] uppercase tracking-widest text-neutral-400">Stock value</span>
-            <span className="block text-xl font-semibold tabular-nums mt-1">{fmtMoney(totalStockValue)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* ── results ── */}
-      {rows.length === 0 ? (
-        <EmptyState
-          emoji="🏷️"
-          title={productFilter === "all" ? "No stock yet" : `No ${productFilter} in stock`}
-          hint={productFilter === "all" ? "Inventory builds itself as you record purchases and sales." : "Try another product or add a purchase."}
-          action={<Link href="/purchases" className="btn-primary">+ Add Purchase</Link>}
-        />
+        )
       ) : (
-        <div className="space-y-6">
-          {groups.map((g) => (
-            <div key={g.product}>
-              {/* Product group header */}
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-sm font-medium">{g.product}</span>
-                <span className="text-xs text-neutral-400">{g.items.length} item{g.items.length > 1 ? "s" : ""}</span>
-                <div className="flex-1 border-b border-neutral-200" />
-                <span className="text-xs text-neutral-500 tabular-nums">{fmtQtyWithUnit(g.totalStockQty)}</span>
-                <span className="text-xs font-medium tabular-nums">{fmtMoney(g.totalStockValue)}</span>
+        /* ---------------- stock ---------------- */
+        <>
+          {groups.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+              <div className="border border-neutral-200 bg-white p-4">
+                <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Variants in stock</span>
+                <span className="block text-xl font-semibold tabular-nums mt-1">
+                  {active.length}
+                  {hasFilters && <span className="text-sm font-normal text-neutral-400"> / {inventoryByVariant.length}</span>}
+                </span>
               </div>
-
-              {/* Desktop table */}
-              <div className="hidden sm:block border border-neutral-200 bg-white">
-                <div className="grid grid-cols-[1fr_80px_100px_100px_100px_100px_100px_80px] gap-2 px-4 py-2 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200">
-                  <span>Item</span>
-                  <span>Grade / Factory</span>
-                  <span className="text-right">Purchased</span>
-                  <span className="text-right">Sold</span>
-                  <span className="text-right">In stock</span>
-                  <span className="text-right">Cost</span>
-                  <span className="text-right">Sell Price</span>
-                  <span />
-                </div>
-                {g.items.map((r) => (
-                  <div
-                    key={r.item}
-                    className="grid grid-cols-[1fr_80px_100px_100px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 transition-colors"
-                  >
-                    <span className="font-medium text-xs truncate">{r.item}</span>
-                    <span className="text-neutral-500 text-xs">
-                      {[r.quality, r.spec].filter(Boolean).join(" · ") || "—"}
-                    </span>
-                    <span className="text-right text-xs tabular-nums">{fmtQtyWithUnit(r.purchasedQty, r.unit)}</span>
-                    <span className="text-right text-xs tabular-nums">{fmtQtyWithUnit(r.soldQty, r.unit)}</span>
-                    <span className={`text-right font-medium text-xs tabular-nums ${r.stockQty <= 0 ? "text-neutral-400" : r.stockQty <= 5 ? "text-[#a12b1f]" : ""}`}>
-                      {fmtQtyWithUnit(r.stockQty, r.unit)}
-                    </span>
-                    <span className="text-right text-xs tabular-nums">{fmtRateWithUnit(r.landedAvg)}</span>
-                    <span className="text-right text-xs tabular-nums">
-                      {(r.sellRate ?? r.avgSellRate) > 0 ? fmtRateWithUnit(r.sellRate ?? r.avgSellRate) : <span className="text-neutral-400">—</span>}
-                    </span>
-                    <span className="text-right">
-                      <button onClick={() => setDeleteTarget(r)} className="btn-ghost !py-1 !px-2 text-xs text-red-600 hover:!bg-red-50">Delete</button>
-                    </span>
-                  </div>
-                ))}
+              <div className="border border-neutral-200 bg-white p-4">
+                <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Total stock</span>
+                <span className="block text-xl font-semibold tabular-nums mt-1">{fmtQtyWithUnit(totalQty)}</span>
               </div>
-
-              {/* Mobile cards */}
-              <div className="sm:hidden border border-neutral-200 bg-white divide-y divide-neutral-100">
-                {g.items.map((r) => (
-                  <div key={r.item} className="p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm truncate">{r.item}</span>
-                      <span className={`font-medium text-sm tabular-nums ${r.stockQty <= 0 ? "text-neutral-400" : r.stockQty <= 5 ? "text-[#a12b1f]" : ""}`}>
-                        {fmtQtyWithUnit(r.stockQty, r.unit)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-neutral-500">
-                      <span>{[r.quality, r.spec].filter(Boolean).join(" · ") || "No grade / factory"}</span>
-                      <span className="tabular-nums">
-                        {(r.sellRate ?? r.avgSellRate) > 0 ? fmtRateWithUnit(r.sellRate ?? r.avgSellRate) : "—"}
-                      </span>
-                    </div>
-                    <div className="flex justify-end mt-2">
-                      <button onClick={() => setDeleteTarget(r)} className="btn-ghost !py-1 !px-2 text-xs text-red-600 hover:!bg-red-50">Delete</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {/* ---- Fully sold items, shown apart ---- */}
-          {soldOutRows.length > 0 && (
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-sm font-bold text-neutral-800">Sold Out</span>
-                <span className="text-xs text-neutral-400">{soldOutRows.length} item{soldOutRows.length === 1 ? "" : "s"} — everything sold, nothing left in stock</span>
-                <div className="flex-1 border-b border-neutral-200" />
-              </div>
-
-              {/* Desktop */}
-              <div className="hidden sm:block border border-neutral-200 bg-white">
-                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_90px_90px_100px_90px] gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200">
-                  <span>Item</span>
-                  <span>Product</span>
-                  <span className="text-right">Purchased</span>
-                  <span className="text-right">Sold</span>
-                  <span>Status</span>
-                  <span />
-                </div>
-                {soldOutRows.map((r) => (
-                  <div key={r.item} className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_90px_90px_100px_90px] gap-3 px-4 py-3 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 transition-colors">
-                    <span className="min-w-0">
-                      <span className="block font-medium text-xs truncate">{r.item}</span>
-                      {r.quality && <span className="block text-[11px] text-neutral-400 truncate">{r.quality}</span>}
-                    </span>
-                    <span className="self-center text-neutral-500 text-xs truncate">{r.product || "—"}</span>
-                    <span className="self-center text-right text-xs tabular-nums">{fmtQtyWithUnit(r.purchasedQty, r.unit)}</span>
-                    <span className="self-center text-right text-xs tabular-nums">{fmtQtyWithUnit(r.soldQty, r.unit)}</span>
-                    <span className="self-center">
-                      <span className="text-[10px] uppercase tracking-wider font-semibold text-red-700 bg-red-50 border border-red-100 px-2 py-0.5">Sold Out</span>
-                    </span>
-                    <span className="self-center text-right">
-                      <button onClick={() => setDeleteTarget(r)} className="btn-ghost !py-1 !px-2 text-xs text-red-600 hover:!bg-red-50">Delete</button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Mobile cards */}
-              <div className="sm:hidden border border-neutral-200 bg-white divide-y divide-neutral-100">
-                {soldOutRows.map((r) => (
-                  <div key={r.item} className="p-3">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="font-medium text-sm truncate">{r.item}</span>
-                      <span className="shrink-0 text-[10px] uppercase tracking-wider font-semibold text-red-700 bg-red-50 border border-red-100 px-2 py-0.5">Sold Out</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-neutral-500">
-                      <span className="truncate">{[r.product, r.quality].filter(Boolean).join(" · ") || "—"}</span>
-                      <span className="tabular-nums shrink-0">Sold {fmtQtyWithUnit(r.soldQty, r.unit)}</span>
-                    </div>
-                    <div className="flex justify-end mt-2">
-                      <button onClick={() => setDeleteTarget(r)} className="btn-ghost !py-1 !px-2 text-xs text-red-600 hover:!bg-red-50">Delete</button>
-                    </div>
-                  </div>
-                ))}
+              <div className="border border-black bg-black text-white p-4">
+                <span className="block text-[11px] uppercase tracking-widest text-neutral-400">Stock value</span>
+                <span className="block text-xl font-semibold tabular-nums mt-1">{fmtMoney(totalValue)}</span>
               </div>
             </div>
           )}
-        </div>
+
+          {filtered.length === 0 ? (
+            <EmptyState
+              emoji="🏷️"
+              title={productFilter === "all" ? "No stock yet" : "Nothing in this product yet"}
+              hint="Inventory builds itself as you record purchases and sales."
+              action={<Link href="/purchases" className="btn-primary">+ Add Purchase</Link>}
+            />
+          ) : (
+            <div className="space-y-6">
+              {groups.map((g) => (
+                <div key={g.product}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-sm font-medium">{g.product}</span>
+                    <span className="text-xs text-neutral-400">{g.rows.length} variant{g.rows.length > 1 ? "s" : ""}</span>
+                    <div className="flex-1 border-b border-neutral-200" />
+                    <span className="text-xs text-neutral-500 tabular-nums">{fmtQtyWithUnit(g.qty)}</span>
+                    <span className="text-xs font-medium tabular-nums">{fmtMoney(g.value)}</span>
+                  </div>
+
+                  <div className="border border-neutral-200 bg-white divide-y divide-neutral-100">
+                    {g.rows.map((r) => {
+                      const lots = lotsOf(r.variantId);
+                      const open = openVariant === r.variantId;
+                      const attrs = attrText(r);
+                      const isLow = r.stockQty > 0 && r.stockQty <= 5;
+                      return (
+                        <div key={r.variantId}>
+                          {/* desktop-style row (flex so it also works stacked) */}
+                          <div className="grid grid-cols-[minmax(0,2fr)_110px_120px_120px_120px_130px] sm:grid-cols-[minmax(0,2fr)_110px_120px_120px_120px_130px] gap-3 px-4 py-3 items-center">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <button
+                                  onClick={() => setOpenVariant(open ? null : r.variantId)}
+                                  aria-label={open ? "Collapse lots" : "Show lots"}
+                                  className="shrink-0 text-neutral-300 hover:text-black text-[11px]"
+                                >
+                                  {open ? "▾" : "▸"}
+                                </button>
+                                <span className="truncate font-medium text-[13px]">{r.shortName}</span>
+                                <span className="text-neutral-400 text-xs shrink-0">{r.category}</span>
+                              </div>
+                              {attrs && <p className="text-[11px] text-neutral-500 truncate pl-5">{attrs}</p>}
+                            </div>
+                            <span className={`text-right font-semibold text-[13px] tabular-nums ${isLow ? "text-[#a12b1f]" : ""}`}>
+                              {fmtQtyWithUnit(r.stockQty, r.unit)}
+                            </span>
+                            <span className="text-right text-xs tabular-nums text-neutral-600">
+                              {fmtRateWithUnit(r.landedAvg)}
+                            </span>
+                            <span className="text-right text-xs tabular-nums text-neutral-500">{fmtMoney(r.stockValue)}</span>
+                            <span className="text-right text-xs tabular-nums">
+                              {(r.sellRate ?? r.avgSellRate) > 0 ? fmtRateWithUnit(r.sellRate ?? r.avgSellRate, r.unit) : <span className="text-neutral-300">—</span>}
+                            </span>
+                            <span className="flex items-center justify-end gap-2">
+                              {lots.length > 1 && <span className="text-[10px] text-neutral-400 tabular-nums">{lots.length} lots</span>}
+                              <button onClick={() => setDeleteTarget(r)} className="btn-ghost !py-1 !px-2 text-xs text-red-600 hover:!bg-red-50 shrink-0">Delete</button>
+                            </span>
+                          </div>
+
+                          {/* lots */}
+                          {open && (
+                            <div className="px-4 pb-3 pl-9 sm:pl-12">
+                              <div className="border border-neutral-200 rounded-md overflow-hidden">
+                                <table className="!mb-0">
+                                  <thead>
+                                    <tr>
+                                      <th>Lot</th>
+                                      <th>Supplier</th>
+                                      <th className="text-right">Remaining</th>
+                                      <th className="text-right">Landed</th>
+                                      <th>Location</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {lots.length === 0 && (
+                                      <tr>
+                                        <td colSpan={5} className="text-neutral-400 text-xs">No stock left — all lots of this variant are sold.</td>
+                                      </tr>
+                                    )}
+                                    {lots.map((l) => (
+                                      <tr key={l.purchaseId}>
+                                        <td className="text-neutral-700 font-mono text-xs">
+                                          {l.lotNumber || l.heatNumber || l.batchNumber || <span className="text-neutral-400 font-sans">—</span>}
+                                        </td>
+                                        <td className="text-neutral-600 text-xs">{l.supplierName}</td>
+                                        <td className="num font-medium text-xs tabular-nums">{fmtQtyWithUnit(l.remainingQty, l.unit)}</td>
+                                        <td className="num text-xs tabular-nums text-neutral-600">{fmtRateWithUnit(l.landedPerUnit)}</td>
+                                        <td className="text-xs text-neutral-600">
+                                          {l.warehouseId ? [whName(l.warehouseId), locName(l.locationId)].filter(Boolean).join(" / ") : <span className="text-neutral-400">—</span>}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* ---- fully sold variants ---- */}
+              {soldOut.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-sm font-bold text-neutral-800">Sold Out</span>
+                    <span className="text-xs text-neutral-400">{soldOut.length} — everything sold, nothing left in stock</span>
+                    <div className="flex-1 border-b border-neutral-200" />
+                  </div>
+                  <div className="border border-neutral-200 bg-white divide-y divide-neutral-100">
+                    {soldOut.map((r) => {
+                      const attrs = attrText(r);
+                      return (
+                        <div key={r.variantId} className="flex items-center justify-between gap-3 px-4 py-3">
+                          <div className="min-w-0">
+                            <span className="block truncate text-[13px] font-medium">{r.shortName}</span>
+                            <span className="block text-[11px] text-neutral-400 truncate">{[r.category, attrs, r.product].filter(Boolean).join(" · ") || "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[10px] uppercase tracking-wider font-semibold text-red-700 bg-red-50 border border-red-100 px-2 py-0.5">Sold Out</span>
+                            <button onClick={() => setDeleteTarget(r)} className="btn-ghost !py-1 !px-2 text-xs text-red-600 hover:!bg-red-50">Remove</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Delete Item Confirm Modal */}
+      {/* Delete confirm */}
       <ConfirmModal
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={confirmDeleteItem}
-        title={deleteTarget && deleteTarget.stockQty <= 0.000001 ? "Remove sold-out item?" : "Delete from inventory?"}
-        confirmLabel={deleteTarget && deleteTarget.stockQty <= 0.000001 ? "Remove from List" : "Delete Item"}
+        onConfirm={confirmDelete}
+        title={deleteTarget && deleteTarget.stockQty <= 0.000001 ? "Remove sold-out variant?" : "Delete from inventory?"}
+        confirmLabel={deleteTarget && deleteTarget.stockQty <= 0.000001 ? "Remove from List" : "Delete"}
       >
         {deleteTarget && (() => {
           const t = deleteTarget;
           const soldOut = t.stockQty <= 0.000001;
-          const pur = purchases.filter((x) => x.item === t.item).length;
-          const sel = sales.filter((s) => s.lines.some((l) => l.item === t.item)).length;
+          const pur = purchases.filter((x) => x.variantId === t.variantId || (t.legacyItem && x.item === t.legacyItem)).length;
+          const sel = sales.filter((s) => s.lines.some((l) => l.variantId === t.variantId || (t.legacyItem && l.item === t.legacyItem))).length;
           return (
             <>
               <div className="border border-neutral-200 mb-5">
                 <div className="flex justify-between items-center gap-3 py-2.5 px-4 border-b border-neutral-200">
-                  <span className="text-sm text-neutral-500 truncate">{t.item}</span>
+                  <span className="text-sm text-neutral-500 truncate">{t.shortName}</span>
                   <span className="font-medium text-sm tabular-nums shrink-0">{fmtQtyWithUnit(t.stockQty, t.unit)}</span>
                 </div>
-                {t.quality && (
+                {attrText(t) && (
                   <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
-                    <span className="text-neutral-500">Quality</span>
-                    <span className="tabular-nums">{t.quality}</span>
+                    <span className="text-neutral-500">{catName(t.categoryId)}</span>
+                    <span className="tabular-nums">{attrText(t)}</span>
                   </div>
                 )}
                 <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
@@ -358,9 +442,9 @@ export default function InventoryPage() {
                 <div className="border border-red-200 bg-red-50 p-4">
                   <p className="text-[11px] uppercase tracking-widest text-red-700 font-medium mb-2">Before you delete</p>
                   <ul className="text-xs text-neutral-700 space-y-1.5 list-disc pl-4">
-                    <li>{t.item} and its remaining stock will be permanently removed from Inventory.</li>
-                    {pur > 0 && <li>{pur} purchase record{pur === 1 ? "" : "s"} of this item will be removed.</li>}
-                    {sel > 0 && <li>{sel} sale record{sel === 1 ? "" : "s"} of this item will be removed.</li>}
+                    <li>{t.shortName} and its remaining stock will be permanently removed from Inventory.</li>
+                    {pur > 0 && <li>{pur} purchase record{pur === 1 ? "" : "s"} of this variant will be removed.</li>}
+                    {sel > 0 && <li>{sel} sale record{sel === 1 ? "" : "s"} of this variant will be removed.</li>}
                     <li>Stock, mill dues and profit all recalculate to match.</li>
                   </ul>
                 </div>

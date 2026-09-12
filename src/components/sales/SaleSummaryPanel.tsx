@@ -12,6 +12,13 @@ export default function SaleSummaryPanel({
   setTaxPct,
   discAmt,
   taxAmt,
+  loadingCharges,
+  setLoadingCharges,
+  transportCharges,
+  setTransportCharges,
+  labourCharges,
+  setLabourCharges,
+  chargesAmt,
   grandTotal,
   paidNow,
   setPaidNow,
@@ -19,6 +26,7 @@ export default function SaleSummaryPanel({
   payError,
   customerName,
   canSave,
+  hideSubmit = false,
 }: {
   subtotal: number;
   discountPct: number;
@@ -27,6 +35,13 @@ export default function SaleSummaryPanel({
   setTaxPct: (n: number) => void;
   discAmt: number;
   taxAmt: number;
+  loadingCharges: number;
+  setLoadingCharges: (n: number) => void;
+  transportCharges: number;
+  setTransportCharges: (n: number) => void;
+  labourCharges: number;
+  setLabourCharges: (n: number) => void;
+  chargesAmt: number;
   grandTotal: number;
   paidNow: number;
   setPaidNow: (n: number) => void;
@@ -34,6 +49,7 @@ export default function SaleSummaryPanel({
   payError?: string;
   customerName: string;
   canSave: boolean;
+  hideSubmit?: boolean;
 }) {
   return (
     <div className="border border-neutral-200 rounded-xl bg-white p-5 xl:sticky xl:top-6">
@@ -74,6 +90,47 @@ export default function SaleSummaryPanel({
             <span className="tabular-nums text-neutral-500">+ {fmtMoney(taxAmt)}</span>
           </div>
         )}
+
+        {/* Charges — loading / transport / labour, all optional flat amounts */}
+        <div className={`border rounded-lg px-3 py-3 ${chargesAmt > 0 ? "border-neutral-300 bg-neutral-50/70" : "border-dashed border-neutral-200"}`}>
+          <div className="flex items-baseline justify-between mb-2.5">
+            <span className="text-[11px] uppercase tracking-widest text-neutral-500 font-medium">Charges</span>
+            {chargesAmt > 0 && (
+              <span className="text-[11px] tabular-nums text-neutral-500">+ {fmtMoney(chargesAmt)}</span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="!mb-1 !text-[11px]">Loading</label>
+              <input
+                type="number" min="0" step="any" placeholder="0"
+                className="!py-2 !text-[13px]"
+                value={numVal(loadingCharges)}
+                onChange={(e) => setLoadingCharges(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="!mb-1 !text-[11px]">Transport</label>
+              <input
+                type="number" min="0" step="any" placeholder="0"
+                className="!py-2 !text-[13px]"
+                value={numVal(transportCharges)}
+                onChange={(e) => setTransportCharges(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="!mb-1 !text-[11px]">Labour</label>
+              <input
+                type="number" min="0" step="any" placeholder="0"
+                className="!py-2 !text-[13px]"
+                value={numVal(labourCharges)}
+                onChange={(e) => setLabourCharges(Number(e.target.value))}
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-neutral-400 mt-2">Optional — added to the invoice total</p>
+        </div>
+
         <div className="flex justify-between items-center py-2.5 px-3 bg-black text-white -mx-3">
           <span className="text-xs uppercase tracking-widest text-neutral-400">Grand Total</span>
           <span className="tabular-nums font-semibold">{fmtMoney(grandTotal)}</span>
@@ -97,18 +154,34 @@ export default function SaleSummaryPanel({
           )}
         </div>
 
-        <div className={`flex justify-between items-center px-3 py-2.5 border border-dashed -mx-3 ${remaining > 0 ? "border-neutral-400" : "border-neutral-300"}`}>
-          <span className="text-xs uppercase tracking-widest text-neutral-500">Remaining Due</span>
-          <span className={`tabular-nums font-semibold ${remaining > 0 ? "" : "text-neutral-400"}`}>{fmtMoney(remaining)}</span>
-        </div>
+        {remaining === 0 && grandTotal > 0 ? (
+          <div className="flex justify-between items-center px-3 py-2.5 -mx-1 rounded-lg border border-[#cfe3cd] bg-[#f0f7ef]">
+            <span className="text-xs uppercase tracking-widest text-[#2e6b2e] font-medium">Remaining Due</span>
+            <span className="tabular-nums font-semibold text-[#2e6b2e]">Fully paid</span>
+          </div>
+        ) : (
+          <div className={`flex justify-between items-center px-3 py-2.5 border border-dashed -mx-3 ${remaining > 0 ? "border-neutral-400" : "border-neutral-300"}`}>
+            <span className="text-xs uppercase tracking-widest text-neutral-500">Remaining Due</span>
+            <span className={`tabular-nums font-semibold ${remaining > 0 ? "" : "text-neutral-400"}`}>{fmtMoney(remaining)}</span>
+          </div>
+        )}
       </div>
 
-      <button type="submit" className="btn-primary w-full mt-5" disabled={!canSave}>
-        Save Sale
-      </button>
-      <p className="text-[11px] text-neutral-400 text-center mt-2.5">
-        Invoice for {customerName} created on save
-      </p>
+      {!hideSubmit && (
+        <>
+          <button type="submit" className="btn-primary w-full mt-5" disabled={!canSave}>
+            Save Sale
+          </button>
+          <p className="text-[11px] text-neutral-400 text-center mt-2.5">
+            Invoice for {customerName} created on save
+          </p>
+        </>
+      )}
+      {hideSubmit && (
+        <p className="text-[11px] text-neutral-400 text-center mt-4">
+          Invoice for {customerName} · save with the button below
+        </p>
+      )}
     </div>
   );
 }

@@ -28,7 +28,7 @@ export default function ReceivePaymentModal({
   const cust = customers.find((c) => c.id === sale.customerId);
 
   return (
-    <Modal open={!!sale} onClose={onClose} title="Receive Payment">
+    <Modal open={!!sale} onClose={onClose} title="Receive Payment" subtitle={sale ? `${sale.invoiceNo} · ${cust?.name ?? ""}` : undefined} size="lg">
       {/* key remounts the form per invoice so Amount starts at the due */}
       <PaymentForm key={sale.id} saleId={sale.id} due={due} defaultAmount={due} custName={cust?.name ?? ""} onClose={onClose} />
     </Modal>

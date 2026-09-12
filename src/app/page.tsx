@@ -1,471 +1,202 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useStore, saleGrandTotal } from "@/lib/store";
-import { Page, Stagger, StaggerItem, CountUp } from "@/components/ui";
-import { fmtCompact, qtyUnitLabel } from "@/lib/format";
+import Link from "next/link";
 
-type Period = "today" | "monthly" | "yearly";
-
-const PERIODS: { key: Period; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "monthly", label: "This Month" },
-  { key: "yearly", label: "This Year" },
+/* what the product does — one plain line each, straight from the app */
+const FEATURES = [
+  {
+    title: "Stock & Inventory",
+    desc: "What is in stock right now, at landed cost. A purchase adds it, a sale removes it — no manual tallies.",
+  },
+  {
+    title: "Purchases",
+    desc: "Record every lot you buy — quantity, rate, transport and other costs — so the true cost of each unit is known.",
+  },
+  {
+    title: "Sales & Invoices",
+    desc: "Bill customers, print an invoice with every sale, and track what is paid and what is still due on each bill.",
+  },
+  {
+    title: "Customers & Suppliers",
+    desc: "Who owes you and who you owe — a balance per customer and per supplier, never one blurred total.",
+  },
+  {
+    title: "Payments",
+    desc: "Cash, bank or cheque. Money in and money out is recorded against the right bill, so dues stay honest.",
+  },
+  {
+    title: "Reports & Profit",
+    desc: "Monthly and yearly profit — counted from money actually collected, after the running costs of the shop.",
+  },
 ];
 
-const inPeriod = (date: string, period: Period) => {
-  const now = new Date();
-  const d = new Date(date);
-  if (period === "today")
-    return (
-      d.getFullYear() === now.getFullYear() &&
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate()
-    );
-  if (period === "monthly")
-    return (
-      d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-    );
-  return d.getFullYear() === now.getFullYear();
-};
+const SECTION = "px-5 sm:px-8 lg:px-14";
 
-/* ---------- shared primitives (monochrome, 8px radius) ---------- */
-
-function Card({
-  children,
-  dark = false,
-  className = "",
-}: {
-  children: React.ReactNode;
-  dark?: boolean;
-  className?: string;
-}) {
+export default function HomePage() {
   return (
-    <div
-      className={`panel overflow-hidden ${
-        dark ? "!bg-[#111] !border-[#111]" : "bg-white"
-      } ${className}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-/* KPI figure: strong 700 number, optional unit suffix */
-function KpiNumber({
-  value,
-  prefix = "",
-  suffix = "",
-  compact = true,
-}: {
-  value: number;
-  prefix?: string;
-  suffix?: string;
-  compact?: boolean;
-}) {
-  return (
-    <span className="text-[30px] sm:text-[36px] lg:text-[42px] font-bold leading-none tracking-tight tabular-nums">
-      {prefix}
-      <CountUp value={value} compact={compact} />
-      {suffix}
-    </span>
-  );
-}
-
-/* large summary card */
-function Kpi({
-  label,
-  value,
-  hint,
-  prefix = "₨ ",
-  suffix = "",
-  dark = false,
-  money = true,
-}: {
-  label: string;
-  value: number;
-  hint?: string;
-  prefix?: string;
-  suffix?: string;
-  dark?: boolean;
-  money?: boolean;
-}) {
-  return (
-    <Card
-      dark={dark}
-      className="p-5 h-full flex flex-col justify-between gap-5"
-    >
-      <p
-        className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${
-          dark ? "text-neutral-400" : "text-neutral-500"
-        }`}
-      >
-        {label}
-      </p>
-      <div>
-        <div className={dark ? "text-white" : "text-[#171717]"}>
-          {money ? (
-            <KpiNumber value={value} prefix={prefix} suffix={suffix} />
-          ) : (
-            <KpiNumber value={value} suffix={suffix} compact={false} />
-          )}
+    <div className="min-h-screen bg-[#f8f8f7] text-[#171717]">
+      {/* ================= navbar ================= */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-[#e5e5e5]">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 sm:px-8 lg:px-14 py-3">
+          <Link href="/" className="leading-tight">
+            <span className="text-lg font-semibold tracking-tight">Tradex</span>
+            <span className="block text-[10px] uppercase tracking-[0.18em] text-neutral-500 mt-0.5">
+              Business Ledger
+            </span>
+          </Link>
+          <nav className="flex items-center gap-1 sm:gap-1.5">
+            <a
+              href="#about"
+              className="px-3 py-2 text-[13px] font-medium text-neutral-600 hover:text-black hover:bg-neutral-100 rounded-md transition-colors"
+            >
+              About
+            </a>
+            <a
+              href="#contact"
+              className="px-3 py-2 text-[13px] font-medium text-neutral-600 hover:text-black hover:bg-neutral-100 rounded-md transition-colors"
+            >
+              Contact us
+            </a>
+            <Link
+              href="/login"
+              className="ml-2 bg-[#171717] text-white text-[13px] font-medium px-4 py-2 rounded-md hover:bg-neutral-800 active:scale-[0.98] transition"
+            >
+              Login
+            </Link>
+          </nav>
         </div>
-        {hint && (
-          <p
-            className={`mt-2.5 text-[11px] font-normal ${
-              dark ? "text-neutral-500" : "text-neutral-400"
-            }`}
-          >
-            {hint}
+      </header>
+
+      {/* ================= intro ================= */}
+      <section className="bg-white border-b border-[#e5e5e5]">
+        <div className={`${SECTION} py-16 sm:py-24 lg:py-28`}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+            Tradex — one ledger for your shop, depot or factory
           </p>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-export default function DashboardPage() {
-  const {
-    customers,
-    suppliers,
-    sales,
-    payments,
-    expenses,
-    inventory,
-    byItem,
-    lineUnitCost,
-    products,
-    customerBalance,
-    supplierBalance,
-  } = useStore();
-
-  const [period, setPeriod] = useState<Period>("monthly");
-  const [productId, setProductId] = useState<string>("all");
-  const product = products.find((p) => p.id === productId) ?? null;
-  const isAll = !product;
-
-  const day = useMemo(
-    () =>
-      new Date().toLocaleDateString("en-GB", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }),
-    [],
-  );
-
-  const greeting = useMemo(() => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good Morning";
-    if (h < 17) return "Good Afternoon";
-    return "Good Evening";
-  }, []);
-
-  /* item -> product category map (drives which sales belong to a product) */
-  const productOf = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const r of inventory) if (r.product) m[r.item] = r.product;
-    return m;
-  }, [inventory]);
-
-  /* scope inventory + sales down to the selected product */
-  const invRows = useMemo(
-    () =>
-      isAll ? inventory : inventory.filter((r) => r.product === product!.name),
-    [inventory, isAll, product],
-  );
-  const saleRows = useMemo(
-    () =>
-      isAll
-        ? sales
-        : sales.filter((s) =>
-            s.lines.some((l) => productOf[l.item] === product!.name),
-          ),
-    [sales, isAll, product, productOf],
-  );
-
-  /* period-scoped sales / payments / expenses */
-  const pSales = useMemo(
-    () => saleRows.filter((x) => inPeriod(x.date, period)),
-    [saleRows, period],
-  );
-  const pPayments = useMemo(
-    () => payments.filter((x) => inPeriod(x.date, period)),
-    [payments, period],
-  );
-  const pExpenses = useMemo(
-    () => expenses.filter((x) => inPeriod(x.date, period)),
-    [expenses, period],
-  );
-
-  const moneyIn = pPayments
-    .filter((p) => p.type === "customer")
-    .reduce((a, p) => a + p.amount, 0);
-
-  const salesTotal = useMemo(
-    () => pSales.reduce((a, s) => a + saleGrandTotal(s), 0),
-    [pSales],
-  );
-
-  /* profit of each sale = its selling price minus the actual cost of the
-     stock it consumed (same costing as Profit & Loss) */
-  const profitBySale = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const s of sales)
-      m[s.id] = s.lines.reduce(
-        (a, l, i) => a + l.qty * (l.rate - (lineUnitCost(s.id, i) || byItem[l.item] || 0)),
-        0
-      );
-    return m;
-  }, [sales, lineUnitCost, byItem]);
-
-  /* Realized (cash-basis) profit: profit is counted only from customer
-     payments actually received in the period, matched to the invoice the
-     money settled — so an invoice's profit appears when the dues are paid,
-     not when the goods leave the shop. Whole depot = net of shop expenses. */
-  const realized = useMemo(() => {
-    let profit = 0;
-    let received = 0;
-    const productName = product?.name ?? "";
-    const depotProfit = saleRows.reduce((a, s) => a + (profitBySale[s.id] ?? 0), 0);
-    const depotGrand = saleRows.reduce((a, s) => a + saleGrandTotal(s), 0);
-    const blendedMargin = depotGrand > 0 ? depotProfit / depotGrand : 0;
-
-    for (const pmt of pPayments) {
-      if (pmt.type !== "customer") continue;
-      const s = pmt.saleId ? sales.find((x) => x.id === pmt.saleId) ?? null : null;
-      const inScope = isAll
-        ? true
-        : !!s && s.lines.some((l) => productOf[l.item] === productName);
-      if (!inScope) continue;
-
-      if (!s) {
-        // unallocated payment — settled FIFO later; use the blended margin
-        profit += pmt.amount * blendedMargin;
-        received += pmt.amount;
-        continue;
-      }
-      const grand = saleGrandTotal(s);
-      if (grand <= 0) continue;
-
-      if (isAll) {
-        const margin = (profitBySale[s.id] ?? 0) / grand;
-        profit += pmt.amount * margin;
-        received += pmt.amount;
-      } else {
-        // attribute the payment to the chosen product's share of the invoice
-        let prodProfit = 0;
-        let prodRev = 0;
-        s.lines.forEach((l, i) => {
-          if (productOf[l.item] === productName) {
-            const cost = lineUnitCost(s.id, i) || byItem[l.item] || 0;
-            prodProfit += l.qty * (l.rate - cost);
-            prodRev += l.qty * l.rate;
-          }
-        });
-        profit += (pmt.amount * prodProfit) / grand;
-        received += (pmt.amount * prodRev) / grand;
-      }
-    }
-    return { profit, received };
-  }, [pPayments, sales, saleRows, isAll, product, productOf, lineUnitCost, byItem, profitBySale]);
-
-  /* shop expenses for the period (whole depot only) */
-  const expensesPeriod = useMemo(
-    () => pExpenses.reduce((a, e) => a + e.amount, 0),
-    [pExpenses]
-  );
-
-  /* net profit shown on the card: realized − shop expenses (whole depot),
-     or realized profit of the chosen product */
-  const profitValue = useMemo(
-    () => (isAll ? realized.profit - expensesPeriod : realized.profit),
-    [isAll, realized.profit, expensesPeriod]
-  );
-
-  const stockQty = invRows.reduce((a, r) => a + r.stockQty, 0);
-  const stockValue = invRows.reduce((a, r) => a + r.stockValue, 0);
-  const itemCount = invRows.length;
-  const inStockItems = invRows.filter((r) => r.stockQty > 0).length;
-  /* all products can have different units (kg vs bag) — only a single product has a meaningful qty sum */
-  const unitSuffix = isAll ? "" : qtyUnitLabel(product?.unit);
-  const stockCard = isAll
-    ? {
-        value: inStockItems,
-        suffix: "",
-        hint: `${itemCount} tracked item${itemCount === 1 ? "" : "s"} in the depot`,
-      }
-    : {
-        value: stockQty,
-        suffix: unitSuffix ? ` ${unitSuffix}` : "",
-        hint: `Worth ${fmtCompact(stockValue)}`,
-      };
-
-  /* dues are whole-depot figures — who owes us, and which mills we owe */
-  const dues = useMemo(() => {
-    const custDues = customers
-      .map((c) => ({ name: c.name, bal: customerBalance(c.id) }))
-      .filter((d) => d.bal > 0)
-      .sort((a, b) => b.bal - a.bal);
-    const millDues = suppliers
-      .map((s) => ({ name: s.name, bal: supplierBalance(s.id) }))
-      .filter((d) => d.bal > 0)
-      .sort((a, b) => b.bal - a.bal);
-    return {
-      receivable: custDues.reduce((a, d) => a + d.bal, 0),
-      payable: millDues.reduce((a, d) => a + d.bal, 0),
-      owingCustomers: custDues.length,
-      owingMills: millDues.length,
-      custDues,
-      millDues,
-    };
-  }, [customers, suppliers, customerBalance, supplierBalance]);
-
-  return (
-    <Page>
-      {/* ===== Header ===== */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-[22px] sm:text-2xl font-semibold tracking-tight">
-            {greeting}
+          <h1 className="mt-6 text-[38px] sm:text-[52px] lg:text-[60px] font-bold tracking-tight leading-[1.05] max-w-4xl">
+            Stock, sales, payments and profit — kept together, so the numbers
+            always match.
           </h1>
-          <p className="text-[13px] text-neutral-500 mt-1.5">{day}</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* period switcher */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-white border border-neutral-200">
-            {PERIODS.map((p) => (
-              <button
-                key={p.key}
-                onClick={() => setPeriod(p.key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                  period === p.key
-                    ? "bg-[#171717] text-white"
-                    : "text-neutral-500 hover:text-neutral-900"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+          <p className="mt-7 text-[17px] leading-relaxed text-neutral-500 max-w-2xl">
+            Record each purchase and sale once. Tradex keeps the stock, the
+            invoices, the dues and the profit from that single entry, and every
+            screen shows the same figures.
+          </p>
+          <div className="mt-10 flex flex-wrap items-center gap-3.5">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2.5 bg-[#171717] text-white text-sm font-medium pl-6 pr-5 py-3.5 rounded-md hover:bg-neutral-800 active:scale-[0.98] transition"
+            >
+              Login
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2.5 8h11M9 3.5 13.5 8 9 12.5" />
+              </svg>
+            </Link>
+            <a
+              href="#features"
+              className="inline-flex items-center gap-2 border border-[#e5e5e5] text-sm font-medium px-6 py-3.5 rounded-md bg-white hover:border-[#171717] hover:bg-[#fafafa] transition"
+            >
+              What it does
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 2.5v11M3.5 9 8 13.5 12.5 9" />
+              </svg>
+            </a>
           </div>
+        </div>
+      </section>
 
-          {/* profile */}
-          <div className="flex items-center gap-2.5 pl-1 pr-3 py-1.5 rounded-lg bg-white border border-neutral-200">
-            <div className="w-7 h-7 rounded-full bg-[#171717] text-white flex items-center justify-center text-[10px] font-semibold tracking-wide">
-              MK
-            </div>
-            <div className="leading-tight">
-              <p className="text-[13px] font-semibold text-[#171717]">
-                M. Kashif
+      {/* ================= what it does ================= */}
+      <section id="features" className={`${SECTION} py-16 sm:py-24 scroll-mt-20`}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+          What Tradex does
+        </p>
+        <h2 className="mt-5 text-[28px] sm:text-[36px] font-bold tracking-tight leading-tight max-w-3xl">
+          The day-to-day records of a trading business, in six screens.
+        </h2>
+
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {FEATURES.map((f) => (
+            <article
+              key={f.title}
+              className="bg-white border border-[#e5e5e5] rounded-lg p-6 sm:p-7 flex flex-col hover:border-neutral-400 transition-colors"
+            >
+              <h3 className="text-[15px] font-semibold tracking-tight">
+                {f.title}
+              </h3>
+              <p className="mt-2.5 text-[13.5px] leading-relaxed text-neutral-600">
+                {f.desc}
               </p>
-              <p className="text-[10px] text-neutral-500">Owner</p>
-            </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ================= about ================= */}
+      <section id="about" className={`${SECTION} py-16 sm:py-24 scroll-mt-20`}>
+        <div className="grid lg:grid-cols-12 gap-x-10 gap-y-6">
+          <div className="lg:col-span-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+              About
+            </p>
+            <h2 className="mt-5 text-[26px] sm:text-[32px] font-bold tracking-tight leading-tight">
+              Where Tradex comes from
+            </h2>
+          </div>
+          <div className="lg:col-span-8 max-w-3xl space-y-5 text-[15px] leading-relaxed text-neutral-600">
+            <p>
+              Tradex started as the bookkeeping system of a steel and cement
+              depot. The owner wanted every purchase, sale and payment written
+              down once, with stock and profit following automatically — no
+              separate registers that could fall out of step.
+            </p>
+            <p>
+              Today it is the same ledger, opened up so any shop, depot or
+              factory owner can run their business on it.
+            </p>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ===== Product picker ===== */}
-      <div className="mb-8 flex flex-wrap items-end gap-x-6 gap-y-3">
-        <div className="w-full sm:w-80">
-          <label htmlFor="product-filter">Data for</label>
-          <select
-            id="product-filter"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            className="w-full bg-white !py-2.5"
+      {/* ================= contact ================= */}
+      <section
+        id="contact"
+        className={`${SECTION} py-16 sm:py-24 bg-white border-t border-[#e5e5e5] scroll-mt-20`}
+      >
+        <div className="grid lg:grid-cols-12 gap-x-10 gap-y-6">
+          <div className="lg:col-span-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+              Contact us
+            </p>
+            <h2 className="mt-5 text-[26px] sm:text-[32px] font-bold tracking-tight leading-tight">
+              Questions, or want a login for your business?
+            </h2>
+          </div>
+          <div className="lg:col-span-8 max-w-3xl">
+            <p className="text-[15px] leading-relaxed text-neutral-600">
+              Questions about Tradex or getting access for your business? Reach
+              out and we will reply.
+            </p>
+            <p className="mt-6 text-[15px] font-medium text-neutral-800">
+              contact@tradex.example&nbsp;·&nbsp;(0300) 000-0000
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= footer ================= */}
+      <footer className="px-5 sm:px-8 lg:px-14 py-8 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e5e5]">
+        <p className="text-xs text-neutral-400">
+          © {new Date().getFullYear()} Tradex — Business Ledger
+        </p>
+        <p className="text-xs text-neutral-400">
+          <Link
+            href="/login"
+            className="font-medium text-neutral-600 hover:text-black transition-colors"
           >
-            <option value="all">All Products — entire depot</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-neutral-500 pb-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-black" />
-          {isAll
-            ? products.length === 0
-              ? "No products yet — add them under Products"
-              : `${products.length} product${products.length === 1 ? "" : "s"} · ${itemCount} tracked item${itemCount === 1 ? "" : "s"}`
-            : `${product!.name} · ${qtyUnitLabel(product?.unit) || "unit"} · ${itemCount} item${itemCount === 1 ? "" : "s"} under it`}
-        </div>
-      </div>
-
-      {/* ===== Stats — the dashboard is stats only ===== */}
-      <Stagger className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-        <StaggerItem>
-          <Kpi
-            dark
-            label={isAll ? "Items in Stock" : "Stock in Hand"}
-            value={stockCard.value}
-            money={false}
-            suffix={stockCard.suffix}
-            hint={stockCard.hint}
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Kpi
-            label="Stock Worth"
-            value={stockValue}
-            hint="At average landed cost"
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Kpi
-            label="Sales"
-            value={salesTotal}
-            hint={
-              isAll
-                ? `${fmtCompact(moneyIn)} collected in period`
-                : `${pSales.length} invoice${pSales.length === 1 ? "" : "s"} in period`
-            }
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Kpi
-            label="Net Profit"
-            value={profitValue}
-            hint={
-              realized.received > 0
-                ? isAll
-                  ? `Collected ${fmtCompact(realized.received)} · net after shop expenses`
-                  : `${Math.round((realized.profit / realized.received) * 100)}% net margin on ${fmtCompact(realized.received)} collected`
-                : "Counts as customers clear their dues"
-            }
-          />
-        </StaggerItem>
-        {dues.owingCustomers > 0 && (
-          <StaggerItem>
-            <Kpi
-              label="Customer Payment Dues"
-              value={dues.receivable}
-              hint={dues.custDues
-                .map((d) => `${d.name} owes ${fmtCompact(d.bal)}`)
-                .join(" · ")}
-            />
-          </StaggerItem>
-        )}
-        {dues.owingMills > 0 && (
-          <StaggerItem>
-            <Kpi
-              label="Mills Payment Dues"
-              value={dues.payable}
-              hint={dues.millDues
-                .map((d) => `pay ${d.name} ${fmtCompact(d.bal)}`)
-                .join(" · ")}
-            />
-          </StaggerItem>
-        )}
-      </Stagger>
-
-      <p className="text-xs text-neutral-500 mt-6">
-        {isAll
-          ? "Showing the whole depot — pick a product above to zoom its stock, sales and profit."
-          : `Stock, sales and profit are for ${product!.name}. Payment dues always cover the whole depot.`}
-      </p>
-    </Page>
+            Login
+          </Link>
+        </p>
+      </footer>
+    </div>
   );
 }

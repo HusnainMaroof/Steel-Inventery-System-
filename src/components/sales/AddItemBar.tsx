@@ -1,178 +1,149 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { fmtQtyWithUnit, fmtRateWithUnit, qtyUnitLabel } from "@/lib/format";
-
-interface Draft {
-  product: string;
-  item: string;
-  spec?: string;
-  quality: string;
-  supplierId: string;
-  qty: number;
-}
+import { OptionalSection } from "@/components/ui";
+import type { SaleDraftApi } from "./useSaleDraft";
 
 const numVal = (n: number) => (n === 0 ? "" : String(n));
 
 export default function AddItemBar({
-  draft,
-  setDraft,
-  onDraftProduct,
-  onDraftItem,
-  onDraftSpec,
-  onDraftQuality,
-  productsWithStock,
-  itemsOf,
-  specsOf,
-  qualitiesOf,
-  sourcesOf,
-  productSpecLabel,
-  sourceUnits,
-  availOf,
-  supplierName,
-  draftAvail,
-  draftUnit,
-  draftPrice,
-  draftOver,
-  canAdd,
+  api,
   onAdd,
-  hasStock,
+  showOptionalDetails = false,
 }: {
-  draft: Draft;
-  setDraft: (patch: Partial<Draft>) => void;
-  onDraftProduct: (product: string) => void;
-  onDraftItem: (item: string) => void;
-  onDraftSpec: (spec: string) => void;
-  onDraftQuality: (quality: string) => void;
-  productsWithStock: string[];
-  itemsOf: (product: string) => { item: string }[];
-  specsOf: (item: string) => string[];
-  qualitiesOf: (item: string, spec?: string) => string[];
-  sourcesOf: (item: string, quality?: string, spec?: string) => {
-    supplierId?: string;
-    stockQty: number;
-    unit?: string;
-  }[];
-  productSpecLabel: (product: string) => string;
-  sourceUnits: (item: string, spec: string | undefined, supplierId: string) => string;
-  availOf: (item: string, quality: string, spec: string | undefined, supplierId: string) => number;
-  supplierName: (id: string) => string;
-  draftAvail: number;
-  draftUnit: string;
-  draftPrice?: number;
-  draftOver: boolean;
-  canAdd: boolean;
+  api: SaleDraftApi;
   onAdd: () => void;
-  hasStock: boolean;
+  showOptionalDetails?: boolean;
 }) {
-  const specLabel = productSpecLabel(draft.product);
-  const specCustom = specLabel !== "Quality";
-  const specOptions = specsOf(draft.item);
+  const { pick, setPick } = api;
+  const [showLot, setShowLot] = useState(showOptionalDetails);
+  const categories = api.categoriesOfProduct(pick.productId);
+  const rows = api.variantRowsOf(pick.categoryId);
+  const lots = api.lotsOf(pick.variantId);
+  const v = pick.variantId ? api.varById.get(pick.variantId) : undefined;
+  const row = rows.find((r) => r.variantId === pick.variantId);
+
+  useEffect(() => {
+    setShowLot(showOptionalDetails);
+  }, [showOptionalDetails]);
 
   return (
-    <div className="mt-8 border border-neutral-200 rounded-xl p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <label className="!mb-0 text-[12px]">Add Item</label>
-        {!hasStock ? (
-          <span className="text-xs text-neutral-400">No stock yet — record a purchase first</span>
+    <div className="border border-neutral-200 rounded-xl overflow-hidden">
+      <div className="px-4 sm:px-5 py-3.5 border-b border-neutral-100 bg-neutral-50/50 flex items-center justify-between gap-2">
+        <p className="text-[13px] font-semibold text-neutral-800">Add item</p>
+        {!api.hasStock ? (
+          <span className="text-[12px] text-neutral-400">No stock — record a purchase first</span>
         ) : (
-          <span className="text-xs text-neutral-400">Price is auto-set from inventory</span>
+          <span className="text-[12px] text-neutral-400">Rate from stock lot</span>
         )}
       </div>
 
-      {!hasStock ? null : (
-        <>
-          {/* filter surface — what you're narrowing down */}
-          <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3 sm:p-4">
-            <p className="text-[11px] uppercase tracking-widest text-neutral-400 mb-3">Find stock to sell</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-              <div>
-                <label className="!mb-1">Product</label>
-                <select value={draft.product} onChange={(e) => onDraftProduct(e.target.value)}>
-                  {productsWithStock.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="!mb-1">Product Item</label>
-                <select value={draft.item} onChange={(e) => onDraftItem(e.target.value)}>
-                  {itemsOf(draft.product).map((r) => <option key={r.item} value={r.item}>{r.item}</option>)}
-                </select>
-              </div>
-              {specCustom && specOptions.length > 0 && (
-                <div>
-                  <label className="!mb-1">{specLabel}</label>
-                  <select value={draft.spec ?? ""} onChange={(e) => onDraftSpec(e.target.value)}>
-                    <option value="" disabled>
-                      {specOptions.length === 0 ? "No stock…" : "Select factory…"}
-                    </option>
-                    {specOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="!mb-1">Quality</label>
-                <select value={draft.quality} onChange={(e) => onDraftQuality(e.target.value)}>
-                  <option value="">{specCustom ? "Any quality" : "Any quality"}</option>
-                  {qualitiesOf(draft.item, draft.spec).map((q) => <option key={q} value={q}>{q}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="!mb-1">Mill / Source</label>
-                <select value={draft.supplierId} onChange={(e) => setDraft({ supplierId: e.target.value, qty: 1 })}>
-                  <option value="" disabled>
-                    {sourcesOf(draft.item, draft.quality, draft.spec).length === 0 ? "No stock…" : "Select mill…"}
+      {!api.hasStock ? (
+        <div className="px-5 py-8 text-center text-[13px] text-neutral-400">Nothing in stock to sell yet.</div>
+      ) : (
+        <div className="p-4 sm:p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="!mb-1">Product</label>
+              <select value={pick.productId} onChange={(e) => api.onProduct(e.target.value)}>
+                {api.productsWithStock.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="!mb-1">Category</label>
+              <select value={pick.categoryId} onChange={(e) => api.onCategory(e.target.value)}>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="!mb-1">Variant</label>
+              <select value={pick.variantId} onChange={(e) => api.onVariant(e.target.value)}>
+                {rows.map((r) => (
+                  <option key={r.variantId} value={r.variantId}>
+                    {r.shortName}{r.attrText ? ` — ${r.attrText}` : ""} · {fmtQtyWithUnit(r.stockQty, r.unit)} left
                   </option>
-                  {sourcesOf(draft.item, draft.quality, draft.spec).map((r) => (
-                    <option key={r.supplierId} value={r.supplierId ?? ""} disabled={r.stockQty <= 0}>
-                      {supplierName(r.supplierId ?? "")} — {fmtQtyWithUnit(availOf(draft.item, draft.quality, draft.spec, r.supplierId ?? ""), sourceUnits(draft.item, draft.spec, r.supplierId ?? ""))} left
-                    </option>
-                  ))}
-                </select>
-              </div>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* confirmation + commit row */}
-          <div className="mt-3 pt-3 border-t border-neutral-200 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-neutral-500">
-              {draft.item && draft.supplierId ? (
+          {lots.length > 0 && (
+            <OptionalSection
+              title="Source / lot"
+              hint="Optional — pick a specific lot or use FIFO (oldest first)"
+              open={showLot}
+              onToggle={() => setShowLot((s) => !s)}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                <div>
+                  <label className="!mb-1">Lot</label>
+                  <select value={pick.lotId} onChange={(e) => setPick({ lotId: e.target.value })}>
+                    <option value="">Any lot — FIFO (oldest first)</option>
+                    {lots.map((l) => (
+                      <option key={l.purchaseId} value={l.purchaseId}>
+                        {l.label} — {fmtQtyWithUnit(l.remaining, l.unit)} left
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-[13px] text-neutral-500 sm:pb-2">
+                  Available:{" "}
+                  <span className="font-semibold text-neutral-800 tabular-nums">
+                    {fmtQtyWithUnit(api.draftAvail, api.draftUnit)}
+                  </span>
+                </p>
+              </div>
+            </OptionalSection>
+          )}
+
+          <div className="pt-4 border-t border-neutral-100 flex flex-wrap items-end justify-between gap-4">
+            <div className="text-[13px] text-neutral-500 min-w-0 flex-1">
+              {v ? (
                 <>
-                  <span className="font-medium text-neutral-700">{draft.item}</span>
-                  {draft.spec ? ` · ${draft.spec}` : ""}
-                  {draft.quality ? ` · ${draft.quality}` : ""} · {supplierName(draft.supplierId)}
-                  {draftPrice ? (
+                  <span className="font-medium text-neutral-800">{v.shortName}</span>
+                  {row?.attrText ? ` · ${row.attrText}` : ""}
+                  {api.draftPrice ? (
                     <span className="ml-2 text-neutral-600 tabular-nums">
-                      @ {fmtRateWithUnit(draftPrice, draftUnit)}
+                      @ {fmtRateWithUnit(api.draftPrice ?? 0, api.draftUnit)}
                     </span>
                   ) : (
-                    <span className="ml-2 text-neutral-400">no sell price set</span>
+                    <span className="ml-2 text-neutral-400">no sell price — using cost + 15%</span>
                   )}
                 </>
               ) : (
-                "Pick an item and mill to add it"
+                "Pick a variant with stock"
               )}
             </div>
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-3 shrink-0">
               <div>
-                <label className="!mb-1">Qty ({qtyUnitLabel(draftUnit)})</label>
+                <label className="!mb-1">Qty ({qtyUnitLabel(api.draftUnit)})</label>
                 <input
-                  type="number" min="0" max={draftAvail || undefined} step="any"
-                  className={`!w-28 ${draftOver ? "!border-red-600" : ""}`}
-                  value={numVal(draft.qty)}
-                  onChange={(e) => setDraft({ qty: Number(e.target.value) })}
+                  type="number"
+                  min="0"
+                  max={api.draftAvail || undefined}
+                  step="any"
+                  className={`!w-28 ${api.draftOver ? "!border-red-600" : ""}`}
+                  value={numVal(pick.qty)}
+                  onChange={(e) => setPick({ qty: Number(e.target.value) })}
                 />
               </div>
-              <button type="button" className="btn-primary !py-2 !px-4 text-xs" onClick={onAdd} disabled={!canAdd}>
-                + Add Item
+              <button type="button" className="btn-primary !py-2.5 !px-5 text-[13px]" onClick={onAdd} disabled={!api.canAdd}>
+                Add item
               </button>
             </div>
           </div>
 
-          {draftOver && (
-            <p className="text-[11px] text-red-600 mt-1.5">
-              Only {fmtQtyWithUnit(draftAvail, draftUnit)} available of this mill&apos;s stock.
+          {api.draftOver && (
+            <p className="text-[12px] text-red-600">
+              Only {fmtQtyWithUnit(api.draftAvail, api.draftUnit)} available for this variant.
             </p>
           )}
-        </>
+        </div>
       )}
     </div>
   );
