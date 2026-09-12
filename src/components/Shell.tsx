@@ -39,15 +39,6 @@ const ADMIN_NAV = [{ href: "/admin", label: "Owners" }];
 const roleLabel = (r: AuthUser["role"]) =>
   r === "superadmin" ? "Super Admin" : "Owner";
 
-const initialsOf = (s: string) =>
-  s
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase() || "TX";
-
 /* signed-in identity + sign out — footer of the sidebar and the mobile drawer */
 function UserBlock({
   user,
@@ -186,9 +177,13 @@ function MobileNav({
         <Link
           href={brandHref}
           title={brand}
-          className="flex-1 min-w-0 text-sm font-medium tracking-tight text-center truncate px-2"
+          className="flex-1 min-w-0 flex justify-center px-2"
         >
-          {brand}
+          <img
+            src="/images/logo.png"
+            alt={brand}
+            className="h-8 w-auto max-w-full object-contain"
+          />
         </Link>
         <span className="w-9" aria-hidden />
       </header>
@@ -215,12 +210,12 @@ function MobileNav({
               <div className="flex flex-col justify-between min-h-full py-6 px-4">
                 <div>
                   <div className="flex items-center justify-between mb-8 min-h-8">
-                    <div
-                      className="text-lg font-medium tracking-tight truncate max-w-[70%]"
+                    <img
+                      src="/images/logo.png"
+                      alt={brand}
                       title={brand}
-                    >
-                      {brand}
-                    </div>
+                      className="h-9 w-auto max-w-[70%] object-contain object-left"
+                    />
                     <button
                       onClick={() => setDrawerOpen(false)}
                       aria-label="Close menu"
@@ -311,7 +306,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             href={n.href}
             title={n.label}
             onClick={onNavigate}
-            className={`group relative flex items-center gap-3 px-3 py-2.5 text-[15px] rounded-sm transition-colors duration-150 hover:bg-neutral-100 ${
+            className={`group relative flex items-center gap-3 px-3 py-2.5 text-[15px] rounded-sm transition-colors  duration-150 hover:bg-neutral-100 ${
               collapsed ? "md:justify-center" : ""
             }`}
           >
@@ -368,23 +363,21 @@ export default function Shell({ children }: { children: ReactNode }) {
             <div className="flex items-center justify-between mb-10 min-h-8">
               <Link href={roleHome} className="block leading-tight min-w-0">
                 {collapsed ? (
-                  <span
-                    className="text-lg font-medium tracking-tight"
+                  <img
+                    src="/images/logo.png"
+                    alt={brand}
                     title={brand}
-                  >
-                    {initialsOf(brand)}
-                  </span>
+                    className="h-8 w-auto max-w-full object-cover object-left"
+                  />
                 ) : (
                   <>
-                    <div
-                      className="text-lg font-medium tracking-tight truncate"
+                    <img
+                      src="/images/logo.png"
+                      alt={brand}
                       title={brand}
-                    >
-                      {brand}
-                    </div>
-                    <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 mt-1">
-                      {brandCaption}
-                    </div>
+                      className="  object-cover object-center"
+                    />
+                
                   </>
                 )}
               </Link>

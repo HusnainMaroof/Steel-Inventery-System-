@@ -12,6 +12,13 @@ export default function SaleSummaryPanel({
   setTaxPct,
   discAmt,
   taxAmt,
+  loadingCharges,
+  setLoadingCharges,
+  transportCharges,
+  setTransportCharges,
+  labourCharges,
+  setLabourCharges,
+  chargesAmt,
   grandTotal,
   paidNow,
   setPaidNow,
@@ -28,6 +35,13 @@ export default function SaleSummaryPanel({
   setTaxPct: (n: number) => void;
   discAmt: number;
   taxAmt: number;
+  loadingCharges: number;
+  setLoadingCharges: (n: number) => void;
+  transportCharges: number;
+  setTransportCharges: (n: number) => void;
+  labourCharges: number;
+  setLabourCharges: (n: number) => void;
+  chargesAmt: number;
   grandTotal: number;
   paidNow: number;
   setPaidNow: (n: number) => void;
@@ -76,6 +90,47 @@ export default function SaleSummaryPanel({
             <span className="tabular-nums text-neutral-500">+ {fmtMoney(taxAmt)}</span>
           </div>
         )}
+
+        {/* Charges — loading / transport / labour, all optional flat amounts */}
+        <div className={`border rounded-lg px-3 py-3 ${chargesAmt > 0 ? "border-neutral-300 bg-neutral-50/70" : "border-dashed border-neutral-200"}`}>
+          <div className="flex items-baseline justify-between mb-2.5">
+            <span className="text-[11px] uppercase tracking-widest text-neutral-500 font-medium">Charges</span>
+            {chargesAmt > 0 && (
+              <span className="text-[11px] tabular-nums text-neutral-500">+ {fmtMoney(chargesAmt)}</span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="!mb-1 !text-[11px]">Loading</label>
+              <input
+                type="number" min="0" step="any" placeholder="0"
+                className="!py-2 !text-[13px]"
+                value={numVal(loadingCharges)}
+                onChange={(e) => setLoadingCharges(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="!mb-1 !text-[11px]">Transport</label>
+              <input
+                type="number" min="0" step="any" placeholder="0"
+                className="!py-2 !text-[13px]"
+                value={numVal(transportCharges)}
+                onChange={(e) => setTransportCharges(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="!mb-1 !text-[11px]">Labour</label>
+              <input
+                type="number" min="0" step="any" placeholder="0"
+                className="!py-2 !text-[13px]"
+                value={numVal(labourCharges)}
+                onChange={(e) => setLabourCharges(Number(e.target.value))}
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-neutral-400 mt-2">Optional — added to the invoice total</p>
+        </div>
+
         <div className="flex justify-between items-center py-2.5 px-3 bg-black text-white -mx-3">
           <span className="text-xs uppercase tracking-widest text-neutral-400">Grand Total</span>
           <span className="tabular-nums font-semibold">{fmtMoney(grandTotal)}</span>

@@ -63,6 +63,8 @@ export interface Purchase {
   unit: string; // product's unit, snapshot at entry (e.g. "kg", "bag")
   rate: number; // buying price PER UNIT of that unit
   transport: number;
+  loadingCharges?: number; // loading/unloading charges for this lot (optional)
+  labourCharges?: number; // labour cost for this lot (optional)
   otherCost: number;
   sellRate?: number; // your selling price per unit (planned)
   paid?: number; // amount already paid to the supplier
@@ -78,6 +80,7 @@ export interface SaleLine {
   unit: string; // product's unit, shown on the invoice
   spec?: string; // product's own spec, e.g. Cement factory ("Lucky Cement") — legacy mirror
   quality?: string; // quality grade sold (e.g. "60 Grade") — legacy mirror
+  qualityName?: string; // quality name printed on the invoice (e.g. "60 Grade", "Bilzar")
   supplierId?: string; // which mill/supplier's stock this line came from
   purchaseId?: string; // the purchase lot this line was fulfilled from (exact source)
   // dynamic-catalogue identity (snapshot at sale time — history never rewrites)
@@ -95,6 +98,9 @@ export interface Sale {
   lines: SaleLine[];
   discountPct?: number; // invoice-wide discount percent (0 if absent)
   taxPct?: number; // invoice-wide sales tax percent (0 if absent)
+  loadingCharges?: number; // invoice-wide loading charges (0 if absent)
+  transportCharges?: number; // invoice-wide transport/freight charges (0 if absent)
+  labourCharges?: number; // invoice-wide labour cost (0 if absent)
 }
 
 export interface Payment {

@@ -77,7 +77,9 @@ export default function PurchasesPage() {
     locationId: "",
     qty: 0,
     rate: 0,
+    loading: 0,
     transport: 0,
+    labour: 0,
     otherCost: 0,
     sellRate: 0,
     paidNow: 0,
@@ -108,7 +110,8 @@ export default function PurchasesPage() {
   const qtyLabel = qtyUnitLabel(productUnit);
   const perLabel = perUnitLabel(productUnit);
   const totalStock = form.qty * form.rate;
-  const totalCost = totalStock + form.transport + form.otherCost;
+  const totalCharges = form.loading + form.transport + form.labour + form.otherCost;
+  const totalCost = totalStock + totalCharges;
   const landedPerUnit = form.qty > 0 ? totalCost / form.qty : 0;
   const marginPerUnit = form.sellRate > 0 ? form.sellRate - landedPerUnit : 0;
   const warehouse = warehouses.find((w) => w.id === form.warehouseId && w.active);
@@ -138,7 +141,9 @@ export default function PurchasesPage() {
       locationId: "",
       qty: 0,
       rate: 0,
+      loading: 0,
       transport: 0,
+      labour: 0,
       otherCost: 0,
       sellRate: 0,
       paidNow: 0,
@@ -180,6 +185,8 @@ export default function PurchasesPage() {
       unit: productUnit,
       rate: Number(form.rate),
       transport: Number(form.transport),
+      loadingCharges: Number(form.loading) || undefined,
+      labourCharges: Number(form.labour) || undefined,
       otherCost: Number(form.otherCost),
       sellRate: Number(form.sellRate) || undefined,
       paid: paidNow,
@@ -543,8 +550,28 @@ export default function PurchasesPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div><label>Quantity ({qtyLabel})</label><input type="number" min="0.1" step="any" placeholder="0" value={numVal(form.qty)} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} required /></div>
                 <div><label>Buying Price ({perLabel})</label><input type="number" min="0" placeholder="0" value={numVal(form.rate)} onChange={(e) => setForm({ ...form, rate: Number(e.target.value) })} required /></div>
-                <div><label>Transport Cost</label><input type="number" min="0" placeholder="0" value={numVal(form.transport)} onChange={(e) => setForm({ ...form, transport: Number(e.target.value) })} /></div>
-                <div><label>Other Expenses</label><input type="number" min="0" placeholder="0" value={numVal(form.otherCost)} onChange={(e) => setForm({ ...form, otherCost: Number(e.target.value) })} /></div>
+              </div>
+
+              <div className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/50">
+                <div className="flex items-baseline justify-between mb-3">
+                  <p className="text-[12px] font-medium text-neutral-600">Charges</p>
+                  <span className="text-[11px] text-neutral-400">Optional — added to landed cost</span>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div><label>Loading Charges</label><input type="number" min="0" step="any" placeholder="0" value={numVal(form.loading)} onChange={(e) => setForm({ ...form, loading: Number(e.target.value) })} /></div>
+                  <div><label>Transport Charges</label><input type="number" min="0" step="any" placeholder="0" value={numVal(form.transport)} onChange={(e) => setForm({ ...form, transport: Number(e.target.value) })} /></div>
+                  <div><label>Labour Cost</label><input type="number" min="0" step="any" placeholder="0" value={numVal(form.labour)} onChange={(e) => setForm({ ...form, labour: Number(e.target.value) })} /></div>
+                  <div><label>Other Expenses</label><input type="number" min="0" step="any" placeholder="0" value={numVal(form.otherCost)} onChange={(e) => setForm({ ...form, otherCost: Number(e.target.value) })} /></div>
+                </div>
+                {totalCharges > 0 && (
+                  <div className="flex justify-between items-center mt-3 pt-3 border-t border-neutral-200 text-sm">
+                    <span className="text-neutral-500">Total charges</span>
+                    <span className="font-semibold tabular-nums">{fmtMoney(totalCharges)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
                 <div><label>Your Selling Price ({perLabel})</label><input type="number" min="0" placeholder="0" value={numVal(form.sellRate)} onChange={(e) => setForm({ ...form, sellRate: Number(e.target.value) })} /></div>
                 <div><label>Paid Now (to supplier)</label><input type="number" min="0" placeholder="0" value={numVal(form.paidNow)} onChange={(e) => setForm({ ...form, paidNow: Number(e.target.value) })} /></div>
               </div>
@@ -566,7 +593,7 @@ export default function PurchasesPage() {
                 <div className="flex justify-between items-start gap-3 text-sm border-t border-neutral-100 pt-3">
                   <div className="min-w-0">
                     <span className="block text-neutral-500">Landed cost {perLabel}</span>
-                    <span className="block text-[12px] text-neutral-400 mt-0.5">buying + transport + expenses</span>
+                    <span className="block text-[12px] text-neutral-400 mt-0.5">buying + charges</span>
                   </div>
                   <span className="font-semibold tabular-nums shrink-0">{fmtMoney(landedPerUnit)}</span>
                 </div>
@@ -627,6 +654,8 @@ export default function PurchasesPage() {
           const total = purchaseTotal(p);
           const costPerUnit = p.qty > 0 ? total / p.qty : 0;
           const transportShare = p.qty > 0 ? p.transport / p.qty : 0;
+          const loadingShare = p.qty > 0 ? (p.loadingCharges ?? 0) / p.qty : 0;
+          const labourShare = p.qty > 0 ? (p.labourCharges ?? 0) / p.qty : 0;
           const otherShare = p.qty > 0 ? p.otherCost / p.qty : 0;
           const usedSell = p.sellRate ?? 0;
           const perUnit = perUnitLabel(p.unit);
@@ -656,9 +685,13 @@ export default function PurchasesPage() {
             { label: "Quantity", value: fmtQtyWithUnit(p.qty, p.unit) },
             { label: "Buying Price" + perUnit, value: fmtMoney(p.rate) },
             { label: "+ Transport" + perUnit, value: p.transport > 0 ? fmtMoney(transportShare) : "—", muted: true },
+            { label: "+ Loading" + perUnit, value: (p.loadingCharges ?? 0) > 0 ? fmtMoney(loadingShare) : "—", muted: true },
+            { label: "+ Labour" + perUnit, value: (p.labourCharges ?? 0) > 0 ? fmtMoney(labourShare) : "—", muted: true },
             { label: "+ Other Expenses" + perUnit, value: p.otherCost > 0 ? fmtMoney(otherShare) : "—", muted: true },
             { label: "Landed Cost" + perUnit, value: fmtMoney(costPerUnit), strong: true },
             { label: "Transport (total)", value: fmtMoney(p.transport), muted: true },
+            { label: "Loading (total)", value: fmtMoney(p.loadingCharges ?? 0), muted: true },
+            { label: "Labour (total)", value: fmtMoney(p.labourCharges ?? 0), muted: true },
             { label: "Other Expenses (total)", value: fmtMoney(p.otherCost), muted: true },
             { label: "Total Payable to Mill", value: fmtMoney(payable) },
             { label: "Already Paid", value: fmtMoney(paid), muted: true },

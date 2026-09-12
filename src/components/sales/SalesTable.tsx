@@ -72,6 +72,7 @@ export default function SalesTable({
   const [appliedSearch, setAppliedSearch] = useState("");
   const [appliedMode, setAppliedMode] = useState<"name" | "phone">("name");
   const [appliedDate, setAppliedDate] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "due" | "paid">("all");
 
   const formatPhone = (v: string) => {
     const digits = v.replace(/\D/g, "").slice(0, 11);
@@ -82,7 +83,8 @@ export default function SalesTable({
     setSearchInput(searchMode === "phone" ? formatPhone(v) : v);
   };
 
-  const hasFilters = appliedSearch.trim() !== "" || appliedDate !== "";
+  const hasFilters =
+    appliedSearch.trim() !== "" || appliedDate !== "" || statusFilter !== "all";
 
   const groups = useMemo(() => {
     const q = appliedSearch.toLowerCase().trim();
@@ -99,6 +101,11 @@ export default function SalesTable({
         }
       }
       if (appliedDate && s.date !== appliedDate) return false;
+      if (statusFilter !== "all") {
+        const due = Math.max(0, saleGrandTotal(s) - salePaid(s.id));
+        if (statusFilter === "due" && due <= 0.001) return false;
+        if (statusFilter === "paid" && due > 0.001) return false;
+      }
       return true;
     });
 
@@ -135,7 +142,7 @@ export default function SalesTable({
         date,
         sales: sales.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       }));
-  }, [sales, customers, customerName, productOfLine, attrTextOf, salePaid, appliedSearch, appliedMode, appliedDate]);
+  }, [sales, customers, customerName, productOfLine, attrTextOf, salePaid, appliedSearch, appliedMode, appliedDate, statusFilter]);
 
   const totalDue = groups.reduce((a, g) => a + g.sales.reduce((b, r) => b + r.due, 0), 0);
   const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
@@ -153,6 +160,7 @@ export default function SalesTable({
     setAppliedSearch("");
     setAppliedMode("name");
     setAppliedDate("");
+    setStatusFilter("all");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -172,6 +180,28 @@ export default function SalesTable({
 
   return (
     <>
+      {/* ── status filter: all / dues only / paid only ── */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="inline-flex border border-neutral-200 rounded-md overflow-hidden bg-white">
+          {([
+            { key: "all", label: "All invoices" },
+            { key: "due", label: "Dues only" },
+            { key: "paid", label: "Paid" },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setStatusFilter(t.key)}
+              className={`px-3.5 py-2 text-xs font-medium transition-colors ${
+                statusFilter === t.key ? "bg-black text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ── filters ── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
         <div className="flex flex-1 sm:max-w-96">

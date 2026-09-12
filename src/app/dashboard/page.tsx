@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useStore, saleGrandTotal } from "@/lib/store";
+import { useStore, saleGrandTotal, steelAmount } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { Page, Stagger, StaggerItem, CountUp } from "@/components/ui";
 import { fmtCompact, fmtMoney, qtyUnitLabel } from "@/lib/format";
@@ -113,26 +113,24 @@ function SalesProfitHero({
   );
 }
 
-/* dues card — always visible */
+/* dues card — numbers only, no party names */
 function DueCard({
   label,
   value,
   count,
-  names,
   emptyLabel,
   tone,
 }: {
   label: string;
   value: number;
   count: number;
-  names: { name: string; bal: number }[];
   emptyLabel: string;
   tone: "in" | "out";
 }) {
   const accent = tone === "in" ? "text-[#2e6b2e]" : "text-[#a12b1f]";
   const hint =
     count > 0
-      ? names.slice(0, 3).map((d) => `${d.name} ${fmtCompact(d.bal)}`).join(" · ")
+      ? `${count} ${tone === "in" ? (count === 1 ? "customer owes" : "customers owe") : count === 1 ? "mill to pay" : "mills to pay"}`
       : emptyLabel;
 
   return (
@@ -142,7 +140,7 @@ function DueCard({
         <p className={`text-[28px] sm:text-[32px] font-bold tabular-nums leading-none ${value > 0 ? accent : "text-neutral-400"}`}>
           {value > 0 ? fmtMoney(value) : "—"}
         </p>
-        <p className="mt-2.5 text-[11px] text-neutral-400 leading-relaxed line-clamp-2">{hint}</p>
+        <p className="mt-2.5 text-[11px] text-neutral-400 leading-relaxed">{hint}</p>
       </div>
     </Card>
   );
@@ -205,14 +203,17 @@ export default function DashboardPage() {
     customers,
     suppliers,
     sales,
+    purchases,
     payments,
     expenses,
     inventory,
     byItem,
     lineUnitCost,
     products,
+    categories,
     customerBalance,
     supplierBalance,
+    salePaid,
   } = useStore();
   const { user } = useAuth();
   const initials = (user?.name ?? "O")
@@ -385,16 +386,65 @@ export default function DashboardPage() {
         hint: `Worth ${fmtCompact(stockValue)}`,
       };
 
-  /* dues are whole-depot figures — who owes us, and which mills we owe */
+  /* who owes us, and which mills we owe — scoped to the selected product.
+     Whole depot ("all"): full ledger balances. A product: customer dues are
+     the outstanding on invoices containing that product, mill dues are the
+     unpaid steel amounts on that product's purchases. */
   const dues = useMemo(() => {
+    const productName = product?.name ?? "";
+    const catProduct = new Map(
+      categories.map((c) => [c.id, products.find((p) => p.id === c.productId)?.name])
+    );
+    const lineInScope = (l: { categoryId?: string; item: string }) =>
+      (l.categoryId ? catProduct.get(l.categoryId) : undefined) === productName ||
+      productOf[l.item] === productName;
+
+    if (isAll) {
+      const custDues = customers
+        .map((c) => ({ name: c.name, bal: customerBalance(c.id) }))
+        .filter((d) => d.bal > 0)
+        .sort((a, b) => b.bal - a.bal);
+      const millDues = suppliers
+        .map((s) => ({ name: s.name, bal: supplierBalance(s.id) }))
+        .filter((d) => d.bal > 0)
+        .sort((a, b) => b.bal - a.bal);
+      return {
+        receivable: custDues.reduce((a, d) => a + d.bal, 0),
+        payable: millDues.reduce((a, d) => a + d.bal, 0),
+        owingCustomers: custDues.length,
+        owingMills: millDues.length,
+        custDues,
+        millDues,
+      };
+    }
+
+    const custMap: Record<string, number> = {};
+    for (const s of sales) {
+      if (!s.lines.some(lineInScope)) continue;
+      const outstanding = Math.max(0, saleGrandTotal(s) - salePaid(s.id));
+      if (outstanding <= 0.001) continue;
+      custMap[s.customerId] = (custMap[s.customerId] ?? 0) + outstanding;
+    }
     const custDues = customers
-      .map((c) => ({ name: c.name, bal: customerBalance(c.id) }))
-      .filter((d) => d.bal > 0)
+      .map((c) => ({ name: c.name, bal: custMap[c.id] ?? 0 }))
+      .filter((d) => d.bal > 0.001)
       .sort((a, b) => b.bal - a.bal);
+
+    const millMap: Record<string, number> = {};
+    for (const p of purchases) {
+      const inScope =
+        p.product === productName ||
+        (p.categoryId ? catProduct.get(p.categoryId) === productName : false);
+      if (!inScope) continue;
+      const bal = Math.max(0, steelAmount(p) - (p.paid ?? 0));
+      if (bal <= 0.001) continue;
+      millMap[p.supplierId] = (millMap[p.supplierId] ?? 0) + bal;
+    }
     const millDues = suppliers
-      .map((s) => ({ name: s.name, bal: supplierBalance(s.id) }))
-      .filter((d) => d.bal > 0)
+      .map((s) => ({ name: s.name, bal: millMap[s.id] ?? 0 }))
+      .filter((d) => d.bal > 0.001)
       .sort((a, b) => b.bal - a.bal);
+
     return {
       receivable: custDues.reduce((a, d) => a + d.bal, 0),
       payable: millDues.reduce((a, d) => a + d.bal, 0),
@@ -403,7 +453,20 @@ export default function DashboardPage() {
       custDues,
       millDues,
     };
-  }, [customers, suppliers, customerBalance, supplierBalance]);
+  }, [
+    isAll,
+    product,
+    customers,
+    suppliers,
+    sales,
+    purchases,
+    categories,
+    products,
+    productOf,
+    customerBalance,
+    supplierBalance,
+    salePaid,
+  ]);
 
   return (
     <Page>
@@ -504,7 +567,6 @@ export default function DashboardPage() {
             label="Customer dues"
             value={dues.receivable}
             count={dues.owingCustomers}
-            names={dues.custDues}
             emptyLabel="No outstanding customer balances"
             tone="in"
           />
@@ -514,7 +576,6 @@ export default function DashboardPage() {
             label="Mill dues"
             value={dues.payable}
             count={dues.owingMills}
-            names={dues.millDues}
             emptyLabel="Nothing owed to mills"
             tone="out"
           />

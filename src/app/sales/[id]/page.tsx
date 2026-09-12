@@ -36,6 +36,7 @@ export default function SaleInvoicePage() {
       product: product?.name ?? null,
       category: cat?.name ?? null,
       item: variant?.shortName ?? l.item,
+      qualityName: l.qualityName ?? l.quality ?? null,
       attributes,
     };
   };
@@ -75,6 +76,9 @@ export default function SaleInvoicePage() {
         discountPct={sale.discountPct ?? 0}
         tax={tax}
         taxPct={sale.taxPct ?? 0}
+        loadingCharges={sale.loadingCharges ?? 0}
+        transportCharges={sale.transportCharges ?? 0}
+        labourCharges={sale.labourCharges ?? 0}
         grandTotal={grand}
         paid={paid}
         due={due}

@@ -9,6 +9,7 @@ export type InvoiceLineDetail = {
   product: string | null;
   category: string | null;
   item: string;
+  qualityName?: string | null;
   attributes: { label: string; value: string }[];
 };
 
@@ -21,6 +22,9 @@ export default function InvoiceDocument({
   discountPct,
   tax,
   taxPct,
+  loadingCharges = 0,
+  transportCharges = 0,
+  labourCharges = 0,
   grandTotal,
   paid,
   due,
@@ -34,14 +38,17 @@ export default function InvoiceDocument({
   discountPct: number;
   tax: number;
   taxPct: number;
+  loadingCharges?: number;
+  transportCharges?: number;
+  labourCharges?: number;
   grandTotal: number;
   paid: number;
   due: number;
   lineDetailOf: (line: SaleLine) => InvoiceLineDetail;
 }) {
   const hasAdjustments = discount > 0 || tax > 0;
-  const hasDue = due > 0.001;
   const hasPaid = paid > 0.001;
+  const hasDue = due > 0.001;
 
   return (
     <div className="print-area bg-white text-[#171717] max-w-[210mm] mx-auto border border-neutral-200 sm:border-neutral-300 rounded-sm overflow-hidden">
@@ -49,7 +56,12 @@ export default function InvoiceDocument({
       <div className="px-8 sm:px-10 pt-9 pb-6 border-b border-neutral-200">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-5">
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{business.businessName}</h1>
+            <img
+              src="/images/logo.png"
+              alt={business.businessName}
+              title={business.businessName}
+              className="h-20 w-auto max-w-full object-contain object-left"
+            />
             <p className="text-[12px] text-neutral-500 mt-2 leading-relaxed">
               {[business.address, business.city].filter(Boolean).join(" · ")}
               {business.phone && (
@@ -105,8 +117,13 @@ export default function InvoiceDocument({
                   <td className="!py-4 !text-[12px] text-neutral-400 align-top">{i + 1}</td>
                   <td className="!py-4 align-top min-w-0">
                     <p className="text-[14px] font-semibold leading-snug">{d.item}</p>
+                    {d.qualityName && (
+                      <span className="inline-block mt-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#171717] bg-neutral-100 border border-neutral-300 rounded-sm">
+                        Quality: {d.qualityName}
+                      </span>
+                    )}
                     {productLine && (
-                      <p className="text-[12px] text-neutral-600 mt-1">{productLine}</p>
+                      <p className="text-[12px] text-neutral-600 mt-1.5">{productLine}</p>
                     )}
                     {d.attributes.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
@@ -153,8 +170,27 @@ export default function InvoiceDocument({
                 <span className="tabular-nums">{fmtMoney(tax)}</span>
               </div>
             )}
-            <div className="flex justify-between items-center py-3 mt-1 border-b border-neutral-100">
-              <span className="text-[13px] font-semibold">Total</span>
+            <div className="mt-3 border border-neutral-300 bg-neutral-50 rounded-md overflow-hidden">
+              <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-500 border-b border-neutral-200">
+                Charges
+              </p>
+              <div className="px-3 py-2 space-y-1.5">
+                {[
+                  { label: "Loading Charges", value: loadingCharges },
+                  { label: "Transport Charges", value: transportCharges },
+                  { label: "Labour Cost", value: labourCharges },
+                ].map((c) => (
+                  <div key={c.label} className="flex justify-between text-[13px] text-neutral-700">
+                    <span>{c.label}</span>
+                    <span className={`tabular-nums ${c.value > 0 ? "font-semibold" : "text-neutral-400"}`}>
+                      {c.value > 0 ? `+ ${fmtMoney(c.value)}` : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-between items-center py-3 px-3 mt-3 bg-[#171717] text-white rounded-sm">
+              <span className="text-[12px] uppercase tracking-widest text-neutral-400 font-medium">Total</span>
               <span className="text-[18px] font-bold tabular-nums">{fmtMoney(grandTotal)}</span>
             </div>
             {hasPaid && (

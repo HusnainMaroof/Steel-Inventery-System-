@@ -40,6 +40,13 @@ export default function NewSaleModal({
     setTaxPct: (n: number) => void;
     discAmt: number;
     taxAmt: number;
+    loadingCharges: number;
+    setLoadingCharges: (n: number) => void;
+    transportCharges: number;
+    setTransportCharges: (n: number) => void;
+    labourCharges: number;
+    setLabourCharges: (n: number) => void;
+    chargesAmt: number;
     grandTotal: number;
     paidNow: number;
     setPaidNow: (n: number) => void;
@@ -114,6 +121,13 @@ export default function NewSaleModal({
               setTaxPct={entSummary.setTaxPct}
               discAmt={entSummary.discAmt}
               taxAmt={entSummary.taxAmt}
+              loadingCharges={entSummary.loadingCharges}
+              setLoadingCharges={entSummary.setLoadingCharges}
+              transportCharges={entSummary.transportCharges}
+              setTransportCharges={entSummary.setTransportCharges}
+              labourCharges={entSummary.labourCharges}
+              setLabourCharges={entSummary.setLabourCharges}
+              chargesAmt={entSummary.chargesAmt}
               grandTotal={entSummary.grandTotal}
               paidNow={entSummary.paidNow}
               setPaidNow={entSummary.setPaidNow}

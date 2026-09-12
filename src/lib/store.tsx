@@ -32,7 +32,11 @@ import { defaultShortName, variantKey } from "./catalogue";
 import { seedInitialState } from "./seed";
 
 export const purchaseTotal = (p: Purchase) =>
-  p.qty * p.rate + p.transport + p.otherCost;
+  p.qty * p.rate +
+  p.transport +
+  (p.loadingCharges ?? 0) +
+  (p.labourCharges ?? 0) +
+  p.otherCost;
 
 // what we owe the MILL: steel amount only — transport & other costs are on us
 export const steelAmount = (p: Purchase) => p.qty * p.rate;
@@ -46,7 +50,12 @@ export const saleDiscount = (s: Sale) =>
   saleTotal(s) * ((s.discountPct ?? 0) / 100);
 export const saleTaxable = (s: Sale) => saleTotal(s) - saleDiscount(s);
 export const saleTax = (s: Sale) => saleTaxable(s) * ((s.taxPct ?? 0) / 100);
-export const saleGrandTotal = (s: Sale) => saleTaxable(s) + saleTax(s);
+
+/* flat invoice-wide charges (loading / transport / labour) — not taxed */
+export const saleCharges = (s: Sale) =>
+  (s.loadingCharges ?? 0) + (s.transportCharges ?? 0) + (s.labourCharges ?? 0);
+
+export const saleGrandTotal = (s: Sale) => saleTaxable(s) + saleTax(s) + saleCharges(s);
 export type InvoiceStatus = "paid" | "unpaid";
 
 export const invoiceStatus = (paid: number, total: number): InvoiceStatus =>

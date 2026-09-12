@@ -28,7 +28,7 @@ export default function SaleDetailModal({
     (id && suppliers.find((s) => s.id === id)?.name) || "";
   const productOf = (item: string) =>
     inventory.find((r) => r.item === item)?.product || "";
-  const lineCaption = (l: { categoryId?: string; attributeSnapshot?: Record<string, string>; item: string; spec?: string; quality?: string; supplierId?: string }) => {
+  const lineCaption = (l: { categoryId?: string; attributeSnapshot?: Record<string, string>; item: string; spec?: string; quality?: string; qualityName?: string; supplierId?: string }) => {
     const defs =
       l.categoryId
         ? attributeDefs
@@ -128,6 +128,11 @@ export default function SaleDetailModal({
                     <tr key={i}>
                       <td className="font-medium max-w-[200px]">
                         <span className="block truncate">{l.item}</span>
+                        {l.qualityName ? (
+                          <span className="inline-block mt-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#171717] bg-neutral-100 border border-neutral-300 rounded-sm">
+                            {l.qualityName}
+                          </span>
+                        ) : null}
                         {source ? (
                           <span className="block text-[11px] text-neutral-400 font-normal truncate">{source}</span>
                         ) : null}
@@ -185,6 +190,15 @@ export default function SaleDetailModal({
               )}
               {tax > 0 && (
                 <div className="flex justify-between"><span className="text-neutral-500">Tax ({sale.taxPct ?? 0}%)</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(tax)}</span></div>
+              )}
+              {(sale.loadingCharges ?? 0) > 0 && (
+                <div className="flex justify-between"><span className="text-neutral-500">Loading Charges</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(sale.loadingCharges!)}</span></div>
+              )}
+              {(sale.transportCharges ?? 0) > 0 && (
+                <div className="flex justify-between"><span className="text-neutral-500">Transport Charges</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(sale.transportCharges!)}</span></div>
+              )}
+              {(sale.labourCharges ?? 0) > 0 && (
+                <div className="flex justify-between"><span className="text-neutral-500">Labour Cost</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(sale.labourCharges!)}</span></div>
               )}
               <div className="flex justify-between items-center pt-2 mt-2 border-t border-neutral-100">
                 <span className="font-semibold">Total</span>

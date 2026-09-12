@@ -14,6 +14,7 @@ export interface SaleDraftLine {
   unit: string;
   qty: number;
   rate: number;
+  qualityName?: string; // quality name shown on the invoice (prefilled, editable)
   supplierId?: string; // set when a specific source lot is chosen
   purchaseId?: string; // exact lot, when chosen
 }
@@ -56,6 +57,7 @@ export function useSaleDraft() {
     suppliers,
     warehouses,
     locations,
+    purchases,
     inventory,
     inventoryByVariant,
     stockLots,
@@ -185,6 +187,14 @@ export function useSaleDraft() {
   const addDraftItem = () => {
     if (!canAdd || !pickVariant) return;
     const source = pickLot ?? pickLots[0];
+    // prefill the quality name from the source lot's purchase quality,
+    // falling back to the variant's grade/quality attribute
+    const sourcePurchase = source
+      ? purchases.find((p) => p.id === source.purchaseId)
+      : undefined;
+    const gradeAttr = Object.entries(pickVariant.attributes ?? {}).find(([k]) =>
+      /grade|quality/i.test(k)
+    )?.[1];
     setLines((prev) => [
       ...prev,
       {
@@ -195,6 +205,7 @@ export function useSaleDraft() {
         unit: draftUnit,
         qty: Number(pick.qty) || 1,
         rate: Math.round(draftPrice ?? (draftLanded * 1.15)) || 0,
+        qualityName: sourcePurchase?.quality || gradeAttr || undefined,
         // explicit lot only when the operator picks one; otherwise leave unset
         // so the store consumes FIFO across the variant's lots
         supplierId: pick.lotId ? source?.supplierId : undefined,

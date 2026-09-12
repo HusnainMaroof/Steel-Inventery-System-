@@ -29,6 +29,9 @@ export default function SalesPage() {
   const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
   const [discountPct, setDiscountPct] = useState(0);
   const [taxPct, setTaxPct] = useState(0);
+  const [loadingCharges, setLoadingCharges] = useState(0);
+  const [transportCharges, setTransportCharges] = useState(0);
+  const [labourCharges, setLabourCharges] = useState(0);
   const [paidNow, setPaidNow] = useState(0);
   const [payError, setPayError] = useState("");
 
@@ -37,7 +40,9 @@ export default function SalesPage() {
   const discAmt = subtotal * (discountPct / 100);
   const taxable = subtotal - discAmt;
   const taxAmt = taxable * (taxPct / 100);
-  const grandTotal = taxable + taxAmt;
+  const chargesAmt =
+    (Number(loadingCharges) || 0) + (Number(transportCharges) || 0) + (Number(labourCharges) || 0);
+  const grandTotal = taxable + taxAmt + chargesAmt;
   const remaining = Math.max(0, grandTotal - (Number(paidNow) || 0));
   const canSave =
     api.lines.length > 0 &&
@@ -49,6 +54,9 @@ export default function SalesPage() {
     api.removeAll();
     setDiscountPct(0);
     setTaxPct(0);
+    setLoadingCharges(0);
+    setTransportCharges(0);
+    setLabourCharges(0);
     setPaidNow(0);
     setPayError("");
     setSaleDate(new Date().toISOString().slice(0, 10));
@@ -83,11 +91,15 @@ export default function SalesPage() {
       customerId: existingId,
       discountPct,
       taxPct,
+      loadingCharges: chargesAmt > 0 ? Number(loadingCharges) || 0 : 0,
+      transportCharges: chargesAmt > 0 ? Number(transportCharges) || 0 : 0,
+      labourCharges: chargesAmt > 0 ? Number(labourCharges) || 0 : 0,
       lines: api.lines.map((l) => ({
         item: l.item,
         qty: Number(l.qty),
         rate: Number(l.rate),
         unit: l.unit,
+        qualityName: l.qualityName?.trim() || undefined,
         categoryId: l.categoryId || undefined,
         variantId: l.variantId || undefined,
         attributeSnapshot: l.snapshot,
@@ -181,6 +193,13 @@ export default function SalesPage() {
           setTaxPct,
           discAmt,
           taxAmt,
+          loadingCharges,
+          setLoadingCharges,
+          transportCharges,
+          setTransportCharges,
+          labourCharges,
+          setLabourCharges,
+          chargesAmt,
           grandTotal,
           paidNow,
           setPaidNow: (n: number) => { setPaidNow(n); setPayError(""); },

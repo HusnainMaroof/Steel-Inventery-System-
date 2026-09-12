@@ -37,6 +37,7 @@ export default function LineItemsTable({
           <tr>
             <th>Item</th>
             <th>Attributes / Source</th>
+            <th>Quality Name</th>
             <th className="num">Qty</th>
             <th className="num">Rate</th>
             <th className="num">Amount</th>
@@ -57,6 +58,15 @@ export default function LineItemsTable({
                 <td className="text-neutral-500 text-xs whitespace-nowrap">
                   {attrText ? `${attrText} · ` : ""}
                   {sourceLabel(l)}
+                </td>
+                <td>
+                  <input
+                    className="!w-36"
+                    placeholder="e.g. 60 Grade"
+                    title="Quality name printed on the invoice"
+                    value={l.qualityName ?? ""}
+                    onChange={(e) => api.setLine(i, { qualityName: e.target.value })}
+                  />
                 </td>
                 <td className="num">
                   <div className="inline-flex items-center justify-end gap-1.5">
