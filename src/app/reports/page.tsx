@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { type ColumnDef } from "@tanstack/react-table";
-import { useStore, purchaseTotal, saleGrandTotal } from "@/lib/store";
+import { useStore, purchaseTotal, saleTotal, saleGrandTotal } from "@/lib/store";
 import { Page, PageTitle, Tabs, CustomSelect, StatCard, Stagger, StaggerItem, EmptyState } from "@/components/ui";
 import { fmtMoney, monthKey, monthLabel } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
@@ -43,13 +43,29 @@ function Row({
 type MonthStat = {
   key: string;
   label: string;
+  purchaseCount: number; // how many purchase lots were made
   purchaseSpend: number;
   revenue: number;
   cogs: number;
+  gross: number; // revenue − cogs (profit before any other costs)
   expenses: number;
   net: number;
   margin: number;
 };
+
+/* resolve which Product a record belongs to (category → product,
+   variant → category → product, or legacy item-name map) — works for
+   both sale lines and purchase lots */
+const recordProductId = (
+  r: { categoryId?: string; variantId?: string; item: string },
+  varCat: Map<string, string>,
+  catProd: Map<string, string>,
+  itemProd: Map<string, string>
+) =>
+  (r.categoryId && catProd.get(r.categoryId)) ||
+  (r.variantId && catProd.get(varCat.get(r.variantId) ?? "")) ||
+  itemProd.get(r.item) ||
+  "";
 
 /* P&L monthly breakdown columns */
 const pnlMonthCols: ColumnDef<MonthStat>[] = [
@@ -60,6 +76,12 @@ const pnlMonthCols: ColumnDef<MonthStat>[] = [
     cell: (c) => <span className="font-medium">{c.getValue<string>()}</span>,
   },
   {
+    accessorKey: "purchaseCount",
+    header: "Purchases",
+    meta: { hiddenOnMobile: true, align: "right" },
+    cell: (c) => <span className="num text-neutral-500">{c.getValue<number>()}</span>,
+  },
+  {
     accessorKey: "revenue",
     header: "Revenue",
     meta: { hiddenOnMobile: true, align: "right" },
@@ -67,18 +89,12 @@ const pnlMonthCols: ColumnDef<MonthStat>[] = [
   },
   {
     accessorKey: "cogs",
-    header: "COGS",
+    header: "Stock cost",
     meta: { hiddenOnMobile: true, align: "right" },
     cell: (c) => <span className="num text-neutral-500">{fmtMoney(c.getValue<number>())}</span>,
   },
   {
-    accessorKey: "expenses",
-    header: "Expenses",
-    meta: { hiddenOnMobile: true, align: "right" },
-    cell: (c) => <span className="num text-neutral-500">{fmtMoney(c.getValue<number>())}</span>,
-  },
-  {
-    accessorKey: "net",
+    accessorKey: "gross",
     header: "Profit",
     meta: { align: "right", card: { position: "amount" } },
     cell: (c) => {
@@ -139,17 +155,56 @@ const summaryMonthCols: ColumnDef<MonthStat>[] = [
 ];
 
 export default function ReportsPage() {
-  const { purchases, sales, expenses, inventory, byItem, lineUnitCost, customers, customerBalance, suppliers, supplierBalance } =
-    useStore();
+  const {
+    purchases,
+    sales,
+    expenses,
+    inventory,
+    byItem,
+    lineUnitCost,
+    salePaid,
+    customers,
+    customerBalance,
+    suppliers,
+    supplierBalance,
+    products,
+    categories,
+    variants,
+    productItems,
+  } = useStore();
 
   /* outer: which combined view */
   const [view, setView] = useState<"pnl" | "summary">("pnl");
 
   /* P&L tab controls */
   const [pnlMode, setPnlMode] = useState<"all" | "month">("all");
+  const [productFilter, setProductFilter] = useState<string>("");
 
   /* Summary tab controls */
   const [repTab, setRepTab] = useState<"monthly" | "yearly">("monthly");
+
+  /* resolve which Product a record belongs to (category → product,
+     variant → category → product, or legacy item-name map) — works for
+     both sale lines and purchase lots */
+  const productMaps = useMemo(
+    () => ({
+      varCat: new Map(variants.map((v) => [v.id, v.categoryId])),
+      catProd: new Map(categories.map((c) => [c.id, c.productId])),
+      itemProd: new Map(productItems.map((it) => [it.name, it.productId])),
+    }),
+    [variants, categories, productItems]
+  );
+  const productOf = useCallback(
+    (r: { categoryId?: string; variantId?: string; item: string }) =>
+      recordProductId(r, productMaps.varCat, productMaps.catProd, productMaps.itemProd),
+    [productMaps]
+  );
+
+  const productOptions = useMemo(
+    () => [{ value: "", label: "All products" }, ...products.map((p) => ({ value: p.id, label: p.name }))],
+    [products]
+  );
+  const productName = products.find((p) => p.id === productFilter)?.name;
 
   const monthStats = useMemo<MonthStat[]>(() => {
     const keys = Array.from(
@@ -160,18 +215,32 @@ export default function ReportsPage() {
       ])
     ).sort();
     return keys.map((k) => {
-      const ps = purchases.filter((p) => monthKey(p.date) === k);
+      const ps = purchases.filter(
+        (p) => monthKey(p.date) === k && (!productFilter || productOf(p) === productFilter)
+      );
       const ss = sales.filter((s) => monthKey(s.date) === k);
-      const es = expenses.filter((e) => monthKey(e.date) === k);
+      const es = productFilter ? [] : expenses.filter((e) => monthKey(e.date) === k);
       const purchaseSpend = ps.reduce((a, p) => a + purchaseTotal(p), 0);
-      const revenue = ss.reduce((a, s) => a + saleGrandTotal(s), 0);
+      /* per-product revenue attributes each invoice's discount/tax/charges
+         across its lines in proportion to their share of the subtotal */
+      const revenue = ss.reduce((a, s) => {
+        const sub = saleTotal(s);
+        const grand = saleGrandTotal(s);
+        return (
+          a +
+          s.lines.reduce((b, l) => {
+            if (productFilter && productOf(l) !== productFilter) return b;
+            return b + (sub > 0 ? (l.qty * l.rate * grand) / sub : 0);
+          }, 0)
+        );
+      }, 0);
       const cogs = ss.reduce(
         (a, s) =>
           a +
-          s.lines.reduce(
-            (b, l, i) => b + l.qty * (lineUnitCost(s.id, i) || byItem[l.item] || 0),
-            0
-          ),
+          s.lines.reduce((b, l, i) => {
+            if (productFilter && productOf(l) !== productFilter) return b;
+            return b + l.qty * (lineUnitCost(s.id, i) || byItem[l.item] || 0);
+          }, 0),
         0
       );
       const expensesSum = es.reduce((a, e) => a + e.amount, 0);
@@ -179,15 +248,17 @@ export default function ReportsPage() {
       return {
         key: k,
         label: monthLabel(k),
+        purchaseCount: ps.length,
         purchaseSpend,
         revenue,
         cogs,
+        gross: revenue - cogs,
         expenses: expensesSum,
         net,
-        margin: revenue > 0 ? (net / revenue) * 100 : 0,
+        margin: revenue > 0 ? ((revenue - cogs) / revenue) * 100 : 0,
       };
     });
-  }, [purchases, sales, expenses, byItem, lineUnitCost]);
+  }, [purchases, sales, expenses, byItem, lineUnitCost, productFilter, productOf]);
 
   /* P&L tab state — month defaults to the most recent month */
   const [month, setMonth] = useState<string>(() => "");
@@ -203,16 +274,45 @@ export default function ReportsPage() {
     if (pnlMode === "month" && target) return target;
     return monthStats.reduce(
       (a, m) => ({
+        purchaseCount: a.purchaseCount + m.purchaseCount,
         purchaseSpend: a.purchaseSpend + m.purchaseSpend,
         revenue: a.revenue + m.revenue,
         cogs: a.cogs + m.cogs,
+        gross: a.gross + m.gross,
         expenses: a.expenses + m.expenses,
         net: a.net + m.net,
         margin: 0,
       }),
-      { purchaseSpend: 0, revenue: 0, cogs: 0, expenses: 0, net: 0, margin: 0 }
+      { purchaseCount: 0, purchaseSpend: 0, revenue: 0, cogs: 0, gross: 0, expenses: 0, net: 0, margin: 0 }
     );
   }, [monthStats, pnlMode, effectiveMonth]);
+
+  /* Dues shown on the P&L tab — shop-wide totals, or scoped to the
+     selected product (each invoice/lot's dues attributed by its share) */
+  const pnlDues = useMemo(() => {
+    if (!productFilter) {
+      return {
+        receivable: customers.reduce((a, c) => a + Math.max(0, customerBalance(c.id)), 0),
+        payable: suppliers.reduce((a, s) => a + Math.max(0, supplierBalance(s.id)), 0),
+      };
+    }
+    const receivable = sales.reduce((a, s) => {
+      const sub = saleTotal(s);
+      const sold = s.lines.reduce(
+        (b, l) => (productOf(l) === productFilter ? b + l.qty * l.rate : b),
+        0
+      );
+      if (sold <= 0 || sub <= 0) return a;
+      const share = sold / sub;
+      return a + share * Math.max(0, saleGrandTotal(s) - salePaid(s.id));
+    }, 0);
+    const payable = purchases.reduce(
+      (a, p) =>
+        productOf(p) === productFilter ? a + Math.max(0, purchaseTotal(p) - (p.paid ?? 0)) : a,
+      0
+    );
+    return { receivable, payable };
+  }, [productFilter, customers, customerBalance, suppliers, supplierBalance, sales, purchases, salePaid, productOf]);
 
   /* Summary tab aggregates */
   const year = useMemo(() => {
@@ -268,7 +368,7 @@ export default function ReportsPage() {
         />
       ) : view === "pnl" ? (
         <>
-          {/* P&L scope controls */}
+          {/* P&L scope controls — all filters on one row */}
           <div className="flex flex-wrap items-center gap-3 mb-8">
             <Tabs
               tabs={[
@@ -279,58 +379,77 @@ export default function ReportsPage() {
               onChange={(k) => setPnlMode(k as "all" | "month")}
             />
             {pnlMode === "month" && monthOptions.length > 0 && (
-              <CustomSelect
-                value={effectiveMonth}
-                onChange={setMonth}
-                options={monthOptions}
-                placeholder="Pick a month"
-              />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-neutral-500">Month</span>
+                <CustomSelect
+                  value={effectiveMonth}
+                  onChange={setMonth}
+                  options={monthOptions}
+                  placeholder="Pick a month"
+                />
+              </div>
             )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-neutral-500">Product</span>
+              <CustomSelect
+                value={productFilter}
+                onChange={setProductFilter}
+                options={productOptions}
+                placeholder="All products"
+              />
+            </div>
           </div>
 
           {/* Summary cards */}
           <Stagger className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
             <StaggerItem><StatCard label="Money in (sales)" value={scoped.revenue} /></StaggerItem>
-            <StaggerItem><StatCard label="Cost of stock sold" value={-scoped.cogs} /></StaggerItem>
-            <StaggerItem><StatCard label="Shop expenses" value={-scoped.expenses} /></StaggerItem>
-            <StaggerItem><StatCard label="Profit left" value={scoped.net} invert={scoped.net > 0} /></StaggerItem>
+            <StaggerItem><StatCard label="Purchases made" value={scoped.purchaseCount} money={false} /></StaggerItem>
+            <StaggerItem><StatCard label="Spent on stock" value={scoped.purchaseSpend} /></StaggerItem>
+            <StaggerItem><StatCard label="Profit left" value={scoped.gross} invert={scoped.gross > 0} /></StaggerItem>
           </Stagger>
 
           {/* P&L statement + Credit/Debit */}
           <div className="grid md:grid-cols-2 gap-10">
             <div>
               <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mb-4">
-                {pnlMode === "month" ? `Statement — ${monthLabel(effectiveMonth)}` : "All-time statement"}
+                {pnlMode === "month"
+                  ? `Statement — ${productName ? `${productName} — ` : ""}${monthLabel(effectiveMonth)}`
+                  : productName
+                    ? `Statement — ${productName} — All time`
+                    : "All-time statement"}
               </h2>
               <div className="border border-neutral-200 p-4">
-                <Row label="Revenue — from sales" value={scoped.revenue} />
-                <Row label="Less — cost of stock sold (COGS)" value={scoped.cogs} minus />
-                <Row label="Gross profit" value={scoped.revenue - scoped.cogs} strong />
-                <Row label="Less — shop expenses" value={scoped.expenses} minus />
+                <Row label="Money from sales" value={scoped.revenue} />
+                <Row label="Less — cost of stock you sold" value={scoped.cogs} minus />
                 <div className="flex justify-between py-4 mt-1 bg-black text-white px-4 -mx-4">
-                  <span className="text-xs uppercase tracking-widest">Net profit</span>
+                  <span className="text-xs uppercase tracking-widest">Profit</span>
                   <motion.span
-                    key={scoped.net}
+                    key={scoped.gross}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="tabular-nums text-lg font-medium"
                   >
-                    {fmtMoney(scoped.net)}
+                    {fmtMoney(scoped.gross)}
                   </motion.span>
                 </div>
               </div>
+              {scoped.purchaseSpend > 0 && (
+                <p className="text-xs text-neutral-500 mt-3">
+                  You also spent {fmtMoney(scoped.purchaseSpend)} buying stock in this period.
+                </p>
+              )}
               {scoped.revenue > 0 && (
                 <p className="text-xs text-neutral-500 mt-3">
-                  On every ₨100 of sales you keep about ₨{((scoped.net / scoped.revenue) * 100).toFixed(0)} of profit.
+                  On every ₨100 of sales you keep about ₨{((scoped.gross / scoped.revenue) * 100).toFixed(0)} of profit.
                 </p>
               )}
             </div>
 
             <div>
               <h2 className="text-xs uppercase tracking-[0.15em] text-neutral-500 mb-4">
-                Credit &amp; Debit — who owes who
+                Credit &amp; Debit — total dues
               </h2>
-              <CreditDebit />
+              <CreditDebit showWho={false} receivable={pnlDues.receivable} payable={pnlDues.payable} />
             </div>
           </div>
 

@@ -3,21 +3,31 @@
 import { useStore } from "@/lib/store";
 import { fmtMoney } from "@/lib/format";
 
-/** Simple "who owes who" panel — customers owing you vs. what you owe suppliers. */
-export default function CreditDebit() {
+/** "Who owes who" panel — customers owing you vs. what you owe suppliers.
+ *  Pass showWho={false} to show only the total due numbers, no party lists.
+ *  Pass receivable/payable to override the totals (e.g. scoped to one product). */
+export default function CreditDebit({
+  showWho = true,
+  receivable: receivableProp,
+  payable: payableProp,
+}: {
+  showWho?: boolean;
+  receivable?: number;
+  payable?: number;
+}) {
   const { customers, customerBalance, suppliers, supplierBalance } = useStore();
 
   const owingCustomers = customers
     .map((c) => ({ c, bal: customerBalance(c.id) }))
     .filter((x) => x.bal > 0)
     .sort((a, b) => b.bal - a.bal);
-  const totalReceivable = owingCustomers.reduce((a, x) => a + x.bal, 0);
+  const totalReceivable = receivableProp ?? owingCustomers.reduce((a, x) => a + x.bal, 0);
 
   const owingSuppliers = suppliers
     .map((s) => ({ s, bal: supplierBalance(s.id) }))
     .filter((x) => x.bal > 0)
     .sort((a, b) => b.bal - a.bal);
-  const totalPayable = owingSuppliers.reduce((a, x) => a + x.bal, 0);
+  const totalPayable = payableProp ?? owingSuppliers.reduce((a, x) => a + x.bal, 0);
 
   return (
     <div className="grid grid-cols-2 gap-4 mb-6">
@@ -26,7 +36,7 @@ export default function CreditDebit() {
           Customers owe you
         </span>
         <span className="block text-xl font-medium tabular-nums mt-1">{fmtMoney(totalReceivable)}</span>
-        {owingCustomers.length > 0 && (
+        {showWho && owingCustomers.length > 0 && (
           <ul className="mt-3 space-y-1">
             {owingCustomers.slice(0, 3).map((x) => (
               <li key={x.c.id} className="flex justify-between text-xs text-neutral-300">
@@ -45,7 +55,7 @@ export default function CreditDebit() {
           You owe suppliers
         </span>
         <span className="block text-xl font-medium tabular-nums mt-1">{fmtMoney(totalPayable)}</span>
-        {owingSuppliers.length > 0 && (
+        {showWho && owingSuppliers.length > 0 && (
           <ul className="mt-3 space-y-1">
             {owingSuppliers.slice(0, 3).map((x) => (
               <li key={x.s.id} className="flex justify-between text-xs text-neutral-600">
