@@ -1,45 +1,22 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useMemo } from "react";
 import { useStore, saleTotal, saleDiscount, saleTax, saleGrandTotal } from "@/lib/store";
 import { useBusinessProfile } from "@/lib/auth";
-import { attrsInOrder, groupDefsByCategory } from "@/lib/catalogue";
-import InvoiceDocument, { type InvoiceLineDetail } from "@/components/InvoiceDocument";
-import type { SaleLine } from "@/lib/types";
-import { useMemo } from "react";
+import InvoiceDocument from "@/components/InvoiceDocument";
+import { invoiceLineDetail } from "@/lib/invoiceDetail";
 
 export default function SaleInvoicePage() {
   const params = useParams<{ id: string }>();
   const business = useBusinessProfile();
   const { sales, customers, products, categories, variants, attributeDefs, salePaid } = useStore();
   const sale = sales.find((s) => s.id === params.id);
-
-  const defsByCat = useMemo(() => groupDefsByCategory(attributeDefs), [attributeDefs]);
-
-  const lineDetailOf = (l: SaleLine): InvoiceLineDetail => {
-    const cat = l.categoryId ? categories.find((c) => c.id === l.categoryId) : undefined;
-    const product = cat ? products.find((p) => p.id === cat.productId) : undefined;
-    const variant = l.variantId ? variants.find((v) => v.id === l.variantId) : undefined;
-    const defs = l.categoryId ? defsByCat[l.categoryId] ?? [] : [];
-
-    const attributes = l.attributeSnapshot
-      ? attrsInOrder(defs, l.attributeSnapshot).map((r) => ({
-          label: r.def.name,
-          value: r.value,
-        }))
-      : [l.spec, l.quality]
-          .filter(Boolean)
-          .map((v, i) => ({ label: i === 0 ? "Spec" : "Grade", value: v! }));
-
-    return {
-      product: product?.name ?? null,
-      category: cat?.name ?? null,
-      item: variant?.shortName ?? l.item,
-      qualityName: l.qualityName ?? l.quality ?? null,
-      attributes,
-    };
-  };
+  const ctx = useMemo(
+    () => ({ products, categories, variants, attributeDefs }),
+    [products, categories, variants, attributeDefs]
+  );
 
   if (!sale)
     return (
@@ -82,7 +59,7 @@ export default function SaleInvoicePage() {
         grandTotal={grand}
         paid={paid}
         due={due}
-        lineDetailOf={lineDetailOf}
+        lineDetailOf={(l) => invoiceLineDetail(l, ctx)}
       />
     </div>
   );

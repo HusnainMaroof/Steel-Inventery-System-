@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { fmtQtyWithUnit, fmtRateWithUnit, qtyUnitLabel } from "@/lib/format";
 import { OptionalSection } from "@/components/ui";
+import { AttributeFields } from "@/components/catalogue/AttributeFields";
 import type { SaleDraftApi } from "./useSaleDraft";
 
 const numVal = (n: number) => (n === 0 ? "" : String(n));
@@ -18,11 +19,11 @@ export default function AddItemBar({
 }) {
   const { pick, setPick } = api;
   const [showLot, setShowLot] = useState(showOptionalDetails);
-  const categories = api.categoriesOfProduct(pick.productId);
-  const rows = api.variantRowsOf(pick.categoryId);
-  const lots = api.lotsOf(pick.variantId);
-  const v = pick.variantId ? api.varById.get(pick.variantId) : undefined;
-  const row = rows.find((r) => r.variantId === pick.variantId);
+  const items = api.categoriesOfProduct(pick.productId);
+  const lots = api.pickVariant ? api.lotsOf(api.pickVariant.id) : [];
+  const v = api.pickVariant;
+  const productName = api.prodById.get(pick.productId)?.name;
+  const itemName = api.pickUsesCats ? api.catById.get(pick.categoryId)?.name : undefined;
 
   useEffect(() => {
     setShowLot(showOptionalDetails);
@@ -43,7 +44,7 @@ export default function AddItemBar({
         <div className="px-5 py-8 text-center text-[13px] text-neutral-400">Nothing in stock to sell yet.</div>
       ) : (
         <div className="p-4 sm:p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 ${api.pickUsesCats ? "sm:grid-cols-2" : ""} gap-4`}>
             <div>
               <label className="!mb-1">Product</label>
               <select value={pick.productId} onChange={(e) => api.onProduct(e.target.value)}>
@@ -52,25 +53,29 @@ export default function AddItemBar({
                 ))}
               </select>
             </div>
-            <div>
-              <label className="!mb-1">Category</label>
-              <select value={pick.categoryId} onChange={(e) => api.onCategory(e.target.value)}>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="!mb-1">Variant</label>
-              <select value={pick.variantId} onChange={(e) => api.onVariant(e.target.value)}>
-                {rows.map((r) => (
-                  <option key={r.variantId} value={r.variantId}>
-                    {r.shortName}{r.attrText ? ` — ${r.attrText}` : ""} · {fmtQtyWithUnit(r.stockQty, r.unit)} left
-                  </option>
-                ))}
-              </select>
-            </div>
+            {api.pickUsesCats && (
+              <div>
+                <label className="!mb-1">Category</label>
+                <select value={pick.categoryId} onChange={(e) => api.onCategory(e.target.value)}>
+                  {items.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
+
+          {api.pickDefs.length > 0 && (
+            <div className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/50">
+              <p className="text-[12px] font-medium text-neutral-600 mb-3">Attributes</p>
+              <AttributeFields
+                defs={api.pickDefs}
+                value={pick.attrs}
+                onChange={api.onAttrs}
+                optionsOf={(defId) => api.attributeOptions.filter((o) => o.attributeDefId === defId)}
+              />
+            </div>
+          )}
 
           {lots.length > 0 && (
             <OptionalSection
@@ -103,10 +108,10 @@ export default function AddItemBar({
 
           <div className="pt-4 border-t border-neutral-100 flex flex-wrap items-end justify-between gap-4">
             <div className="text-[13px] text-neutral-500 min-w-0 flex-1">
-              {v ? (
+              {v && api.canAdd ? (
                 <>
-                  <span className="font-medium text-neutral-800">{v.shortName}</span>
-                  {row?.attrText ? ` · ${row.attrText}` : ""}
+                  <span className="font-medium text-neutral-800">{productName}</span>
+                  {itemName ? ` · ${itemName}` : ""}
                   {api.draftPrice ? (
                     <span className="ml-2 text-neutral-600 tabular-nums">
                       @ {fmtRateWithUnit(api.draftPrice ?? 0, api.draftUnit)}
@@ -115,8 +120,12 @@ export default function AddItemBar({
                     <span className="ml-2 text-neutral-400">no sell price — using cost + 15%</span>
                   )}
                 </>
+              ) : api.noStockForCombo ? (
+                "This combination is not in stock."
+              ) : api.notInStock ? (
+                "Fill the attributes to match stock on hand."
               ) : (
-                "Pick a variant with stock"
+                "Pick a product"
               )}
             </div>
             <div className="flex items-end gap-3 shrink-0">
@@ -140,7 +149,7 @@ export default function AddItemBar({
 
           {api.draftOver && (
             <p className="text-[12px] text-red-600">
-              Only {fmtQtyWithUnit(api.draftAvail, api.draftUnit)} available for this variant.
+              Only {fmtQtyWithUnit(api.draftAvail, api.draftUnit)} available for this item.
             </p>
           )}
         </div>

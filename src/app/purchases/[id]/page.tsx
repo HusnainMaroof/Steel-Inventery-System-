@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
 import { Page, PageTitle } from "@/components/ui";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, perUnitLabel } from "@/lib/format";
+import { productUsesCategories, resolveDefs } from "@/lib/catalogue";
 
 export default function PurchaseDetailPage({
   params,
@@ -12,13 +13,25 @@ export default function PurchaseDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { purchases, suppliers, inventory, categories, attributeDefs, warehouses, locations } = useStore();
+  const { purchases, suppliers, inventory, products, categories, attributeDefs, warehouses, locations } = useStore();
 
   const purchase = purchases.find((p) => p.id === id);
   const supplier = suppliers.find((s) => s.id === purchase?.supplierId);
   const inv = inventory.find((r) => r.item === purchase?.item);
-  const defs = (purchase?.categoryId ? attributeDefs.filter((d) => d.categoryId === purchase!.categoryId && d.active).sort((a, b) => a.sortOrder - b.sortOrder) : []);
-  const catName = categories.find((c) => c.id === purchase?.categoryId)?.name;
+  const prod =
+    (purchase?.product ? products.find((x) => x.name === purchase.product) : undefined) ??
+    (purchase?.categoryId
+      ? products.find((x) => x.id === categories.find((c) => c.id === purchase.categoryId)?.productId)
+      : undefined);
+  const defs = resolveDefs(attributeDefs, {
+    productId: prod?.id,
+    categoryId: purchase?.categoryId,
+    snapshot: purchase?.attributeSnapshot,
+  });
+  const catName =
+    productUsesCategories(prod) && purchase?.categoryId
+      ? categories.find((c) => c.id === purchase.categoryId)?.name
+      : undefined;
   const whName = warehouses.find((w) => w.id === purchase?.warehouseId)?.name;
   const locName = locations.find((l) => l.id === purchase?.locationId)?.name;
 

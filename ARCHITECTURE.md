@@ -18,10 +18,11 @@ One entry (a purchase or a sale) drives every other screen. There is no second
 copy of the numbers anywhere: dashboard, inventory, sales, customers,
 suppliers, payments and reports are all *derived* from the same raw records.
 
-The catalogue is **configuration-driven, not product-specific**: businesses
-shape their own `Product → Category → Attributes → Variant` model and the same
-engine handles steel, cement, wire, paint or anything else — no hard-coded
-Grade/Brand/Gauge/Factor fields and no `if product === "steel"` UI logic.
+The catalogue is **configuration-driven, not product-specific**: each product
+chooses whether it needs a Category layer. The same engine then serves
+`Product → Attributes → Variant` (Steel) or
+`Product → Categories → Attributes → Variant` (Cement) — no hard-coded
+Grade/Brand/Gauge fields and no `if product === "steel"` UI logic.
 
 ## 2. Big picture
 
@@ -68,20 +69,20 @@ demo business.
 ### Dynamic catalogue (the identity of "what something is")
 
 ```
-Product (Steel)
-  └─ Category (Rebar)
-       └─ AttributeDefs (Size = dropdown, Grade = dropdown, …)
-            └─ AttributeOptions (3 Sutar…8 Sutar / 40·60·75 Grade)
-                 └─ Variant (Rebar · 3 Sutar · 60 Grade)  ← stockable unit
+Product (optional Category)
+  ├─ Steel  →  AttributeDefs (Size, Grade, Manufacturer)  →  Variant
+  └─ Cement
+       ├─ Grey Cement  →  AttributeDefs (Grade, Company)   →  Variant
+       └─ White Cement →  AttributeDefs (Grade, Company, Color) →  Variant
 ```
 
 | Record | What it holds |
 |---|---|
-| `Product` | Broad material family (`name`, base `unit`, `active`). |
-| `ProductCategory` | A type inside a product (Rebar under Steel, Grey Cement under Cement). |
-| `AttributeDef` | One property a category is described by: `name`, stable `key`, `type` (text/number/select/boolean/date/measurement), `required`, optional `unit`, `sortOrder`, `active`. |
-| `AttributeOption` | Choices for a `select` attribute (each with `active`, never hard-deleted when history uses it). |
-| `Variant` | One stockable/sellable combination of attribute values, deduped by a deterministic `key` (`categoryId + sorted key=value pairs`); friendly `shortName` is editable. |
+| `Product` | Broad stock type (`name`, base `unit`, optional `description`, `active`, `usesCategories`). |
+| `ProductCategory` | Optional grouping under a product (Grey Cement under Cement). Omitted entirely when `usesCategories` is false. Internal field names stay `categoryId` so history and FIFO are untouched. |
+| `AttributeDef` | One property the product (or a category) is described by: `productId`, optional `categoryId`, `name`, stable `key`, `type`, `required`, optional `unit`, `sortOrder`, `active`. Each category can have a different set of attributes. |
+| `AttributeOption` | Choices for a `select` attribute (each with `active`; never hard-deleted when history uses it). |
+| `Variant` | One stockable/sellable combination, deduped by an id-based `identityKey` (scope + sorted defId=optionId); the friendly `shortName` is display-only. |
 | `Warehouse` / `WarehouseLocation` | Physical places stock can sit (Main Yard → Yard A, Rack 01) — optional, chosen per purchase lot. |
 
 ### Transactions (the business events)
@@ -244,9 +245,9 @@ Profit is **realized, cash-basis**, not accrual:
 | `/` | Public | Tradex product homepage (Business Ledger) |
 | `/login` | Public | Sign in (owner or super admin) |
 | `/dashboard` | Owner | Stats-only KPIs: stock, stock worth, sales, net profit, dues (customer vs mills), scoped per product |
-| `/products` | Owner | **Catalogue configurator** — a flow: product chips → category rail → stage showing that category's attributes (dropdown options, reorder, hide) and variants created by real stock; warehouses & locations live in one collapsed, self-explaining section |
-| `/purchases` | Owner | Dynamic purchase form: product → category → configured attribute fields → money; optional lot details (lot/heat/batch, warehouse/location). Supplier payable + payment history unchanged |
-| `/sales` | Owner | Sales & Invoices — pick a **stocked variant** (optional specific lot), snapshot saved per line, printable invoice |
+| `/products` | Owner | **Catalogue control center** — create a product and choose its structure (Attributes only, or Categories then Attributes). Each category can have different attributes. Templates are optional shortcuts. Warehouses live on the products list. |
+| `/purchases` | Owner | Dynamic purchase form: Product, then Category only if that product uses categories, then that scope's attributes. Optional lot details. Supplier payable + payment history unchanged |
+| `/sales` | Owner | Sales & Invoices — pick Product, Category only when configured, then attributes; the matching stocked variant is sold, snapshot saved per line, printable invoice |
 | `/inventory` | Owner | Stock at **variant level**: each row expands to its remaining lots (supplier, heat/batch, location); search across variant/attributes/lot numbers/supplier; a Movements tab with the derived +/− journal |
 | `/customers` | Owner | Customers, their bills, balances and transaction history (renders variant attributes) |
 | `/suppliers` | Owner | Mills/suppliers, what each is owed, and purchase history receipts (renders variant attributes) |
@@ -258,17 +259,18 @@ Profit is **realized, cash-basis**, not accrual:
 
 ## 8. The dynamic forms engine
 
-`src/components/catalogue/AttributeFields.tsx` renders a category's
+`src/components/catalogue/AttributeFields.tsx` renders the configured
 `AttributeDefs` generically — `select → dropdown`, `number → number input`,
-`measurement → number + unit suffix`, `text → text`, `boolean → Yes/No`,
+`measurement → number + unit picker`, `text → text`, `boolean → Yes/No`,
 `date → date`. Required attributes block saving (visible red message). The
-same component drives Purchase entry; no component anywhere knows that
-"Grade" belongs to steel.
+same component drives Purchase and Sale entry; no component anywhere knows that
+"Grade" belongs to steel. The Category field appears only when that product
+has `usesCategories`.
 
-Helpers in `src/lib/catalogue.ts`: deterministic `variantKey`,
-`defaultShortName` (attribute values joined in definition order), ordered
-attribute rows and display text. `VariantBadge` renders one identity block
-(short name + attribute chips) wherever sales/purchases/inventory show a line.
+Helpers in `src/lib/catalogue.ts`: deterministic `variantKey` (legacy labels),
+id-based `identityKey` (attribute IDs + option IDs, order-independent),
+`defaultShortName`, ordered attribute rows and display text. Identity never
+depends on the display name or the configured presentation order.
 
 ## 9. Design and UX conventions
 

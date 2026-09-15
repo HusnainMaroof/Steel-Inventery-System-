@@ -9,7 +9,10 @@ export interface Product {
   businessId?: string;
   name: string;
   unit: string; // base unit — e.g. "kg", "bag"; every quantity of this product is measured in it
+  description?: string;
   active?: boolean;
+  /** when true, this product has a Category layer; when false, attributes hang on the product */
+  usesCategories?: boolean;
   /** @deprecated legacy secondary-list label (pre-dynamic-catalogue); kept for old surfaces */
   specLabel?: string;
 }
@@ -170,8 +173,12 @@ export interface StockLot {
 
 /* ================================================================
    Dynamic product hierarchy — configuration-driven catalogue.
-   A business configures products → categories → attributes → options,
-   and variants emerge from attribute combinations actually used.
+   A product chooses its structure:
+     A) Product → Attributes → Variant
+     B) Product → Categories → Attributes → Variant
+   Category is optional per product. Attributes belong to the product
+   (categoryId empty) or to a category. Variants are created from the
+   combination actually bought or sold.
    ================================================================ */
 
 export type AttrType =
@@ -182,18 +189,23 @@ export type AttrType =
   | "date"
   | "measurement";
 
+/* A Category is an optional grouping under a Product (Grey Cement under
+   Cement). Products that don't use categories skip this layer. */
 export interface ProductCategory {
   id: string;
   businessId: string;
   productId: string; // owning Product
-  name: string; // e.g. "Rebar", "Grey Cement"
+  name: string; // e.g. "Grey Cement", "White Cement"
+  description?: string;
+  sortOrder?: number;
   active: boolean;
 }
 
 export interface AttributeDef {
   id: string;
   businessId: string;
-  categoryId: string; // owning Category
+  productId: string; // owning Product — always set
+  categoryId?: string; // set when the attribute belongs to a Category; empty = product-level
   name: string; // human label, e.g. "Grade"
   key: string; // stable id used in attribute snapshots, e.g. "grade"
   type: AttrType;
@@ -207,6 +219,7 @@ export interface AttributeOption {
   id: string;
   attributeDefId: string;
   label: string; // shown in pickers and snapshots, e.g. "60 Grade"
+  value?: string; // optional stable code; identity uses `id` regardless
   sortOrder: number;
   active: boolean;
 }
@@ -215,9 +228,11 @@ export interface AttributeOption {
 export interface Variant {
   id: string;
   businessId: string;
-  categoryId: string;
-  key: string; // deterministic: categoryId + sorted attribute key=value pairs
-  attributes: Record<string, string>; // attribute key -> value (option label or typed value)
+  productId: string;
+  categoryId?: string; // set when the product uses categories; omitted for product-level variants
+  key: string; // legacy label-based key — still matched so old records resolve
+  identityKey?: string; // id-based: scopeId + sorted defId=optionId pairs; order-independent
+  attributes: Record<string, string>; // attribute key -> display value (option label or typed value)
   shortName: string; // friendly one-line label used on rows, invoices and legacy mirrors
   active: boolean;
   createdAt: string; // ISO datetime when the variant first appeared

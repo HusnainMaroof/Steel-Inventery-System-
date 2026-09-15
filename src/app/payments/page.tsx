@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useStore } from "@/lib/store";
 import { Page, PageTitle, EmptyState } from "@/components/ui";
@@ -35,6 +35,12 @@ export default function PaymentsPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | "customer" | "supplier">("all");
   const [period, setPeriod] = useState<PeriodKey>("all");
   const [customMonth, setCustomMonth] = useState(""); // yyyy-mm
+
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("type");
+    if (t === "received" || t === "customer") setTypeFilter("customer");
+    if (t === "paid" || t === "supplier") setTypeFilter("supplier");
+  }, []);
 
   const periodLabel =
     period === "all"

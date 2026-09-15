@@ -26,7 +26,9 @@ export default function LineItemsTable({
       if (lot) return lot.label;
     }
     const v = api.varById.get(l.variantId);
-    const cat = v ? api.catById.get(v.categoryId) : undefined;
+    const prod = v?.productId ? api.prodById.get(v.productId) : undefined;
+    if (prod && !prod.usesCategories) return "";
+    const cat = v?.categoryId ? api.catById.get(v.categoryId) : undefined;
     return `${api.catById.get(l.categoryId ?? "")?.name ?? cat?.name ?? ""}`;
   };
 
@@ -35,7 +37,7 @@ export default function LineItemsTable({
       <table>
         <thead>
           <tr>
-            <th>Item</th>
+            <th>Product</th>
             <th>Attributes / Source</th>
             <th>Quality Name</th>
             <th className="num">Qty</th>
@@ -49,15 +51,27 @@ export default function LineItemsTable({
             const over = api.lineOver(l);
             const rate = Number(l.rate) || 0;
             const qty = Number(l.qty) || 0;
-            const attrText = l.snapshot
-              ? api.attrTextOf(l.variantId, l.snapshot)
-              : "";
+            const v = api.varById.get(l.variantId);
+            const cat = api.catById.get(l.categoryId ?? "") ?? (v?.categoryId ? api.catById.get(v.categoryId) : undefined);
+            const prod =
+              (v?.productId ? api.prodById.get(v.productId) : undefined) ??
+              (cat ? api.prodById.get(cat.productId) : undefined);
+            const showCat = prod?.usesCategories === true;
+            const defs = api.defsOfVariant(l.variantId, l.snapshot);
+            const attrRows = l.snapshot
+              ? defs.filter((d) => l.snapshot![d.key]).map((d) => `${d.name}: ${l.snapshot![d.key]}`)
+              : [];
             return (
               <tr key={i}>
-                <td className="font-medium whitespace-nowrap">{l.item}</td>
-                <td className="text-neutral-500 text-xs whitespace-nowrap">
-                  {attrText ? `${attrText} · ` : ""}
-                  {sourceLabel(l)}
+                <td className="min-w-[10rem]">
+                  <span className="block font-medium">{prod?.name ?? l.item}</span>
+                  {showCat && cat && <span className="block text-[12px] text-neutral-500">{cat.name}</span>}
+                </td>
+                <td className="text-neutral-500 text-xs">
+                  {attrRows.map((a) => (
+                    <span key={a} className="block">{a}</span>
+                  ))}
+                  <span className="block text-neutral-400 mt-0.5">{sourceLabel(l)}</span>
                 </td>
                 <td>
                   <input

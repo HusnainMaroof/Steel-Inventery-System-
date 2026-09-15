@@ -282,7 +282,9 @@ a {
     visibility: hidden;
   }
   .print-area,
-  .print-area * {
+  .print-area *,
+  .print-pack,
+  .print-pack * {
     visibility: visible;
   }
   .print-area {
@@ -291,6 +293,34 @@ a {
     padding: 20mm 15mm;
     border: none !important;
     background: white !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+  .print-pack {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+  .print-pack .print-area {
+    position: relative;
+    inset: auto;
+    page-break-after: always;
+    break-after: page;
+  }
+  .print-pack .print-sheet:last-child .print-area {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  .print-area.print-flow {
+    position: relative;
+    inset: auto;
+    page-break-after: auto;
+    break-after: auto;
+  }
+  .print-area.print-flow tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .no-print {
     display: none !important;

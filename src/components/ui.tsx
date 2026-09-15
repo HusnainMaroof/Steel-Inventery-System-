@@ -40,12 +40,14 @@ export function CustomSelect({
   options,
   placeholder = "Select…",
   className = "",
+  compact = false,
 }: {
   value: string;
   onChange: (val: string) => void;
   options: { value: string; label: string }[];
   placeholder?: string;
   className?: string;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -63,7 +65,9 @@ export function CustomSelect({
     <div ref={ref} className={`relative ${className}`}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between gap-2 w-full min-w-[180px] px-3 py-2 text-xs font-medium bg-white border border-neutral-200 rounded-lg hover:border-neutral-400 transition-colors text-left"
+        className={`flex items-center justify-between gap-2 w-full px-3 py-2 text-xs font-medium bg-white border border-neutral-200 rounded-lg hover:border-neutral-400 transition-colors text-left ${
+          compact ? "min-w-[8.5rem]" : "min-w-[180px]"
+        }`}
       >
         <span className={selected ? "text-black" : "text-neutral-400"}>
           {selected?.label ?? placeholder}
@@ -217,7 +221,7 @@ export function PageTitle({
     <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-6">
       <div className="min-w-0">
         <h1 className="text-xl sm:text-2xl tracking-tight">{title}</h1>
-        {sub && <p className="text-neutral-500 text-xs mt-1">{sub}</p>}
+        {sub && <p className="text-black text-xs mt-1">{sub}</p>}
       </div>
       {action}
     </div>
@@ -525,6 +529,7 @@ export function EmptyState({
         compact ? "py-8" : "py-14"
       }`}
     >
+      {emoji ? (
       <motion.span
         aria-hidden
         className={compact ? "text-3xl leading-none" : "text-5xl leading-none"}
@@ -533,6 +538,7 @@ export function EmptyState({
       >
         {emoji}
       </motion.span>
+      ) : null}
       <p className={`font-medium text-neutral-800 ${compact ? "text-sm mt-3" : "mt-4"}`}>
         {title}
       </p>

@@ -52,7 +52,7 @@ export default function CreditDebit({
       </div>
       <div className="border border-neutral-200 p-4">
         <span className="block text-[11px] uppercase tracking-widest text-neutral-500">
-          You owe suppliers
+          You owe mills
         </span>
         <span className="block text-xl font-medium tabular-nums mt-1">{fmtMoney(totalPayable)}</span>
         {showWho && owingSuppliers.length > 0 && (

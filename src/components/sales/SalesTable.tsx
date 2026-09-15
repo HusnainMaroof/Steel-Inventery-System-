@@ -2,27 +2,72 @@
 
 import { useState, useMemo } from "react";
 import { saleGrandTotal } from "@/lib/store";
-import { EmptyState } from "@/components/ui";
+import { ConfirmModal, EmptyState } from "@/components/ui";
 import { fmtMoney, fmtDate, fmtTime, fmtQtyWithUnit } from "@/lib/format";
 
-type SoldLine = {
-  product: string; // highlighted product name (e.g. "Steel")
-  item: string; // the sold line's short name (e.g. "3 Sutar")
-  quality: string; // attribute text / quality, or ""
-  qtyText: string; // e.g. "500 kg"
-};
+type AttrRow = { label: string; value: string };
 
 type SaleRow = {
   id: string;
   invoiceNo: string;
   customerName: string;
+  customerPhone: string;
   createdAt: string;
   time: string;
-  soldLines: SoldLine[];
+  items: {
+    product: string;
+    category: string;
+    attrs: AttrRow[];
+    qtyText: string;
+  }[];
+  searchHay: string;
   total: number;
   paid: number;
   due: number;
 };
+
+/* three-dot invoice menu */
+function InvoiceMenu({ items }: { items: { label: string; onClick: () => void }[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className="relative inline-block text-left shrink-0"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        aria-label="Invoice actions"
+        onClick={() => setOpen((o) => !o)}
+        className="w-8 h-8 flex items-center justify-center rounded-md border border-transparent text-black hover:bg-neutral-100 hover:border-neutral-300 transition-colors"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="12" cy="19" r="1.8" />
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-9 z-30 w-44 bg-white border border-neutral-200 rounded-lg shadow-lg py-1">
+            {items.map((it, i) => (
+              <button
+                key={it.label}
+                type="button"
+                onClick={() => { setOpen(false); it.onClick(); }}
+                className={`w-full text-left px-3.5 py-2 text-[13px] text-black hover:bg-neutral-100 transition-colors ${i > 0 ? "border-t border-neutral-100" : ""}`}
+              >
+                {it.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
+type Status = "all" | "paid" | "partial" | "due";
 
 export default function SalesTable({
   sales,
@@ -30,10 +75,12 @@ export default function SalesTable({
   customers,
   hasInventory,
   productOfLine,
-  attrTextOf,
+  categoryNameOf,
+  attrRowsOf,
   salePaid,
   onView,
   onReceive,
+  onDelete,
   onNewSale,
 }: {
   sales: {
@@ -60,112 +107,125 @@ export default function SalesTable({
   customers: { id: string; name: string; phone: string }[];
   hasInventory: boolean;
   productOfLine: (l: { categoryId?: string; item: string }) => string;
-  attrTextOf: (l: { categoryId?: string; attributeSnapshot?: Record<string, string>; quality?: string; item: string }) => string;
+  categoryNameOf: (l: { categoryId?: string }) => string;
+  attrRowsOf: (l: { categoryId?: string; attributeSnapshot?: Record<string, string>; quality?: string; item: string }) => AttrRow[];
   salePaid: (saleId: string) => number;
   onView: (id: string) => void;
   onReceive: (id: string) => void;
+  onDelete: (id: string) => void;
   onNewSale: () => void;
 }) {
-  const [searchInput, setSearchInput] = useState("");
-  const [searchMode, setSearchMode] = useState<"name" | "phone">("name");
-  const [dateInput, setDateInput] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
-  const [appliedMode, setAppliedMode] = useState<"name" | "phone">("name");
-  const [appliedDate, setAppliedDate] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "due" | "paid">("all");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Status>("all");
+  const [dateFilter, setDateFilter] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const formatPhone = (v: string) => {
-    const digits = v.replace(/\D/g, "").slice(0, 11);
-    return digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits;
+  const hasFilters = search.trim() !== "" || statusFilter !== "all" || dateFilter !== "";
+
+  const handleClear = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setDateFilter("");
   };
 
-  const onSearchChange = (v: string) => {
-    setSearchInput(searchMode === "phone" ? formatPhone(v) : v);
-  };
-
-  const hasFilters =
-    appliedSearch.trim() !== "" || appliedDate !== "" || statusFilter !== "all";
+  const rows: SaleRow[] = useMemo(
+    () =>
+      sales.map((s) => {
+        const total = saleGrandTotal(s);
+        const paid = salePaid(s.id);
+        const due = Math.max(0, total - paid);
+        const cust = customers.find((c) => c.id === s.customerId);
+        const items = s.lines.map((l) => ({
+          product: productOfLine(l) || l.item,
+          category: categoryNameOf(l),
+          attrs: attrRowsOf(l),
+          qtyText: fmtQtyWithUnit(l.qty, l.unit),
+        }));
+        const searchHay = [
+          cust?.name ?? "",
+          cust?.phone ?? "",
+          s.invoiceNo,
+          ...items.flatMap((it) => [it.product, it.category, ...it.attrs.map((a) => `${a.label} ${a.value}`)]),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return {
+          id: s.id,
+          invoiceNo: s.invoiceNo,
+          customerName: customerName(s.customerId),
+          customerPhone: cust?.phone ?? "",
+          createdAt: s.createdAt,
+          time: fmtTime(s.createdAt),
+          items,
+          searchHay,
+          total,
+          paid,
+          due,
+        };
+      }),
+    [sales, customers, customerName, productOfLine, categoryNameOf, attrRowsOf, salePaid]
+  );
 
   const groups = useMemo(() => {
-    const q = appliedSearch.toLowerCase().trim();
-    const filtered = [...sales].reverse().filter((s) => {
-      if (q) {
-        const cust = customers.find((c) => c.id === s.customerId);
-        if (!cust) return false;
-        if (appliedMode === "name") {
-          if (!cust.name.toLowerCase().includes(q)) return false;
-        } else {
-          const phoneDigits = cust.phone.replace(/\D/g, "");
-          const queryDigits = q.replace(/\D/g, "");
-          if (!phoneDigits.includes(queryDigits)) return false;
+    const q = search.toLowerCase().trim();
+    const filtered = rows
+      .filter((r) => {
+        if (q && !r.searchHay.includes(q)) return false;
+        if (dateFilter) {
+          const s = sales.find((x) => x.id === r.id);
+          if (!s || s.date !== dateFilter) return false;
         }
-      }
-      if (appliedDate && s.date !== appliedDate) return false;
-      if (statusFilter !== "all") {
-        const due = Math.max(0, saleGrandTotal(s) - salePaid(s.id));
-        if (statusFilter === "due" && due <= 0.001) return false;
-        if (statusFilter === "paid" && due > 0.001) return false;
-      }
-      return true;
-    });
+        if (statusFilter !== "all") {
+          if (statusFilter === "due" && r.due <= 0.001) return false;
+          if (statusFilter === "paid" && (r.paid <= 0.001 || r.due > 0.001)) return false;
+          if (statusFilter === "partial" && !(r.paid > 0.001 && r.due > 0.001)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     const map = new Map<string, SaleRow[]>();
-    for (const s of filtered) {
-      const total = saleGrandTotal(s);
-      const paid = salePaid(s.id);
-      const due = Math.max(0, total - paid);
-      const row: SaleRow = {
-        id: s.id,
-        invoiceNo: s.invoiceNo,
-        customerName: customerName(s.customerId),
-        createdAt: s.createdAt,
-        time: fmtTime(s.createdAt),
-        soldLines: s.lines.map((l) => {
-          const product = productOfLine(l);
-          return {
-            product: product || l.item,
-            item: product ? l.item : "—",
-            quality: attrTextOf(l) || "",
-            qtyText: fmtQtyWithUnit(l.qty, l.unit),
-          };
-        }),
-        total, paid, due,
-      };
+    for (const r of filtered) {
+      const s = sales.find((x) => x.id === r.id)!;
       const list = map.get(s.date) ?? [];
-      list.push(row);
+      list.push(r);
       map.set(s.date, list);
     }
-
     return Array.from(map.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([date, sales]) => ({
+      .map(([date, list]) => ({
         date,
-        sales: sales.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        sales: list,
+        dayTotal: list.reduce((a, r) => a + r.total, 0),
       }));
-  }, [sales, customers, customerName, productOfLine, attrTextOf, salePaid, appliedSearch, appliedMode, appliedDate, statusFilter]);
+  }, [rows, sales, search, statusFilter, dateFilter]);
 
   const totalDue = groups.reduce((a, g) => a + g.sales.reduce((b, r) => b + r.due, 0), 0);
   const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
 
-  const handleSearch = () => {
-    setAppliedSearch(searchInput);
-    setAppliedMode(searchMode);
-    setAppliedDate(dateInput);
-  };
+  const menuItems = (s: SaleRow) => [
+    { label: "Open Invoice", onClick: () => onView(s.id) },
+    { label: "Receive Payment", onClick: () => onReceive(s.id) },
+    { label: "Print", onClick: () => window.open(`/sales/${s.id}`, "_blank") },
+    { label: "Delete", onClick: () => setDeleteId(s.id) },
+  ];
 
-  const handleClear = () => {
-    setSearchInput("");
-    setSearchMode("name");
-    setDateInput("");
-    setAppliedSearch("");
-    setAppliedMode("name");
-    setAppliedDate("");
-    setStatusFilter("all");
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch();
-  };
+  const itemsBlock = (s: SaleRow) => (
+    <div className="space-y-2">
+      {s.items.map((it, i) => (
+        <div key={i}>
+          <span className="block font-semibold text-[11px] text-black truncate">{it.product}</span>
+          {it.category && <span className="block text-[11px] text-black/60 truncate">{it.category}</span>}
+          {it.attrs.map((a, j) => (
+            <span key={j} className="block text-[11px] text-black/60 truncate">
+              {a.label}: {a.value}
+            </span>
+          ))}
+          <span className="block text-[11px] font-medium text-black tabular-nums">{it.qtyText}</span>
+        </div>
+      ))}
+    </div>
+  );
 
   if (sales.length === 0) {
     return (
@@ -180,86 +240,59 @@ export default function SalesTable({
 
   return (
     <>
-      {/* ── status filter: all / dues only / paid only ── */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <div className="inline-flex border border-neutral-200 rounded-md overflow-hidden bg-white">
-          {([
-            { key: "all", label: "All invoices" },
-            { key: "due", label: "Dues only" },
-            { key: "paid", label: "Paid" },
-          ] as const).map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setStatusFilter(t.key)}
-              className={`px-3.5 py-2 text-xs font-medium transition-colors ${
-                statusFilter === t.key ? "bg-black text-white" : "text-neutral-600 hover:bg-neutral-100"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── filters ── */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-        <div className="flex flex-1 sm:max-w-96">
-          <select
-            value={searchMode}
-            onChange={(e) => setSearchMode(e.target.value as "name" | "phone")}
-            className="!w-auto !rounded-r-none !border-r-0"
-          >
-            <option value="name">Name</option>
-            <option value="phone">Phone</option>
-          </select>
-          <div className="relative flex-1">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-              <input
-                type="text"
-                placeholder={searchMode === "name" ? "Search by customer name..." : "Search by phone number..."}
-                value={searchInput}
-                onChange={(e) => onSearchChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="!w-full !rounded-l-none !pl-9"
-              />
-          </div>
-        </div>
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      {/* ── one row: search + payment status + date + clear ── */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-[200px]">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
-            type="date"
-            value={dateInput}
-            onChange={(e) => setDateInput(e.target.value)}
-            className="!w-full sm:!w-52 !pl-9"
+            type="text"
+            placeholder="Search customer, invoice, product…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="!w-full !pl-9 !text-xs !py-2"
           />
         </div>
-        <button onClick={handleSearch} className="btn-primary !py-2 !px-4 text-xs whitespace-nowrap">
-          Search
-        </button>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as Status)}
+          className="!w-auto !text-xs"
+          aria-label="Filter by payment status"
+        >
+          <option value="all">All Invoices</option>
+          <option value="paid">Paid</option>
+          <option value="partial">Partially Paid</option>
+          <option value="due">Due</option>
+        </select>
+        <input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="!w-auto !text-xs"
+          aria-label="Filter by date"
+        />
         {hasFilters && (
-          <button onClick={handleClear} className="btn-ghost !py-2 !px-4 text-xs whitespace-nowrap">
+          <button onClick={handleClear} className="btn-ghost !py-2 !px-3 !text-xs whitespace-nowrap">
             Clear
           </button>
         )}
       </div>
 
-      {/* ── stats ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-        <div className="border border-neutral-200 bg-white p-4">
-          <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Sales / Invoices</span>
-          <span className="block text-xl font-semibold tabular-nums mt-1">
+      {/* ── summary: invoice count + outstanding ── */}
+      <div className="border border-neutral-200 bg-white p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Invoices</span>
+          <span className="block text-2xl font-bold tabular-nums text-black mt-1">
             {filteredCount}
-            {hasFilters && <span className="text-sm font-normal text-neutral-400"> / {sales.length}</span>}
+            {hasFilters && <span className="text-sm font-normal text-black/60"> / {sales.length}</span>}
           </span>
         </div>
-        <div className="border border-black bg-black text-white p-4">
-          <span className="block text-[11px] uppercase tracking-widest text-neutral-400">Total outstanding</span>
-          <span className="block text-xl font-semibold tabular-nums mt-1">{fmtMoney(totalDue)}</span>
+        <div className="text-right">
+          <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Outstanding</span>
+          <span className={`block text-2xl font-bold tabular-nums mt-1 ${totalDue > 0 ? "text-[#a12b1f]" : "text-black"}`}>
+            {fmtMoney(totalDue)}
+          </span>
         </div>
       </div>
 
@@ -268,23 +301,26 @@ export default function SalesTable({
         <EmptyState
           emoji="🔍"
           title="No sales match your filters"
-          hint="Try adjusting the search or date to find what you're looking for."
+          hint="Try adjusting the search, status or date to find what you're looking for."
           action={<button onClick={handleClear} className="btn-primary">Clear filters</button>}
         />
       ) : (
         <div className="space-y-6">
           {groups.map((g) => (
             <div key={g.date}>
+              {/* date group header with count + day total */}
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-sm font-medium">{fmtDate(g.date)}</span>
-                <span className="text-xs text-neutral-400">{g.sales.length} sale{g.sales.length > 1 ? "s" : ""}</span>
+                <span className="text-sm font-bold text-black">{fmtDate(g.date)}</span>
+                <span className="text-xs font-medium text-black">{g.sales.length} sale{g.sales.length > 1 ? "s" : ""}</span>
                 <div className="flex-1 border-b border-neutral-200" />
+                <span className="text-sm font-bold text-black tabular-nums">{fmtMoney(g.dayTotal)}</span>
               </div>
 
               {/* desktop */}
-              <div className="hidden sm:block border border-neutral-200 bg-white overflow-x-auto">
-                <div className="grid grid-cols-[minmax(0,1.5fr)_70px_110px_110px_110px_150px] gap-2 px-4 py-2 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200 min-w-[850px]">
-                  <span>Invoice / Items</span>
+              <div className="hidden sm:block border border-neutral-200 bg-white">
+                <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_80px_110px_110px_110px_44px] gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-black font-medium border-b border-neutral-200">
+                  <span>Invoice / Customer</span>
+                  <span>Items</span>
                   <span className="text-right">Time</span>
                   <span className="text-right">Total</span>
                   <span className="text-right">Paid</span>
@@ -295,37 +331,23 @@ export default function SalesTable({
                   <div
                     key={s.id}
                     onClick={() => onView(s.id)}
-                    className="grid grid-cols-[minmax(0,1.5fr)_70px_110px_110px_110px_150px] gap-2 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors min-w-[850px]"
+                    className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_80px_110px_110px_110px_44px] gap-3 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors"
                   >
-                    <span className="min-w-0">
-                      <span className="block text-[10px] text-neutral-400 truncate">{s.invoiceNo}</span>
-                      <span className="block font-medium text-xs text-neutral-900 truncate mb-0.5">{s.customerName}</span>
-                      <span className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_auto] gap-x-3 gap-y-0.5">
-                        {s.soldLines.map((line, i) => (
-                          <span key={i} className="contents">
-                            <span className="text-[11px] font-semibold text-neutral-900 truncate">{line.product}</span>
-                            <span className="text-[11px] font-medium text-neutral-700 truncate">{line.item}</span>
-                            <span className="text-[11px] text-neutral-500 truncate">{line.quality || "—"}</span>
-                            <span className="text-[11px] font-medium tabular-nums text-right whitespace-nowrap">{line.qtyText}</span>
-                          </span>
-                        ))}
-                      </span>
+                    {/* invoice number secondary, customer primary */}
+                    <span className="min-w-0 self-center">
+                      <span className="block text-[11px] text-black/60 truncate">{s.invoiceNo}</span>
+                      <span className="block font-semibold text-xs text-black truncate">{s.customerName}</span>
                     </span>
-                    <span className="self-center text-right text-xs text-neutral-500 tabular-nums whitespace-nowrap">{s.time}</span>
-                    <span className="self-center text-right font-medium text-xs tabular-nums">{fmtMoney(s.total)}</span>
-                    <span className="self-center text-right text-xs text-neutral-500 tabular-nums">{fmtMoney(s.paid)}</span>
-                    <span className={`self-center text-right font-medium text-xs tabular-nums ${s.due > 0 ? "text-[#a12b1f]" : "text-neutral-400"}`}>
+                    {/* items — full variant hierarchy per line, one invoice row */}
+                    <div className="min-w-0 self-center">{itemsBlock(s)}</div>
+                    <span className="self-center text-right text-xs text-black tabular-nums whitespace-nowrap">{s.time}</span>
+                    <span className="self-center text-right font-medium text-xs text-black tabular-nums">{fmtMoney(s.total)}</span>
+                    <span className="self-center text-right text-xs text-black tabular-nums">{fmtMoney(s.paid)}</span>
+                    <span className={`self-center text-right font-semibold text-xs tabular-nums ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}>
                       {s.due > 0 ? fmtMoney(s.due) : "—"}
                     </span>
-                    <span className="self-center text-right whitespace-nowrap">
-                      {s.due > 0 && (
-                        <button onClick={(e) => { e.stopPropagation(); onReceive(s.id); }} className="btn-primary !py-1 !px-2.5 text-xs">
-                          Receive
-                        </button>
-                      )}
-                      <button onClick={(e) => { e.stopPropagation(); onView(s.id); }} className="underline underline-offset-2 hover:text-neutral-500 text-xs ml-2">
-                        Open
-                      </button>
+                    <span className="self-center flex justify-end">
+                      <InvoiceMenu items={menuItems(s)} />
                     </span>
                   </div>
                 ))}
@@ -341,36 +363,21 @@ export default function SalesTable({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="min-w-0">
-                        <span className="block font-medium text-sm truncate">{s.customerName}</span>
-                        <span className="block text-[10px] text-neutral-400 mt-0.5">{s.invoiceNo}</span>
+                        <span className="block text-[11px] text-black/60">{s.invoiceNo}</span>
+                        <span className="block font-semibold text-sm text-black truncate">{s.customerName}</span>
                       </span>
-                      <span className="shrink-0 text-[10px] text-neutral-400 tabular-nums">{s.time}</span>
+                      <span className="flex items-center gap-1 shrink-0">
+                        <span className="text-xs text-black tabular-nums">{s.time}</span>
+                        <InvoiceMenu items={menuItems(s)} />
+                      </span>
                     </div>
-                    <div className="mt-1.5 mb-2 space-y-1">
-                      {s.soldLines.map((line, i) => (
-                        <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                          <span className="min-w-0 truncate">
-                            <span className="font-semibold text-neutral-900">{line.product}</span>
-                            <span className="text-neutral-700"> · {line.item}</span>
-                            {line.quality && <span className="text-neutral-500"> · {line.quality}</span>}
-                          </span>
-                          <span className="shrink-0 font-medium tabular-nums text-neutral-700">{line.qtyText}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <div className="mt-2 mb-2">{itemsBlock(s)}</div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium tabular-nums text-sm">{fmtMoney(s.total)}</span>
-                      <span className={`tabular-nums text-xs ${s.due > 0 ? "text-[#a12b1f] font-medium" : "text-neutral-400"}`}>
+                      <span className="font-medium tabular-nums text-sm text-black">{fmtMoney(s.total)}</span>
+                      <span className={`tabular-nums text-xs font-semibold ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}>
                         {s.due > 0 ? `Due ${fmtMoney(s.due)}` : "Paid"}
                       </span>
                     </div>
-                    {s.due > 0 && (
-                      <div className="mt-2 flex justify-end">
-                        <button onClick={(e) => { e.stopPropagation(); onReceive(s.id); }} className="btn-primary !py-1 !px-3 text-xs">
-                          Receive Payment
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -378,6 +385,36 @@ export default function SalesTable({
           ))}
         </div>
       )}
+
+      {/* delete confirm */}
+      <ConfirmModal
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => {
+          if (deleteId) onDelete(deleteId);
+          setDeleteId(null);
+        }}
+        title="Delete this invoice?"
+        confirmLabel="Delete Invoice"
+      >
+        {(() => {
+          const s = sales.find((x) => x.id === deleteId);
+          if (!s) return null;
+          const paid = salePaid(s.id);
+          return (
+            <div className="text-sm text-neutral-700 space-y-2">
+              <p>
+                <span className="font-semibold text-neutral-900">{s.invoiceNo}</span> — {customerName(s.customerId)} will be permanently removed.
+              </p>
+              <ul className="text-xs list-disc pl-4 space-y-1">
+                <li>Its stock goes back to Inventory and profit figures recalculate.</li>
+                {paid > 0 && <li>The {fmtMoney(paid)} received against it is removed from Payments.</li>}
+                <li>This cannot be undone.</li>
+              </ul>
+            </div>
+          );
+        })()}
+      </ConfirmModal>
     </>
   );
 }

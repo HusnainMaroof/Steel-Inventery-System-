@@ -30,7 +30,7 @@ const NAV = [
   { href: "/customers", label: "Customers" },
   { href: "/suppliers", label: "Mills / Suppliers" },
   { href: "/payments", label: "Payments" },
-  { href: "/reports", label: "Reports & Profit" },
+  { href: "/reports", label: "Profit & Reports" },
 ];
 
 /* super admin sees only the owner-management panel */

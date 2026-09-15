@@ -6,6 +6,7 @@ import { useStore, saleTotal, saleDiscount, saleTax, saleGrandTotal, invoiceStat
 import { Modal } from "@/components/ui";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtTime } from "@/lib/format";
+import { productUsesCategories, resolveDefs } from "@/lib/catalogue";
 
 const statusStyles: Record<string, { label: string; cls: string }> = {
   paid: { label: "Paid", cls: "bg-[#f0f7ef] text-[#2e6b2e] border-[#cfe3cd]" },
@@ -19,28 +20,49 @@ export default function SaleDetailModal({
   saleId: string | null;
   onClose: () => void;
 }) {
-  const { sales, customers, suppliers, payments, inventory, products, categories, attributeDefs, salePaid } = useStore();
+  const { sales, customers, suppliers, payments, inventory, products, categories, variants, attributeDefs, salePaid } = useStore();
   const [payOpen, setPayOpen] = useState(false);
   const sale = sales.find((s) => s.id === saleId) ?? null;
   if (!sale) return null;
   const cust = customers.find((c) => c.id === sale.customerId);
   const supplierName = (id?: string) =>
     (id && suppliers.find((s) => s.id === id)?.name) || "";
+  const catNameOf = (l: { categoryId?: string; variantId?: string }) => {
+    const variant = l.variantId ? variants.find((v) => v.id === l.variantId) : undefined;
+    const catId = l.categoryId ?? variant?.categoryId;
+    const cat = catId ? categories.find((c) => c.id === catId) : undefined;
+    if (!cat) return "";
+    const prod =
+      (variant?.productId ? products.find((p) => p.id === variant.productId) : undefined) ??
+      products.find((p) => p.id === cat.productId);
+    return productUsesCategories(prod) ? cat.name : "";
+  };
   const productOf = (item: string) =>
     inventory.find((r) => r.item === item)?.product || "";
-  const lineCaption = (l: { categoryId?: string; attributeSnapshot?: Record<string, string>; item: string; spec?: string; quality?: string; qualityName?: string; supplierId?: string }) => {
-    const defs =
-      l.categoryId
-        ? attributeDefs
-            .filter((d) => d.categoryId === l.categoryId && d.active)
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-        : [];
+  const prodNameOf = (l: { categoryId?: string; item: string; variantId?: string }) => {
+    const variant = l.variantId ? variants.find((v) => v.id === l.variantId) : undefined;
+    if (variant?.productId) {
+      const p = products.find((x) => x.id === variant.productId);
+      if (p) return p.name;
+    }
     const cat = l.categoryId ? categories.find((c) => c.id === l.categoryId) : undefined;
     const prod = cat ? products.find((p) => p.id === cat.productId) : undefined;
-    const attrs = l.attributeSnapshot
-      ? defs.filter((d) => l.attributeSnapshot![d.key]).map((d) => l.attributeSnapshot![d.key])
-      : [l.spec, l.quality].filter(Boolean);
-    return [prod?.name ?? productOf(l.item), ...attrs, supplierName(l.supplierId)].filter(Boolean).join(" · ");
+    return prod?.name ?? productOf(l.item);
+  };
+  const attrRowsOf = (l: { categoryId?: string; variantId?: string; attributeSnapshot?: Record<string, string>; spec?: string; quality?: string }) => {
+    if (l.attributeSnapshot) {
+      const variant = l.variantId ? variants.find((v) => v.id === l.variantId) : undefined;
+      const cat = l.categoryId ? categories.find((c) => c.id === l.categoryId) : undefined;
+      const defs = resolveDefs(attributeDefs, {
+        productId: variant?.productId ?? cat?.productId,
+        categoryId: l.categoryId ?? variant?.categoryId,
+        snapshot: l.attributeSnapshot,
+      });
+      return defs
+        .filter((d) => l.attributeSnapshot![d.key])
+        .map((d) => ({ label: d.name, value: l.attributeSnapshot![d.key] }));
+    }
+    return [l.spec, l.quality].filter(Boolean).map((v, i) => ({ label: i === 0 ? "Spec" : "Quality", value: v! }));
   };
   const total = saleTotal(sale);
   const disc = saleDiscount(sale);
@@ -76,7 +98,7 @@ export default function SaleDetailModal({
       onClose={onClose}
       title={sale.invoiceNo}
       subtitle={`${fmtDate(sale.date)} · ${cust?.name ?? sale.customerId}`}
-      size="4xl"
+      size="6xl"
       footer={
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/sales/${sale.id}`} className="btn-ghost !py-2 !px-4 text-[13px]">
@@ -90,14 +112,14 @@ export default function SaleDetailModal({
         </div>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
         <div className="min-w-0">
           {/* header */}
           <div className="flex flex-wrap items-start justify-between gap-4 mb-5 pb-5 border-b border-neutral-100">
             <div>
-              <span className="text-[11px] uppercase tracking-wider text-neutral-400">Customer</span>
-              <p className="font-semibold text-[15px] mt-1">{cust?.name ?? sale.customerId}</p>
-              <p className="text-[13px] text-neutral-400 mt-0.5">
+              <span className="text-[11px] uppercase tracking-wider font-medium text-black">Customer</span>
+              <p className="font-semibold text-[15px] text-black mt-1">{cust?.name ?? sale.customerId}</p>
+              <p className="text-[13px] text-black/60 mt-0.5">
                 {cust?.shop}
                 {cust?.phone ? ` · ${cust.phone}` : ""}
               </p>
@@ -106,7 +128,7 @@ export default function SaleDetailModal({
               <span className={`inline-flex items-center text-[12px] font-medium px-2.5 py-1 rounded-md border ${st.cls}`}>
                 {st.label}
               </span>
-              <p className="text-[12px] text-neutral-400 mt-2">{fmtTime(sale.createdAt)}</p>
+              <p className="text-[12px] text-black/60 mt-2">{fmtTime(sale.createdAt)}</p>
             </div>
           </div>
 
@@ -123,23 +145,31 @@ export default function SaleDetailModal({
               </thead>
               <tbody>
                 {sale.lines.map((l, i) => {
-                  const source = lineCaption(l);
+                  const prod = prodNameOf(l);
+                  const cat = catNameOf(l);
+                  const attrs = attrRowsOf(l);
                   return (
                     <tr key={i}>
-                      <td className="font-medium max-w-[200px]">
-                        <span className="block truncate">{l.item}</span>
-                        {l.qualityName ? (
+                      <td className="max-w-[260px]">
+                        <span className="block font-semibold text-[13px] text-black truncate">{prod || l.item}</span>
+                        {cat && <span className="block text-[11px] text-black/60 truncate">{cat}</span>}
+                        {attrs.map((a, j) => (
+                          <span key={j} className="block text-[11px] text-black/60 truncate">
+                            {a.label}: {a.value}
+                          </span>
+                        ))}
+                        {!l.attributeSnapshot && l.qualityName ? (
                           <span className="inline-block mt-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#171717] bg-neutral-100 border border-neutral-300 rounded-sm">
                             {l.qualityName}
                           </span>
                         ) : null}
-                        {source ? (
-                          <span className="block text-[11px] text-neutral-400 font-normal truncate">{source}</span>
+                        {supplierName(l.supplierId) ? (
+                          <span className="block text-[11px] text-black/60 truncate mt-0.5">Source: {supplierName(l.supplierId)}</span>
                         ) : null}
                       </td>
-                      <td className="num">{fmtQtyWithUnit(l.qty, l.unit)}</td>
-                      <td className="num text-neutral-500">{fmtRateWithUnit(l.rate, l.unit)}</td>
-                      <td className="num font-medium">{fmtMoney(l.qty * l.rate)}</td>
+                      <td className="num text-black">{fmtQtyWithUnit(l.qty, l.unit)}</td>
+                      <td className="num text-black">{fmtRateWithUnit(l.rate, l.unit)}</td>
+                      <td className="num font-medium text-black">{fmtMoney(l.qty * l.rate)}</td>
                     </tr>
                   );
                 })}
@@ -150,26 +180,26 @@ export default function SaleDetailModal({
           {/* payment timeline */}
           {(explicitPayments.length > 0 || fifoPayments.length > 0) && (
             <div>
-              <h3 className="text-[12px] font-medium text-neutral-500 uppercase tracking-wider mb-2">
+              <h3 className="text-[12px] font-medium text-black uppercase tracking-wider mb-2">
                 Payments on this invoice
               </h3>
               <div className="border border-neutral-200 rounded-lg divide-y divide-neutral-100 max-h-48 overflow-y-auto">
                 {explicitPayments.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <div className="min-w-0">
-                      <p className="text-[13px] text-neutral-700">{fmtDate(p.date)} · {p.method}</p>
-                      {p.note ? <p className="text-[12px] text-neutral-400 truncate">{p.note}</p> : null}
+                      <p className="text-[13px] text-black">{fmtDate(p.date)} · {p.method}</p>
+                      {p.note ? <p className="text-[12px] text-black/60 truncate">{p.note}</p> : null}
                     </div>
-                    <span className="shrink-0 text-[13px] font-medium tabular-nums">{fmtMoney(p.amount)}</span>
+                    <span className="shrink-0 text-[13px] font-medium tabular-nums text-black">{fmtMoney(p.amount)}</span>
                   </div>
                 ))}
                 {fifoPayments.map((p) => (
                   <div key={`fifo-${p.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 bg-neutral-50">
                     <div className="min-w-0">
-                      <p className="text-[13px] text-neutral-700">{fmtDate(p.date)} · {p.method}</p>
-                      <p className="text-[11px] text-neutral-400">Applied from unallocated payment</p>
+                      <p className="text-[13px] text-black">{fmtDate(p.date)} · {p.method}</p>
+                      <p className="text-[11px] text-black/60">Applied from unallocated payment</p>
                     </div>
-                    <span className="shrink-0 text-[13px] font-medium tabular-nums">{fmtMoney(p.amount)}</span>
+                    <span className="shrink-0 text-[13px] font-medium tabular-nums text-black">{fmtMoney(p.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -181,28 +211,28 @@ export default function SaleDetailModal({
         <div className="space-y-4 lg:sticky lg:top-0">
           <div className="border border-neutral-200 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-neutral-100 bg-neutral-50/50">
-              <p className="text-[12px] font-medium text-neutral-500 uppercase tracking-wider">Totals</p>
+              <p className="text-[12px] font-medium text-black uppercase tracking-wider">Totals</p>
             </div>
             <div className="p-4 space-y-2.5 text-[13px]">
-              <div className="flex justify-between"><span className="text-neutral-500">Subtotal</span><span className="tabular-nums font-medium">{fmtMoney(total)}</span></div>
+              <div className="flex justify-between"><span className="text-black">Subtotal</span><span className="tabular-nums font-medium text-black">{fmtMoney(total)}</span></div>
               {disc > 0 && (
-                <div className="flex justify-between"><span className="text-neutral-500">Discount ({sale.discountPct ?? 0}%)</span><span className="tabular-nums text-neutral-500">− {fmtMoney(disc)}</span></div>
+                <div className="flex justify-between"><span className="text-black">Discount ({sale.discountPct ?? 0}%)</span><span className="tabular-nums text-black">− {fmtMoney(disc)}</span></div>
               )}
               {tax > 0 && (
-                <div className="flex justify-between"><span className="text-neutral-500">Tax ({sale.taxPct ?? 0}%)</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(tax)}</span></div>
+                <div className="flex justify-between"><span className="text-black">Tax ({sale.taxPct ?? 0}%)</span><span className="tabular-nums text-black">+ {fmtMoney(tax)}</span></div>
               )}
               {(sale.loadingCharges ?? 0) > 0 && (
-                <div className="flex justify-between"><span className="text-neutral-500">Loading Charges</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(sale.loadingCharges!)}</span></div>
+                <div className="flex justify-between"><span className="text-black">Loading Charges</span><span className="tabular-nums text-black">+ {fmtMoney(sale.loadingCharges!)}</span></div>
               )}
               {(sale.transportCharges ?? 0) > 0 && (
-                <div className="flex justify-between"><span className="text-neutral-500">Transport Charges</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(sale.transportCharges!)}</span></div>
+                <div className="flex justify-between"><span className="text-black">Transport Charges</span><span className="tabular-nums text-black">+ {fmtMoney(sale.transportCharges!)}</span></div>
               )}
               {(sale.labourCharges ?? 0) > 0 && (
-                <div className="flex justify-between"><span className="text-neutral-500">Labour Cost</span><span className="tabular-nums text-neutral-500">+ {fmtMoney(sale.labourCharges!)}</span></div>
+                <div className="flex justify-between"><span className="text-black">Labour Cost</span><span className="tabular-nums text-black">+ {fmtMoney(sale.labourCharges!)}</span></div>
               )}
               <div className="flex justify-between items-center pt-2 mt-2 border-t border-neutral-100">
-                <span className="font-semibold">Total</span>
-                <span className="tabular-nums font-semibold text-[15px]">{fmtMoney(grand)}</span>
+                <span className="font-semibold text-black">Total</span>
+                <span className="tabular-nums font-semibold text-[15px] text-black">{fmtMoney(grand)}</span>
               </div>
             </div>
           </div>
@@ -210,15 +240,15 @@ export default function SaleDetailModal({
           <div className="border border-neutral-200 rounded-lg overflow-hidden">
             <div className="grid grid-cols-3 divide-x divide-neutral-200">
               <div className="p-3 text-center">
-                <span className="block text-[10px] uppercase tracking-wider text-neutral-400">Total</span>
-                <span className="block font-semibold tabular-nums text-[13px] mt-1">{fmtMoney(grand)}</span>
+                <span className="block text-[10px] uppercase tracking-wider font-medium text-black">Total</span>
+                <span className="block font-semibold tabular-nums text-[13px] mt-1 text-black">{fmtMoney(grand)}</span>
               </div>
               <div className="p-3 text-center">
-                <span className="block text-[10px] uppercase tracking-wider text-neutral-400">Paid</span>
+                <span className="block text-[10px] uppercase tracking-wider font-medium text-black">Paid</span>
                 <span className="block font-semibold tabular-nums text-[13px] mt-1 text-[#2e6b2e]">{fmtMoney(paid)}</span>
               </div>
               <div className={`p-3 text-center ${due > 0 ? "bg-[#171717] text-white" : ""}`}>
-                <span className={`block text-[10px] uppercase tracking-wider ${due > 0 ? "text-neutral-400" : "text-neutral-400"}`}>Due</span>
+                <span className={`block text-[10px] uppercase tracking-wider font-medium ${due > 0 ? "text-white" : "text-black"}`}>Due</span>
                 <span className="block font-semibold tabular-nums text-[13px] mt-1">
                   {due > 0 ? fmtMoney(due) : <span className="text-[#2e6b2e]">—</span>}
                 </span>
@@ -232,7 +262,7 @@ export default function SaleDetailModal({
                     style={{ width: `${paidPct}%` }}
                   />
                 </div>
-                <div className="flex justify-between mt-1.5 text-[10px] text-neutral-400 tabular-nums">
+                <div className="flex justify-between mt-1.5 text-[10px] text-black tabular-nums">
                   <span>{due > 0 ? "Partially paid" : "Fully paid"}</span>
                   <span>{Math.round(paidPct)}%</span>
                 </div>

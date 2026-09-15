@@ -111,29 +111,28 @@ export default function InvoiceDocument({
           <tbody>
             {sale.lines.map((l, i) => {
               const d = lineDetailOf(l);
-              const productLine = [d.product, d.category].filter(Boolean).join(" · ");
               return (
                 <tr key={i} className="border-b border-neutral-100">
                   <td className="!py-4 !text-[12px] text-neutral-400 align-top">{i + 1}</td>
                   <td className="!py-4 align-top min-w-0">
-                    <p className="text-[14px] font-semibold leading-snug">{d.item}</p>
-                    {d.qualityName && (
-                      <span className="inline-block mt-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#171717] bg-neutral-100 border border-neutral-300 rounded-sm">
-                        Quality: {d.qualityName}
-                      </span>
+                    {/* hierarchy: Product → optional Category → Attributes */}
+                    <p className="text-[14px] font-semibold leading-snug">{d.product ?? d.item}</p>
+                    {d.category && (
+                      <p className="text-[12px] text-neutral-600 mt-0.5">{d.category}</p>
                     )}
-                    {productLine && (
-                      <p className="text-[12px] text-neutral-600 mt-1.5">{productLine}</p>
-                    )}
-                    {d.attributes.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {d.attributes.length > 0 ? (
+                      <div className="mt-1">
                         {d.attributes.map((a) => (
-                          <span key={a.label} className="text-[11px] text-neutral-500">
-                            <span className="text-neutral-400">{a.label}:</span> {a.value}
-                          </span>
+                          <p key={a.label} className="text-[11px] text-neutral-500 leading-relaxed">
+                            {a.label}: {a.value}
+                          </p>
                         ))}
                       </div>
-                    )}
+                    ) : d.qualityName ? (
+                      <span className="inline-block mt-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#171717] bg-neutral-100 border border-neutral-300 rounded-sm">
+                        {d.qualityName}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="!py-4 !text-right align-top text-[13px] tabular-nums whitespace-nowrap">
                     {fmtQtyWithUnit(l.qty, l.unit)}

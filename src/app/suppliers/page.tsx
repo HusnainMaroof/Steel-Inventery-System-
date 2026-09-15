@@ -58,8 +58,7 @@ export default function SuppliersPage() {
      "Factory / Mill" when it is Cement */
   const specLabelOf = (productName?: string) => {
     const pr = products.find((x) => x.name === productName);
-    const custom = pr?.specLabel ?? (productName?.toLowerCase().includes("cement") ? "Factory / Mill" : undefined);
-    return custom ?? "Quality";
+    return pr?.specLabel ?? "Details";
   };
   const attrLineOf = (p: { categoryId?: string; attributeSnapshot?: Record<string, string>; spec?: string; quality?: string }) =>
     p.attributeSnapshot

@@ -6,32 +6,105 @@ import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, OptionalSe
 import { useUiPreferences } from "@/lib/preferences";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtDateTime, qtyUnitLabel, perUnitLabel } from "@/lib/format";
 import { AttributeFields, validateAttributes } from "@/components/catalogue/AttributeFields";
-import { attrsValuesLine } from "@/lib/catalogue";
+import { productUsesCategories, resolveDefs, scopedDefs } from "@/lib/catalogue";
 import type { AttributeDef, AttributeOption, Purchase } from "@/lib/types";
 
-/* identity of a purchase line: short name on top, its attribute values (or
-   legacy spec/quality) beneath — rendered generically from the snapshot */
+/* structured identity of a purchase line — rendered from the stored
+   hierarchy, never the concatenated shortName:
+     Product name        (e.g. Cement)
+     Category name       (e.g. Grey Cement) — only when the product uses categories
+     Label: value        (one line per attribute, e.g. Company: DG Khan)
+   Legacy records without a snapshot fall back to spec/quality lines. */
 function Identity({
   item,
+  productName,
+  categoryName,
   snapshot,
-  categoryId,
-  defsByCategory,
+  defs,
   spec,
   quality,
 }: {
-  item: string;
+  item?: string;
+  productName?: string;
+  categoryName?: string;
   snapshot?: Record<string, string>;
-  categoryId?: string;
-  defsByCategory: Record<string, AttributeDef[]>;
+  defs: AttributeDef[];
   spec?: string;
   quality?: string;
 }) {
-  const defs = categoryId ? defsByCategory[categoryId] ?? [] : [];
-  const attrLine = snapshot ? attrsValuesLine(defs, snapshot) : [spec, quality].filter(Boolean).join(" · ");
+  const attrRows: { label: string; value: string }[] = snapshot
+    ? defs
+        .filter((d) => snapshot[d.key])
+        .map((d) => ({ label: d.name, value: snapshot[d.key] }))
+    : [
+        ...(spec ? [{ label: "Spec", value: spec }] : []),
+        ...(quality ? [{ label: "Quality", value: quality }] : []),
+      ];
+  const top = productName ?? item;
+  if (!top && !categoryName && attrRows.length === 0) return null;
   return (
     <span className="block min-w-0">
-      <span className="block font-medium text-xs truncate">{item}</span>
-      {attrLine ? <span className="block text-[11px] text-neutral-400 truncate">{attrLine}</span> : null}
+      {top ? <span className="block font-medium text-xs text-black truncate">{top}</span> : null}
+      {categoryName ? <span className="block text-[11px] text-black truncate">{categoryName}</span> : null}
+      {attrRows.map((r) => (
+        <span key={r.label} className="block text-[11px] text-black truncate">
+          {r.label}: {r.value}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/* three-dot row menu — optional Pay, View opens the popup, Delete confirms */
+function RowMenu({ onView, onPay, onDelete }: { onView: () => void; onPay?: () => void; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className="relative inline-block text-left shrink-0"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        aria-label="Row actions"
+        onClick={() => setOpen((o) => !o)}
+        className="w-8 h-8 flex items-center justify-center rounded-md border border-transparent text-black hover:bg-neutral-100 hover:border-neutral-300 transition-colors"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="12" cy="19" r="1.8" />
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-9 z-30 w-40 bg-white border border-neutral-200 rounded-lg shadow-lg py-1">
+            {onPay && (
+              <button
+                type="button"
+                onClick={() => { setOpen(false); onPay(); }}
+                className="w-full text-left px-3.5 py-2 text-[13px] font-semibold text-black hover:bg-neutral-100 transition-colors"
+              >
+                Pay
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onView(); }}
+              className={`w-full text-left px-3.5 py-2 text-[13px] text-black hover:bg-neutral-100 transition-colors ${onPay ? "border-t border-neutral-100" : ""}`}
+            >
+              View details
+            </button>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onDelete(); }}
+              className="w-full text-left px-3.5 py-2 text-[13px] text-black hover:bg-neutral-100 border-t border-neutral-100 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
     </span>
   );
 }
@@ -60,6 +133,9 @@ export default function PurchasesPage() {
   const [payAmount, setPayAmount] = useState(0);
   const [payError, setPayError] = useState("");
   const [formError, setFormError] = useState("");
+  const [query, setQuery] = useState("");
+  const [filterMonth, setFilterMonth] = useState<string>("all");
+  const [filterYear, setFilterYear] = useState<string>("all");
   const { prefs } = useUiPreferences();
   const [showLot, setShowLot] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Purchase | null>(null);
@@ -87,19 +163,39 @@ export default function PurchasesPage() {
 
   const product = products.find((p) => p.id === form.productId && p.active !== false) ?? products.find((p) => p.active !== false);
   const productUnit = product?.unit ?? "kg";
-  const catsOfProduct = categories.filter((c) => c.productId === product?.id && c.active);
-  const category = categories.find((c) => c.id === form.categoryId) ?? catsOfProduct[0];
-  const defsOfCategory = attributeDefs
-    .filter((d) => d.categoryId === category?.id && d.active)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-  const defsByCategory = useMemo(() => {
-    const m: Record<string, AttributeDef[]> = {};
-    for (const d of attributeDefs.filter((x) => x.active))
-      (m[d.categoryId] ??= []).push(d);
-    for (const k of Object.keys(m)) m[k].sort((a, b) => a.sortOrder - b.sortOrder);
-    return m;
-  }, [attributeDefs]);
-  const attrErrors = validateAttributes(defsOfCategory, form.attrs);
+  const usesCats = productUsesCategories(product);
+  const catsOfProduct = usesCats ? categories.filter((c) => c.productId === product?.id && c.active) : [];
+  const category = usesCats
+    ? (categories.find((c) => c.id === form.categoryId) ?? catsOfProduct[0])
+    : undefined;
+  const liveDefs = product
+    ? scopedDefs(attributeDefs, product.id, usesCats ? category?.id : undefined).filter((d) => d.active)
+    : [];
+  const attrErrors = validateAttributes(liveDefs, form.attrs);
+
+  const productOfPurchase = (p: Purchase) => {
+    if (p.product) {
+      const byName = products.find((x) => x.name === p.product);
+      if (byName) return byName;
+    }
+    if (p.categoryId) {
+      const cat = categories.find((c) => c.id === p.categoryId);
+      if (cat) return products.find((x) => x.id === cat.productId);
+    }
+    return undefined;
+  };
+  const catNameOf = (p: Purchase) => {
+    const prod = productOfPurchase(p);
+    if (!productUsesCategories(prod) || !p.categoryId) return undefined;
+    return categories.find((c) => c.id === p.categoryId)?.name;
+  };
+  const productNameOf = (p: Purchase) => productOfPurchase(p)?.name ?? p.product;
+  const defsOfPurchase = (p: Purchase) =>
+    resolveDefs(attributeDefs, {
+      productId: productOfPurchase(p)?.id,
+      categoryId: p.categoryId,
+      snapshot: p.attributeSnapshot,
+    });
 
   const defsOptions = useMemo(() => {
     const m: Record<string, AttributeOption[]> = {};
@@ -163,17 +259,18 @@ export default function PurchasesPage() {
       return;
     }
     if (!form.supplierId) return setFormError("Pick the supplier you bought from.");
-    if (!category) return setFormError("Pick a category — add one under Products if this product has none yet.");
-    const errors = validateAttributes(defsOfCategory, form.attrs);
+    if (!product) return setFormError("Pick a product.");
+    if (usesCats && !category) return setFormError("Pick a category — add one under Products if this product has none yet.");
+    const errors = validateAttributes(liveDefs, form.attrs);
     if (Object.keys(errors).length > 0) return setFormError(Object.values(errors)[0]);
     setFormError("");
-    const variant = ensureVariant(category.id, form.attrs);
+    const variant = ensureVariant(product.id, usesCats ? category?.id : undefined, form.attrs);
     addPurchase({
       date: form.date,
       supplierId: form.supplierId,
-      product: product?.name,
+      product: product.name,
       item: variant.shortName,
-      categoryId: category.id,
+      categoryId: usesCats ? category?.id : undefined,
       variantId: variant.id,
       attributeSnapshot: variant.attributes,
       lotNumber: form.lotNumber.trim() || undefined,
@@ -207,9 +304,32 @@ export default function PurchasesPage() {
     setDeleteTarget(null);
   };
 
+  // Search + month/year filter (applies to All Purchases and Payment Dues)
+  const yearOptions = Array.from(
+    new Set([...purchases.map((p) => p.date.slice(0, 4)), String(new Date().getFullYear())])
+  ).sort((a, b) => b.localeCompare(a));
+  const matchesQuery = (p: Purchase) => {
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    const catName = catNameOf(p) ?? "";
+    const prodName = productNameOf(p) ?? "";
+    const attrs = p.attributeSnapshot ? Object.values(p.attributeSnapshot).join(" ") : [p.spec, p.quality].filter(Boolean).join(" ");
+    return [supplierName(p.supplierId), prodName, catName, p.item, attrs, p.lotNumber ?? "", p.heatNumber ?? "", p.batchNumber ?? ""]
+      .join(" ")
+      .toLowerCase()
+      .includes(q);
+  };
+  const matchesDate = (p: Purchase) => {
+    if (filterMonth !== "all" && p.date.slice(5, 7) !== filterMonth) return false;
+    if (filterYear !== "all" && p.date.slice(0, 4) !== filterYear) return false;
+    return true;
+  };
+  const filteredPurchases = purchases.filter((p) => matchesQuery(p) && matchesDate(p));
+  const filteredDues = duePurchases.filter((p) => matchesQuery(p) && matchesDate(p));
+
   // Date-grouped purchases
   const purchaseDateGroups = useMemo(() => {
-    const sorted = [...purchases].sort((a, b) => b.date.localeCompare(a.date));
+    const sorted = [...filteredPurchases].sort((a, b) => b.date.localeCompare(a.date));
     const map = new Map<string, Purchase[]>();
     for (const p of sorted) {
       const list = map.get(p.date) ?? [];
@@ -223,10 +343,10 @@ export default function PurchasesPage() {
         rows: items,
         dayTotal: items.reduce((a, p) => a + steelAmount(p), 0),
       }));
-  }, [purchases]);
+  }, [filteredPurchases]);
 
   const dueDateGroups = useMemo(() => {
-    const sorted = [...duePurchases].sort((a, b) => b.date.localeCompare(a.date));
+    const sorted = [...filteredDues].sort((a, b) => b.date.localeCompare(a.date));
     const map = new Map<string, Purchase[]>();
     for (const p of sorted) {
       const list = map.get(p.date) ?? [];
@@ -235,13 +355,8 @@ export default function PurchasesPage() {
     }
     return Array.from(map.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([date, items]) => ({
-        date,
-        rows: items,
-        dayTotal: items.reduce((a, p) => a + steelAmount(p), 0),
-        dayPaid: items.reduce((a, p) => a + (p.paid ?? 0), 0),
-      }));
-  }, [duePurchases]); // eslint-disable-line react-hooks/preserve-manual-memoization
+      .map(([date, items]) => ({ date, rows: items }));
+  }, [filteredDues]); // eslint-disable-line react-hooks/preserve-manual-memoization
 
   const selected = purchases.find((p) => p.id === selectedId) ?? null;
 
@@ -253,15 +368,48 @@ export default function PurchasesPage() {
       <PageTitle
         title="Purchases"
         sub="Stock bought from suppliers, including delivery and other costs"
-        action={<button className="btn-primary" onClick={openAdd}>+ Add Purchase</button>}
       />
+
+      {/* one row: search + month/year filters + add */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search supplier, product, brand…"
+          className="flex-1 min-w-[200px]"
+          aria-label="Search purchases"
+        />
+        <select
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value)}
+          className="!w-auto"
+          aria-label="Filter by month"
+        >
+          <option value="all">All months</option>
+          {["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"].map((m, i) => (
+            <option key={m} value={m}>{new Date(2000, i, 1).toLocaleDateString("en-GB", { month: "long" })}</option>
+          ))}
+        </select>
+        <select
+          value={filterYear}
+          onChange={(e) => setFilterYear(e.target.value)}
+          className="!w-auto"
+          aria-label="Filter by year"
+        >
+          <option value="all">All years</option>
+          {yearOptions.map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+        <button className="btn-primary shrink-0" onClick={openAdd}>+ Add Purchase</button>
+      </div>
 
       <div className="flex gap-6 border-b border-neutral-200 mb-4">
         {([
           ["all", "All Purchases"],
           ["dues", `Payment Dues${totalDue > 0 ? ` (${duePurchases.length})` : ""}`],
         ] as const).map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key)} className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors ${tab === key ? "border-black text-black font-medium" : "border-transparent text-neutral-400 hover:text-neutral-600"}`}>
+          <button key={key} onClick={() => setTab(key)} className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors ${tab === key ? "border-black text-black font-bold" : "border-transparent text-black font-normal hover:opacity-60"}`}>
             {label}
           </button>
         ))}
@@ -270,81 +418,88 @@ export default function PurchasesPage() {
       {tab === "all" && (
         purchases.length === 0 ? (
           <EmptyState emoji="🚚" title="No purchases yet" hint={suppliers.length === 0 ? "Add a mill / supplier first, then your first purchase will feel right at home." : "Record your first purchase — date, supplier and rate is all it takes."} action={<button className="btn-primary" onClick={openAdd}>+ Add Purchase</button>} />
+        ) : filteredPurchases.length === 0 ? (
+          <EmptyState emoji="🔍" title="No purchases match" hint="Try a different search term or pick another date range." />
         ) : (
           <div className="space-y-6">
             {purchaseDateGroups.map((g) => (
               <div key={g.date}>
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="text-sm font-bold text-neutral-800">{fmtDate(g.date)}</span>
-                  <span className="text-xs text-neutral-400">{g.rows.length} purchase{g.rows.length > 1 ? "s" : ""}</span>
+                  <span className="text-sm font-bold text-black">{fmtDate(g.date)}</span>
                   <div className="flex-1 border-b border-neutral-200" />
-                  <span className="text-sm font-semibold text-neutral-600 tabular-nums">{fmtMoney(g.dayTotal)}</span>
                 </div>
 
-                {/* Desktop rows */}
-                <div className="hidden sm:block border border-neutral-200 bg-white">
-                  <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_120px_140px_150px_120px] gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200">
-                    <span>Product / Item</span>
-                    <span>Mill / Supplier</span>
-                    <span className="text-right">Quantity</span>
-                    <span className="text-right">Buying Price</span>
-                    <span className="text-right">Your Selling Price</span>
-                    <span />
-                  </div>
+                {/* one table per purchase — each keeps its own amount */}
+                <div className="space-y-3">
                   {g.rows.map((r) => (
-                    <div
-                      key={r.id}
-                      onClick={() => setSelectedId(r.id)}
-                      className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_120px_140px_150px_120px] gap-3 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors"
-                    >
-                      <Identity
-                        item={r.item}
-                        snapshot={r.attributeSnapshot}
-                        categoryId={r.categoryId}
-                        defsByCategory={defsByCategory}
-                        spec={r.spec}
-                        quality={r.quality}
-                      />
-                      <span className="self-center text-neutral-600 text-xs truncate">{supplierName(r.supplierId)}</span>
-                      <span className="self-center text-right text-xs tabular-nums">{fmtQtyWithUnit(r.qty, r.unit)}</span>
-                      <span className="self-center text-right text-xs tabular-nums">{fmtRateWithUnit(r.rate, r.unit)}</span>
-                      <span className="self-center text-right text-xs tabular-nums">
-                        {r.sellRate ? fmtRateWithUnit(r.sellRate, r.unit) : <span className="text-neutral-400">—</span>}
-                      </span>
-                      <span className="self-center text-right whitespace-nowrap">
-                        <button onClick={(e) => { e.stopPropagation(); setSelectedId(r.id); }} className="btn-ghost !py-1 !px-3 text-xs">
-                          View
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(r); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">
-                          Delete
-                        </button>
-                      </span>
+                    <div key={r.id} className="hidden sm:block border border-neutral-200 bg-white">
+                      <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_110px_120px_130px_48px] gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-black font-medium border-b border-neutral-200">
+                        <span>Supplier</span>
+                        <span>Product</span>
+                        <span className="text-right">Quantity</span>
+                        <span className="text-right">Buying</span>
+                        <span className="text-right">Selling</span>
+                        <span />
+                      </div>
+                      <div
+                        onClick={() => setSelectedId(r.id)}
+                        className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_110px_120px_130px_48px] gap-3 px-4 py-3 cursor-pointer hover:bg-neutral-50 transition-colors"
+                      >
+                        <span className="block min-w-0 self-center">
+                          <span className="block text-xs font-medium text-black truncate">{supplierName(r.supplierId)}</span>
+                          <span className="block text-[11px] font-bold text-black tabular-nums truncate">Total: {fmtMoney(steelAmount(r))}</span>
+                        </span>
+                        <Identity
+                          item={r.item}
+                          productName={productNameOf(r)}
+                          categoryName={catNameOf(r)}
+                          snapshot={r.attributeSnapshot}
+                          defs={defsOfPurchase(r)}
+                          spec={r.spec}
+                          quality={r.quality}
+                        />
+                        <span className="self-center text-right text-xs tabular-nums text-black">{fmtQtyWithUnit(r.qty, r.unit)}</span>
+                        <span className="self-center text-right text-xs tabular-nums text-black">{fmtRateWithUnit(r.rate, r.unit)}</span>
+                        <span className="self-center text-right text-xs tabular-nums text-black">
+                          {r.sellRate ? fmtRateWithUnit(r.sellRate, r.unit) : "—"}
+                        </span>
+                        <span className="self-center flex justify-end">
+                          <RowMenu
+                            onView={() => setSelectedId(r.id)}
+                            onDelete={() => setDeleteTarget(r)}
+                          />
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Mobile cards */}
-                <div className="sm:hidden border border-neutral-200 bg-white divide-y divide-neutral-100">
+                {/* Mobile cards — one card per purchase */}
+                <div className="sm:hidden space-y-3">
                   {g.rows.map((r) => (
-                    <div key={r.id} onClick={() => setSelectedId(r.id)} className="p-3 cursor-pointer active:bg-neutral-50">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="font-medium text-sm truncate">{r.item}</span>
-                        <span className="shrink-0 font-medium text-sm tabular-nums">{fmtQtyWithUnit(r.qty, r.unit)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
-                        <span className="truncate">
-                          {(() => {
-                            const defs = r.categoryId ? defsByCategory[r.categoryId] ?? [] : [];
-                            const attrLine = r.attributeSnapshot ? attrsValuesLine(defs, r.attributeSnapshot) : [r.spec, r.quality].filter(Boolean).join(" · ");
-                            return attrLine || "—";
-                          })()}
+                    <div key={r.id} onClick={() => setSelectedId(r.id)} className="border border-neutral-200 bg-white p-3 cursor-pointer active:bg-neutral-50">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <Identity
+                          item={r.item}
+                          productName={productNameOf(r)}
+                          categoryName={catNameOf(r)}
+                          snapshot={r.attributeSnapshot}
+                          defs={defsOfPurchase(r)}
+                          spec={r.spec}
+                          quality={r.quality}
+                        />
+                        <span className="flex items-center gap-1 shrink-0">
+                          <span className="font-medium text-sm tabular-nums text-black">{fmtQtyWithUnit(r.qty, r.unit)}</span>
+                          <RowMenu
+                            onView={() => setSelectedId(r.id)}
+                            onDelete={() => setDeleteTarget(r)}
+                          />
                         </span>
-                        <span className="shrink-0 text-neutral-400 truncate">{supplierName(r.supplierId)}</span>
                       </div>
-                      <div className="flex items-center justify-between gap-2 mt-1.5 text-xs">
-                        <span className="tabular-nums text-neutral-600">Buy {fmtRateWithUnit(r.rate, r.unit)}</span>
+                      <div className="flex items-center justify-between gap-2 mt-1.5 text-xs text-black">
+                        <span className="tabular-nums">Buy {fmtRateWithUnit(r.rate, r.unit)}</span>
                         <span className="tabular-nums font-medium">
-                          {r.sellRate ? `Sell ${fmtRateWithUnit(r.sellRate, r.unit)}` : <span className="text-neutral-400">No sell price</span>}
+                          {r.sellRate ? `Sell ${fmtRateWithUnit(r.sellRate, r.unit)}` : "No sell price"}
                         </span>
                       </div>
                     </div>
@@ -360,89 +515,93 @@ export default function PurchasesPage() {
         <div>
           {totalDue > 0 && (
             <div className="border border-neutral-200 p-4 mb-5 flex justify-between items-center">
-              <span className="text-xs uppercase tracking-widest text-neutral-500">Total Outstanding to Suppliers</span>
-              <span className="font-bold tabular-nums text-lg">{fmtMoney(totalDue)}</span>
+              <span className="text-xs uppercase tracking-widest text-black font-medium">Total Outstanding to Suppliers</span>
+              <span className="font-bold tabular-nums text-lg text-[#a12b1f]">{fmtMoney(totalDue)}</span>
             </div>
           )}
           {duePurchases.length === 0 ? (
             <div className="border border-dashed border-neutral-300">
               <EmptyState emoji="🎉" compact title="No pending dues" hint="Every purchase is fully paid — the mills are smiling today." />
             </div>
+          ) : filteredDues.length === 0 ? (
+            <EmptyState emoji="🔍" title="No dues match" hint="Try a different search term or pick another month / year." />
           ) : (
             <div className="space-y-6">
               {dueDateGroups.map((g) => (
                 <div key={g.date}>
                   <div className="flex items-center gap-3 mb-3">
-                    <span className="text-sm font-bold text-neutral-800">{fmtDate(g.date)}</span>
-                    <span className="text-xs text-neutral-400">{g.rows.length} due</span>
+                    <span className="text-sm font-bold text-black">{fmtDate(g.date)}</span>
                     <div className="flex-1 border-b border-neutral-200" />
-                    <span className="text-xs font-semibold text-white bg-[#a12b1f] px-2 py-0.5 rounded tabular-nums">Due {fmtMoney(g.dayTotal - g.dayPaid)}</span>
                   </div>
-                  {/* Desktop rows */}
-                  <div className="hidden sm:block border border-neutral-200 bg-white overflow-x-auto">
-                    <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_130px_100px_110px_100px_150px] gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200 min-w-[820px]">
-                      <span>Product / Item</span>
-                      <span>Mill / Supplier</span>
-                      <span className="text-right">Total Payable to Mill</span>
-                      <span className="text-right">Paid</span>
-                      <span className="text-right">Remaining</span>
-                      <span>Last Payment</span>
-                      <span />
-                    </div>
+
+                  {/* one table per due purchase */}
+                  <div className="space-y-3">
                     {g.rows.map((r) => (
-                      <div
-                        key={r.id}
-                        onClick={() => { openPay(r.id); }}
-                        className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_130px_100px_110px_100px_150px] gap-3 px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors min-w-[820px]"
-                      >
+                      <div key={r.id} className="hidden sm:block border border-neutral-200 bg-white">
+                        <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_110px_130px_150px] gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-black font-medium border-b border-neutral-200">
+                          <span>Supplier</span>
+                          <span>Product</span>
+                          <span className="text-right">Quantity</span>
+                          <span className="text-right">Remaining</span>
+                          <span />
+                        </div>
+                        <div
+                          onClick={() => { openPay(r.id); }}
+                          className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_110px_130px_150px] gap-3 px-4 py-3 cursor-pointer hover:bg-neutral-50 transition-colors"
+                        >
+                          <span className="block min-w-0 self-center">
+                            <span className="block text-xs font-medium text-black truncate">{supplierName(r.supplierId)}</span>
+                            <span className="block text-[11px] font-bold text-black tabular-nums truncate">Total: {fmtMoney(steelAmount(r))}</span>
+                          </span>
                         <Identity
                           item={r.item}
+                          productName={productNameOf(r)}
+                          categoryName={catNameOf(r)}
                           snapshot={r.attributeSnapshot}
-                          categoryId={r.categoryId}
-                          defsByCategory={defsByCategory}
+                          defs={defsOfPurchase(r)}
                           spec={r.spec}
                           quality={r.quality}
                         />
-                        <span className="self-center text-neutral-600 text-xs truncate">{supplierName(r.supplierId)}</span>
-                        <span className="self-center text-right text-xs tabular-nums">{fmtMoney(steelAmount(r))}</span>
-                        <span className="self-center text-right text-xs text-neutral-500 tabular-nums">{fmtMoney(r.paid ?? 0)}</span>
-                        <span className="self-center text-right font-medium text-xs text-[#a12b1f] tabular-nums">{fmtMoney(remainingOf(r))}</span>
-                        <span className="self-center text-xs text-neutral-500">
-                          {r.lastPaidAt ? fmtDate(r.lastPaidAt) : <span className="text-neutral-400">—</span>}
-                        </span>
-                        <span className="self-center text-right whitespace-nowrap">
-                          <button onClick={(e) => { e.stopPropagation(); openPay(r.id); }} className="btn-primary !py-1 !px-3 text-xs">Pay</button>
-                          <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(r); }} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
-                        </span>
+                          <span className="self-center text-right text-xs tabular-nums text-black">{fmtQtyWithUnit(r.qty, r.unit)}</span>
+                          <span className="self-center text-right font-bold text-xs text-[#a12b1f] tabular-nums">{fmtMoney(remainingOf(r))}</span>
+                          <span className="self-center flex justify-end">
+                            <RowMenu
+                              onPay={() => openPay(r.id)}
+                              onView={() => setSelectedId(r.id)}
+                              onDelete={() => setDeleteTarget(r)}
+                            />
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Mobile cards */}
-                  <div className="sm:hidden border border-neutral-200 bg-white divide-y divide-neutral-100">
+                  {/* Mobile cards — one card per due purchase */}
+                  <div className="sm:hidden space-y-3">
                     {g.rows.map((r) => (
-                      <div key={r.id} className="p-3">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="font-medium text-sm truncate">{r.item}</span>
-                          <span className="shrink-0 font-medium text-sm text-[#a12b1f] tabular-nums">Due {fmtMoney(remainingOf(r))}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
-                          <span className="truncate">
-                            {(() => {
-                              const defs = r.categoryId ? defsByCategory[r.categoryId] ?? [] : [];
-                              const attrLine = r.attributeSnapshot ? attrsValuesLine(defs, r.attributeSnapshot) : [r.spec, r.quality].filter(Boolean).join(" · ");
-                              return attrLine || "—";
-                            })()}
+                      <div key={r.id} className="border border-neutral-200 bg-white p-3">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                        <Identity
+                          item={r.item}
+                          productName={productNameOf(r)}
+                          categoryName={catNameOf(r)}
+                          snapshot={r.attributeSnapshot}
+                          defs={defsOfPurchase(r)}
+                          spec={r.spec}
+                          quality={r.quality}
+                        />
+                          <span className="flex items-center gap-1 shrink-0">
+                            <span className="font-bold text-sm text-[#a12b1f] tabular-nums">Due {fmtMoney(remainingOf(r))}</span>
+                            <RowMenu
+                              onPay={() => openPay(r.id)}
+                              onView={() => setSelectedId(r.id)}
+                              onDelete={() => setDeleteTarget(r)}
+                            />
                           </span>
-                          <span className="shrink-0 text-neutral-400 truncate">{supplierName(r.supplierId)}</span>
                         </div>
-                        <div className="flex items-center justify-between gap-2 mt-1.5 text-xs text-neutral-500">
+                        <div className="flex items-center justify-between gap-2 mt-1.5 text-xs text-black">
                           <span className="tabular-nums">Paid {fmtMoney(r.paid ?? 0)} of {fmtMoney(steelAmount(r))}</span>
                           <span className="tabular-nums shrink-0">{r.lastPaidAt ? `Last ${fmtDate(r.lastPaidAt)}` : "No payments yet"}</span>
-                        </div>
-                        <div className="flex justify-end gap-2 mt-2">
-                          <button onClick={() => { openPay(r.id); }} className="btn-primary !py-1 !px-3 text-xs">Pay</button>
-                          <button onClick={() => setDeleteTarget(r)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50">Delete</button>
                         </div>
                       </div>
                     ))}
@@ -494,20 +653,22 @@ export default function PurchasesPage() {
                     {products.filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label>Category</label>
-                  <select value={category?.id ?? ""} onChange={(e) => onCategoryChange(e.target.value)} required>
-                    <option value="" disabled>Select category…</option>
-                    {catsOfProduct.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
+                {usesCats && (
+                  <div>
+                    <label>Category</label>
+                    <select value={category?.id ?? ""} onChange={(e) => onCategoryChange(e.target.value)} required>
+                      <option value="" disabled>Select category…</option>
+                      {catsOfProduct.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
-              {category && defsOfCategory.length > 0 && (
+              {liveDefs.length > 0 && (
                 <div className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/50">
-                  <p className="text-[12px] font-medium text-neutral-600 mb-3">Attributes — {category.name}</p>
+                  <p className="text-[12px] font-medium text-neutral-600 mb-3">Attributes</p>
                   <AttributeFields
-                    defs={defsOfCategory}
+                    defs={liveDefs}
                     value={form.attrs}
                     onChange={(patch) => setForm((f) => ({ ...f, attrs: { ...f.attrs, ...patch } }))}
                     optionsOf={(defId) => defsOptions[defId] ?? []}
@@ -524,8 +685,8 @@ export default function PurchasesPage() {
               >
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div><label>Lot number</label><input value={form.lotNumber} onChange={(e) => setForm({ ...form, lotNumber: e.target.value })} placeholder="e.g. LOT-001" /></div>
-                  <div><label>Heat number</label><input value={form.heatNumber} onChange={(e) => setForm({ ...form, heatNumber: e.target.value })} placeholder="Steel heats, e.g. H92831" /></div>
-                  <div><label>Batch number</label><input value={form.batchNumber} onChange={(e) => setForm({ ...form, batchNumber: e.target.value })} placeholder="Cement batches" /></div>
+                  <div><label>Heat number</label><input value={form.heatNumber} onChange={(e) => setForm({ ...form, heatNumber: e.target.value })} placeholder="e.g. H92831" /></div>
+                  <div><label>Batch number</label><input value={form.batchNumber} onChange={(e) => setForm({ ...form, batchNumber: e.target.value })} placeholder="e.g. LC-77342" /></div>
                   {warehouses.length > 0 && (
                     <>
                       <div>
@@ -663,12 +824,12 @@ export default function PurchasesPage() {
           const payable = steelAmount(p);
           const paid = p.paid ?? 0;
           const remaining = Math.max(0, payable - paid);
-          const defs = p.categoryId ? defsByCategory[p.categoryId] ?? [] : [];
-          const catName = categories.find((c) => c.id === p.categoryId)?.name;
-          const detailRows = [
+          const defs = defsOfPurchase(p);
+          const catName = catNameOf(p);
+          const detailRows: { label: string; value: string; strong?: boolean; tone?: "green" | "red" }[] = [
             { label: "Purchase Date", value: fmtDate(p.date) },
             { label: "Supplier", value: supplierName(p.supplierId) },
-            { label: "Product", value: p.product || "—" },
+            { label: "Product", value: productNameOf(p) || "—" },
             ...(catName ? [{ label: "Category", value: catName }] : []),
             ...(p.attributeSnapshot
               ? defs.filter((d) => p.attributeSnapshot![d.key]).map((d) => ({ label: d.name, value: p.attributeSnapshot![d.key] }))
@@ -684,18 +845,18 @@ export default function PurchasesPage() {
               : []),
             { label: "Quantity", value: fmtQtyWithUnit(p.qty, p.unit) },
             { label: "Buying Price" + perUnit, value: fmtMoney(p.rate) },
-            { label: "+ Transport" + perUnit, value: p.transport > 0 ? fmtMoney(transportShare) : "—", muted: true },
-            { label: "+ Loading" + perUnit, value: (p.loadingCharges ?? 0) > 0 ? fmtMoney(loadingShare) : "—", muted: true },
-            { label: "+ Labour" + perUnit, value: (p.labourCharges ?? 0) > 0 ? fmtMoney(labourShare) : "—", muted: true },
-            { label: "+ Other Expenses" + perUnit, value: p.otherCost > 0 ? fmtMoney(otherShare) : "—", muted: true },
+            { label: "+ Transport" + perUnit, value: p.transport > 0 ? fmtMoney(transportShare) : "—" },
+            { label: "+ Loading" + perUnit, value: (p.loadingCharges ?? 0) > 0 ? fmtMoney(loadingShare) : "—" },
+            { label: "+ Labour" + perUnit, value: (p.labourCharges ?? 0) > 0 ? fmtMoney(labourShare) : "—" },
+            { label: "+ Other Expenses" + perUnit, value: p.otherCost > 0 ? fmtMoney(otherShare) : "—" },
             { label: "Landed Cost" + perUnit, value: fmtMoney(costPerUnit), strong: true },
-            { label: "Transport (total)", value: fmtMoney(p.transport), muted: true },
-            { label: "Loading (total)", value: fmtMoney(p.loadingCharges ?? 0), muted: true },
-            { label: "Labour (total)", value: fmtMoney(p.labourCharges ?? 0), muted: true },
-            { label: "Other Expenses (total)", value: fmtMoney(p.otherCost), muted: true },
-            { label: "Total Payable to Mill", value: fmtMoney(payable) },
-            { label: "Already Paid", value: fmtMoney(paid), muted: true },
-            { label: "Remaining Due", value: fmtMoney(remaining), strong: remaining > 0, muted: remaining === 0 },
+            { label: "Transport (total)", value: fmtMoney(p.transport) },
+            { label: "Loading (total)", value: fmtMoney(p.loadingCharges ?? 0) },
+            { label: "Labour (total)", value: fmtMoney(p.labourCharges ?? 0) },
+            { label: "Other Expenses (total)", value: fmtMoney(p.otherCost) },
+            { label: "Total Payable to Mill", value: fmtMoney(payable), strong: true },
+            { label: "Already Paid", value: fmtMoney(paid), tone: "green" },
+            { label: "Remaining Due", value: fmtMoney(remaining), tone: remaining > 0 ? "red" : undefined },
             { label: "Your Selling Price", value: usedSell ? fmtRateWithUnit(usedSell, p.unit) : "—" },
             { label: "Profit" + perUnit, value: fmtMoney(profitPerUnit), strong: true },
           ];
@@ -703,13 +864,23 @@ export default function PurchasesPage() {
             <div>
               {detailRows.map((r) => (
                 <div key={r.label} className={`flex justify-between items-center gap-4 px-4 py-3 border-b border-neutral-200 last:border-b-0 ${r.strong ? "bg-black text-white" : ""}`}>
-                  <span className={`text-xs uppercase tracking-widest ${r.muted ? "text-neutral-400" : r.strong ? "" : "text-neutral-500"}`}>{r.label}</span>
-                  <span className={`tabular-nums text-right shrink-0 ${r.muted ? "text-neutral-400" : "font-medium"}`}>{r.value}</span>
+                  <span className={`text-xs uppercase tracking-widest font-medium ${r.strong ? "" : "text-black"}`}>{r.label}</span>
+                  <span className={`tabular-nums text-right shrink-0 font-medium ${r.strong ? "" : r.tone === "green" ? "text-[#2e6b2e]" : r.tone === "red" ? "text-[#a12b1f]" : "text-black"}`}>{r.value}</span>
                 </div>
               ))}
-              <div className="flex justify-between items-center mt-4">
-                <p className="text-xs text-neutral-500">Landed cost = buying price + transport + other expenses, spread per unit. Profit = Your Selling Price − Landed Cost.</p>
-                <button onClick={() => setDeleteTarget(p)} className="btn-ghost !py-1 !px-3 text-xs text-red-600 hover:!bg-red-50 shrink-0">Delete</button>
+              <div className="flex justify-between items-center gap-4 mt-4">
+                <p className="text-xs text-black leading-relaxed max-w-md">Landed cost = buying price + transport + other expenses, spread per unit. Profit = Your Selling Price − Landed Cost.</p>
+                <div className="flex items-center gap-2 shrink-0">
+                  {remaining > 0 && (
+                    <button
+                      onClick={() => { setSelectedId(null); openPay(p.id); }}
+                      className="btn-primary !py-1.5 !px-4 text-xs"
+                    >
+                      Pay Due
+                    </button>
+                  )}
+                  <button onClick={() => setDeleteTarget(p)} className="btn-ghost !py-1.5 !px-4 text-xs text-[#a12b1f] shadow-md hover:shadow-lg">Delete</button>
+                </div>
               </div>
             </div>
           );

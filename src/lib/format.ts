@@ -18,6 +18,11 @@ export const fmtCompact = (n: number) => {
   return fmtMoney(n);
 };
 
+export const fmtPct = (n: number) => {
+  if (!Number.isFinite(n)) return "0%";
+  return `${n.toFixed(1)}%`;
+};
+
 // plural quantity label — "kg" stays, count nouns pluralize ("bag" → "bags")
 export const qtyUnitLabel = (u?: string) =>
   u === "bag" || u === "sack" || u === "box" || u === "roll" || u === "dozen"
@@ -62,6 +67,27 @@ export const fmtDateTime = (iso: string) => {
 };
 
 export const monthKey = (iso: string) => iso.slice(0, 7);
+
+export const MONTHS = [
+  { value: "01", label: "January", short: "Jan" },
+  { value: "02", label: "February", short: "Feb" },
+  { value: "03", label: "March", short: "Mar" },
+  { value: "04", label: "April", short: "Apr" },
+  { value: "05", label: "May", short: "May" },
+  { value: "06", label: "June", short: "Jun" },
+  { value: "07", label: "July", short: "Jul" },
+  { value: "08", label: "August", short: "Aug" },
+  { value: "09", label: "September", short: "Sep" },
+  { value: "10", label: "October", short: "Oct" },
+  { value: "11", label: "November", short: "Nov" },
+  { value: "12", label: "December", short: "Dec" },
+] as const;
+
+export const periodInvoiceNo = (year: string, month?: string | null) => {
+  if (!month) return `Y-${year}`;
+  const m = MONTHS.find((x) => x.value === month);
+  return `${(m?.short ?? month).toUpperCase()}-${year}`;
+};
 
 export const monthLabel = (key: string) =>
   new Date(key + "-01T00:00:00").toLocaleDateString("en-GB", {

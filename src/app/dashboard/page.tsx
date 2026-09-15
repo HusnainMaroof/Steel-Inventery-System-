@@ -88,7 +88,7 @@ function SalesProfitHero({
   return (
     <Card dark className="p-6 sm:p-8 h-full min-h-[220px] flex flex-col justify-between gap-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
           Net profit
         </p>
         <div className="mt-3 text-white">
@@ -96,17 +96,17 @@ function SalesProfitHero({
             ₨ <CountUp value={profitValue} compact />
           </span>
         </div>
-        <p className="mt-3 text-[12px] text-neutral-500 leading-relaxed max-w-md">{profitHint}</p>
+        <p className="mt-3 text-[12px] text-white leading-relaxed max-w-md">{profitHint}</p>
       </div>
       <div className="pt-5 border-t border-neutral-800">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
           Sales in period
         </p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <span className="text-[26px] sm:text-[32px] font-bold text-white tabular-nums leading-none">
             ₨ <CountUp value={salesTotal} compact />
           </span>
-          <p className="text-[11px] text-neutral-500 max-w-[200px] text-right leading-snug">{salesHint}</p>
+          <p className="text-[11px] text-white max-w-[200px] text-right leading-snug">{salesHint}</p>
         </div>
       </div>
     </Card>
@@ -135,12 +135,12 @@ function DueCard({
 
   return (
     <Card className="p-5 h-full flex flex-col justify-between gap-4 min-h-[140px]">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#171717]">{label}</p>
       <div>
-        <p className={`text-[28px] sm:text-[32px] font-bold tabular-nums leading-none ${value > 0 ? accent : "text-neutral-400"}`}>
+        <p className={`text-[28px] sm:text-[32px] font-bold tabular-nums leading-none ${value > 0 ? accent : "text-[#171717]"}`}>
           {value > 0 ? fmtMoney(value) : "—"}
         </p>
-        <p className="mt-2.5 text-[11px] text-neutral-400 leading-relaxed">{hint}</p>
+        <p className="mt-2.5 text-[11px] text-[#171717] leading-relaxed">{hint}</p>
       </div>
     </Card>
   );
@@ -171,7 +171,7 @@ function Kpi({
     >
       <p
         className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${
-          dark ? "text-neutral-400" : "text-neutral-500"
+          dark ? "text-white" : "text-[#171717]"
         }`}
       >
         {label}
@@ -187,7 +187,7 @@ function Kpi({
         {hint && (
           <p
             className={`mt-2.5 text-[11px] font-normal ${
-              dark ? "text-neutral-500" : "text-neutral-400"
+              dark ? "text-white" : "text-[#171717]"
             }`}
           >
             {hint}
@@ -476,7 +476,7 @@ export default function DashboardPage() {
           <h1 className="text-[22px] sm:text-2xl font-semibold tracking-tight">
             {greeting}
           </h1>
-          <p className="text-[13px] text-neutral-500 mt-1.5">{day}</p>
+          <p className="text-[13px] text-[#171717] mt-1.5">{day}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -489,7 +489,7 @@ export default function DashboardPage() {
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
                   period === p.key
                     ? "bg-[#171717] text-white"
-                    : "text-neutral-500 hover:text-neutral-900"
+                    : "text-[#171717] hover:text-black"
                 }`}
               >
                 {p.label}
@@ -505,9 +505,6 @@ export default function DashboardPage() {
             <div className="leading-tight">
               <p className="text-[13px] font-semibold text-[#171717]">
                 {user?.name}
-              </p>
-              <p className="text-[10px] text-neutral-500">
-                {user?.businessName || "Owner"}
               </p>
             </div>
           </div>
@@ -531,14 +528,6 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-neutral-500 pb-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-black" />
-          {isAll
-            ? products.length === 0
-              ? "No products yet — add them under Products"
-              : `${products.length} product${products.length === 1 ? "" : "s"} · ${itemCount} tracked item${itemCount === 1 ? "" : "s"}`
-            : `${product!.name} · ${qtyUnitLabel(product?.unit) || "unit"} · ${itemCount} item${itemCount === 1 ? "" : "s"} under it`}
         </div>
       </div>
 
@@ -599,7 +588,7 @@ export default function DashboardPage() {
         </StaggerItem>
       </Stagger>
 
-      <p className="text-xs text-neutral-500 mt-6">
+      <p className="text-xs text-[#171717] mt-6">
         {isAll
           ? "Showing the whole depot — pick a product above to zoom its stock, sales and profit."
           : `Stock, sales and profit are for ${product!.name}. Payment dues always cover the whole depot.`}
