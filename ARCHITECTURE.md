@@ -12,7 +12,9 @@ whole trading business in one ledger:
 - **Stock** is kept automatically — no manual stock counts.
 - **Sell** to customers with printed invoices.
 - **Track payments** on both sides — what customers owe you and what you owe suppliers/mills.
-- **See profit** — real profit, counted only when money is actually collected.
+- **See profit** — on the dashboard, profit is counted when money is actually
+  collected. Profit & Reports shows the period's sales minus the cost of the
+  stock that was sold, then shop expenses.
 
 One entry (a purchase or a sale) drives every other screen. There is no second
 copy of the numbers anywhere: dashboard, inventory, sales, customers,
@@ -210,15 +212,37 @@ Every money figure in the app comes from these helpers
   (steel amount only).
 - Overpayments are blocked with a visible error wherever money is entered.
 
-### Profit (the important one)
+### Profit
 
-Profit is **realized, cash-basis**, not accrual:
+The **dashboard** shows **realized, cash-basis** profit:
 
 - An invoice's profit is recognized when the customer actually pays toward it,
   matched per invoice (`profit × received ÷ grand total`).
 - Unallocated receipts are spread using the depot's blended margin.
 - Whole-depot net profit subtracts shop expenses for the period.
-- The dashboard, P&L and Reports all use this same memo so every number agrees.
+
+**Profit & Reports** (`/reports`) is a different view of the same ledger — a
+period + product report, not a second copy of Sales/Purchases/Payments:
+
+```
+Opening stock (lots as of the day before the period)
++ Purchases in the period
+= Total stock
+− Sold in the period
+= Remaining stock (FIFO lot value at period end)
+
+Sales revenue          (invoices in the period, charges split across lines)
+− Stock cost of sold   (landed cost of the lots those sales consumed)
+= Profit on sales
+− Shop expenses        (whole business only; not hung on one product)
+= Net profit
+
+Business value = Remaining stock value + Customer due + Cash in hand
+```
+
+Cash in hand uses money actually received and paid, not billed sales.
+Credit sales stay in Customer Due. There is no recent-activity table on this
+page. `/profit` still redirects here.
 
 ## 6. Roles and sign-in
 
@@ -252,7 +276,7 @@ Profit is **realized, cash-basis**, not accrual:
 | `/customers` | Owner | Customers, their bills, balances and transaction history (renders variant attributes) |
 | `/suppliers` | Owner | Mills/suppliers, what each is owed, and purchase history receipts (renders variant attributes) |
 | `/payments` | Owner | Payments journal |
-| `/reports` | Owner | Reports & Profit — P&L and monthly summaries (tabs), one shared month-stats memo |
+| `/reports` | Owner | Profit & Reports — one period + product engine: stock, P&L, cash, business value, dues, expenses, stock check |
 | `/profit`, `/invoices`, `/audit` | Owner | Legacy/redirect + reconciliation self-checks |
 | `/sales/[id]`, `/invoices/[id]` | Owner | Printable invoice/bill (no sidebar for clean print) |
 | `/admin` | Super admin | Owners panel — add/delete owner accounts |

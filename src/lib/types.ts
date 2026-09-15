@@ -125,6 +125,15 @@ export interface Expense {
   amount: number;
 }
 
+/** A counted physical stock figure for one product on one day. */
+export interface StockCheck {
+  id: string;
+  date: string; // ISO yyyy-mm-dd
+  productId: string;
+  physicalQty: number;
+  note?: string;
+}
+
 export interface InventoryRow {
   item: string;
   product?: string; // product category (e.g. Rebar)

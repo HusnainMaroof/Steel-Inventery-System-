@@ -41,6 +41,7 @@ export function CustomSelect({
   placeholder = "Select…",
   className = "",
   compact = false,
+  ariaLabel,
 }: {
   value: string;
   onChange: (val: string) => void;
@@ -48,6 +49,7 @@ export function CustomSelect({
   placeholder?: string;
   className?: string;
   compact?: boolean;
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -65,6 +67,9 @@ export function CustomSelect({
     <div ref={ref} className={`relative ${className}`}>
       <button
         onClick={() => setOpen(!open)}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         className={`flex items-center justify-between gap-2 w-full px-3 py-2 text-xs font-medium bg-white border border-neutral-200 rounded-lg hover:border-neutral-400 transition-colors text-left ${
           compact ? "min-w-[8.5rem]" : "min-w-[180px]"
         }`}

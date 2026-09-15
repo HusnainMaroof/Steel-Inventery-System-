@@ -10,6 +10,7 @@
 
 import { useMemo } from "react";
 import { useStore, steelAmount, saleGrandTotal } from "@/lib/store";
+import { buildProfitReport } from "@/lib/profitReport";
 import { Page, PageTitle } from "@/components/ui";
 
 const eps = 0.01;
@@ -37,6 +38,11 @@ export default function AuditPage() {
     supplierBalance,
     lineUnitCost,
     stats,
+    products,
+    categories,
+    variants,
+    productItems,
+    stockChecks,
   } = store;
 
   const out = useMemo(() => {
@@ -227,6 +233,82 @@ export default function AuditPage() {
     check("Expenses = Σ expense rows", Math.abs(expenseTotal - stats.expenses) < eps, money(expenseTotal));
     check("Net profit = revenue − cogs − expenses", Math.abs(revenue - cogs - expenseTotal - stats.netProfit) < 0.5, money(revenue - cogs - expenseTotal));
 
+    /* ---------- PROFIT & REPORTS ENGINE ---------- */
+    L.push("== PROFIT & REPORTS ==");
+    const yearNow = new Date().getFullYear();
+    const monthNow = new Date().getMonth() + 1;
+    const yearly = buildProfitReport({
+      mode: "year",
+      year: yearNow,
+      productId: "",
+      products,
+      categories,
+      variants,
+      productItems,
+      purchases,
+      sales,
+      payments,
+      expenses,
+      customers,
+      suppliers,
+      lineUnitCost,
+      byItem,
+      salePaid,
+      supplierBalance,
+      stockChecks,
+    });
+    const monthly = buildProfitReport({
+      mode: "month",
+      year: yearNow,
+      month: monthNow,
+      productId: "",
+      products,
+      categories,
+      variants,
+      productItems,
+      purchases,
+      sales,
+      payments,
+      expenses,
+      customers,
+      suppliers,
+      lineUnitCost,
+      byItem,
+      salePaid,
+      supplierBalance,
+      stockChecks,
+    });
+    let stockFormulaOk = true;
+    for (const r of yearly.stock) {
+      const totalOk = Math.abs(r.openingQty + r.purchaseQty - r.totalQty) < 0.01;
+      const remainOk = Math.abs(r.totalQty - r.soldQty - r.remainingQty) < 0.01;
+      if (!totalOk || !remainOk) stockFormulaOk = false;
+    }
+    check("Yearly stock: Opening + Purchase = Total, Total − Sold = Remaining", stockFormulaOk);
+    check(
+      "Yearly net profit = profit on sales − expenses",
+      Math.abs(yearly.profitOnSales - yearly.expenses - yearly.netProfit) < 0.5,
+      money(yearly.netProfit)
+    );
+    check(
+      "Yearly business value = remaining stock + customer due + cash in hand",
+      Math.abs(yearly.remainingValue + yearly.customerDue + yearly.cashInHand - yearly.businessValue) < 0.5,
+      money(yearly.businessValue)
+    );
+    const lotWorth = stockLots.reduce((a, l) => a + l.remainingQty * l.landedPerUnit, 0);
+    check(
+      "Yearly remaining stock value ≈ current FIFO lots",
+      Math.abs(yearly.remainingValue - lotWorth) < 1,
+      `${money(yearly.remainingValue)} vs ${money(lotWorth)}`
+    );
+    check(
+      "Monthly net profit = profit on sales − expenses",
+      Math.abs(monthly.profitOnSales - monthly.expenses - monthly.netProfit) < 0.5,
+      money(monthly.netProfit)
+    );
+    check("Yearly cash in hand is received − paid − expenses from opening cash", Math.abs(yearly.openingCash + yearly.cashReceived - yearly.cashPaid - yearly.cashExpenses - yearly.cashInHand) < 0.5, money(yearly.cashInHand));
+    L.push(`Report ${yearly.periodLabel} All Products: sales ${money(yearly.salesRevenue)} · stock cost ${money(yearly.stockCost)} · net ${money(yearly.netProfit)} · cash ${money(yearly.cashInHand)} · worth ${money(yearly.businessValue)}`);
+
     /* ---------- INVOICE NUMBERS ---------- */
     const nos = sales.map((s) => s.invoiceNo);
     check("All invoice numbers are unique", new Set(nos).size === nos.length);
@@ -249,6 +331,7 @@ export default function AuditPage() {
     customers, suppliers, purchases, sales, payments, expenses, inventory,
     stockLots, inventoryBySource, inventoryByVariant, stockMovements, byItem,
     salePaid, customerBalance, supplierBalance, lineUnitCost, stats,
+    products, categories, variants, productItems, stockChecks,
   ]);
 
   return (

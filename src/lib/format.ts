@@ -12,6 +12,8 @@ export const fmtNum = (n: number, decimals = 0) => {
 
 export const fmtMoney = (n: number) => "₨ " + fmtNum(n);
 
+export const fmtSignedMoney = (n: number) => (n < 0 ? "−" + fmtMoney(Math.abs(n)) : fmtMoney(n));
+
 export const fmtCompact = (n: number) => {
   if (Math.abs(n) >= 1_000_000) return "₨ " + (n / 1_000_000).toFixed(2) + "M";
   if (Math.abs(n) >= 1_000) return "₨ " + (n / 1_000).toFixed(1) + "K";

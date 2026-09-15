@@ -20,6 +20,7 @@ import type {
   Purchase,
   Quality,
   Sale,
+  StockCheck,
   StockLot,
   StockMovementView,
   Supplier,
@@ -102,6 +103,7 @@ interface Store {
   sales: Sale[];
   payments: Payment[];
   expenses: Expense[];
+  stockChecks: StockCheck[];
   products: Product[];
   productItems: ProductItem[];
   qualities: Quality[];
@@ -133,6 +135,7 @@ interface Store {
   addCustomer: (c: Omit<Customer, "id">) => string;
   addSupplier: (s: Omit<Supplier, "id">) => void;
   addExpense: (e: Omit<Expense, "id">) => void;
+  recordStockCheck: (c: Omit<StockCheck, "id">) => void;
   addProduct: (name: string, unit: string, description?: string, usesCategories?: boolean) => string;
   updateProduct: (id: string, patch: Partial<Product>) => void;
   addProductItem: (productId: string, name: string) => void;
@@ -203,6 +206,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [sales, setSales] = useState<Sale[]>(INITIAL.sales);
   const [payments, setPayments] = useState<Payment[]>(INITIAL.payments ?? []);
   const [expenses, setExpenses] = useState<Expense[]>(INITIAL.expenses ?? []);
+  const [stockChecks, setStockChecks] = useState<StockCheck[]>([]);
   const [products, setProducts] = useState<Product[]>(INITIAL.products);
   const [productItems, setProductItems] = useState<ProductItem[]>(INITIAL.productItems);
   const [qualities, setQualities] = useState<Quality[]>(INITIAL.qualities);
@@ -706,6 +710,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     sales,
     payments,
     expenses,
+    stockChecks,
     products,
     productItems,
     qualities,
@@ -761,6 +766,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     addSupplier: (s) => setSuppliers((prev) => [...prev, { ...s, id: nextId() }]),
     addExpense: (e) => setExpenses((prev) => [{ ...e, id: nextId() }, ...prev]),
+    recordStockCheck: (c) => setStockChecks((prev) => [{ ...c, id: nextId() }, ...prev]),
     addProduct: (name, unit, description, usesCategories) => {
       const clean = name.trim();
       if (!clean) return "";
