@@ -19,7 +19,7 @@ import type {
   Variant,
 } from "./types";
 
-export type ReportMode = "month" | "year";
+export type ReportMode = "month" | "year" | "all" | "range";
 
 export const EXPENSE_ROWS = [
   { key: "Labor" as const, label: "Labour" },
@@ -41,6 +41,7 @@ export interface QtyBlock {
   openingValue: number;
   purchaseValue: number;
   remainingValue: number;
+  salesAmount: number;
 }
 
 export interface PartyDue {
@@ -83,12 +84,14 @@ export interface ProfitReport {
   stock: QtyBlock[];
   openingValue: number;
   purchaseValue: number;
+  totalStockValue: number;
   remainingValue: number;
   salesRevenue: number;
   stockCost: number;
   profitOnSales: number;
   expenses: number;
   expensesApplied: boolean;
+  hasExpenses: boolean;
   netProfit: number;
   profitPct: number;
   openingCash: number;
@@ -103,6 +106,8 @@ export interface ProfitReport {
   customers: PartyDue[];
   aging: Aging;
   expenseRows: ExpenseLine[];
+  purchaseCharges: { transport: number; loading: number; labour: number; other: number };
+  saleCharges: { loading: number; transport: number; labour: number };
   stockChecks: StockCheckView[];
 }
 
@@ -110,6 +115,8 @@ export interface ProfitReportInput {
   mode: ReportMode;
   year: number;
   month?: number;
+  rangeFrom?: string;
+  rangeTo?: string;
   productId: string;
   now?: Date;
   products: Product[];
@@ -125,7 +132,6 @@ export interface ProfitReportInput {
   lineUnitCost: (saleId: string, lineIdx: number) => number;
   byItem: Record<string, number>;
   salePaid: (id: string) => number;
-  supplierBalance: (id: string) => number;
   stockChecks: StockCheck[];
 }
 
@@ -184,8 +190,12 @@ export function periodBounds(
   mode: ReportMode,
   year: number,
   month?: number,
-  now = new Date()
+  now = new Date(),
+  range?: { from?: string; to?: string }
 ): { from: string; to: string } {
+  if (mode === "range")
+    return { from: range?.from || "2000-01-01", to: range?.to || ymd(now) };
+  if (mode === "all") return { from: "2000-01-01", to: ymd(now) };
   if (mode === "year") return { from: `${year}-01-01`, to: `${year}-12-31` };
   const m = month ?? now.getMonth() + 1;
   const from = `${year}-${String(m).padStart(2, "0")}-01`;
@@ -193,6 +203,8 @@ export function periodBounds(
 }
 
 export function periodLabelOf(mode: ReportMode, year: number, month?: number) {
+  if (mode === "range") return "Custom range";
+  if (mode === "all") return "All time";
   if (mode === "year") return String(year);
   const m = month ?? 1;
   return monthLabel(`${year}-${String(m).padStart(2, "0")}`);
@@ -390,7 +402,13 @@ function expensesInRange(expenses: Expense[], from: string, to: string) {
 
 export function buildProfitReport(input: ProfitReportInput): ProfitReport {
   const now = input.now ?? new Date();
-  const { from, to } = periodBounds(input.mode, input.year, input.month, now);
+  const { from, to } = periodBounds(
+    input.mode,
+    input.year,
+    input.month,
+    now,
+    { from: input.rangeFrom, to: input.rangeTo }
+  );
   const productId = input.productId;
   const maps = productMapsOf(input.variants, input.categories, input.productItems);
   const productOf = (r: Ident) =>
@@ -431,6 +449,9 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     const openingQty = open.reduce((a, l) => a + l.remaining, 0);
     const purchaseQty = buys.reduce((a, p) => a + p.qty, 0);
     const totalQty = openingQty + purchaseQty;
+    let salesAmount = 0;
+    for (const { sale, line } of periodSaleLines)
+      if (ofProd(line)) salesAmount += attributedLineRevenue(sale, line);
     return {
       productId: prod.id,
       productName: prod.name,
@@ -443,6 +464,7 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
       openingValue: lotValue(open),
       purchaseValue: buys.reduce((a, p) => a + purchaseTotal(p), 0),
       remainingValue: lotValue(remain),
+      salesAmount,
     };
   });
 
@@ -459,11 +481,33 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
   }
   const profitOnSales = salesRevenue - stockCost;
 
-  const expensesApplied = !productId;
-  const periodExpenses = expensesApplied
-    ? expensesInRange(input.expenses, from, to)
-    : [];
+  const expenseOfProduct = (e: Expense) =>
+    productId ? e.productId === productId : true;
+  const periodExpenses = expensesInRange(input.expenses, from, to).filter(
+    expenseOfProduct
+  );
+  const expensesApplied = periodExpenses.length > 0;
   const expenses = periodExpenses.reduce((a, e) => a + e.amount, 0);
+
+  const purchaseCharges = { transport: 0, loading: 0, labour: 0, other: 0 };
+  for (const p of input.purchases) {
+    if (!inDateRange(p.date, from, to)) continue;
+    if (!match(p)) continue;
+    purchaseCharges.transport += p.transport;
+    purchaseCharges.loading += p.loadingCharges ?? 0;
+    purchaseCharges.labour += p.labourCharges ?? 0;
+    purchaseCharges.other += p.otherCost;
+  }
+
+  const saleCharges = { loading: 0, transport: 0, labour: 0 };
+  for (const s of input.sales) {
+    if (!inDateRange(s.date, from, to)) continue;
+    if (productId && !s.lines.some(match)) continue;
+    const share = productId ? productShareOfSale(s, match) : 1;
+    saleCharges.loading += (s.loadingCharges ?? 0) * share;
+    saleCharges.transport += (s.transportCharges ?? 0) * share;
+    saleCharges.labour += (s.labourCharges ?? 0) * share;
+  }
   const netProfit = profitOnSales - expenses;
   const profitPctValue = salesRevenue > 0 ? (netProfit / salesRevenue) * 100 : 0;
 
@@ -500,31 +544,25 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     productId,
     match
   );
-  const openingExp = expensesApplied
-    ? expensesInRange(input.expenses, dawn, openAsOf).reduce((a, e) => a + e.amount, 0)
-    : 0;
+  const openingExp = expensesInRange(input.expenses, dawn, openAsOf)
+    .filter(expenseOfProduct)
+    .reduce((a, e) => a + e.amount, 0);
   const cashExpenses = expenses;
   const openingCash = openingReceived - openingPaid - openingExp;
   const cashInHand = openingCash + cashReceived - cashPaid - cashExpenses;
 
   const suppliers: PartyDue[] = [];
-  if (!productId) {
-    for (const s of input.suppliers) {
-      const due = Math.max(0, input.supplierBalance(s.id));
-      if (due > 0.001) suppliers.push({ id: s.id, name: s.name, due });
-    }
-  } else {
-    const bySup: Record<string, number> = {};
-    for (const p of input.purchases) {
-      if (!match(p)) continue;
-      bySup[p.supplierId] =
-        (bySup[p.supplierId] ?? 0) + Math.max(0, steelAmount(p) - (p.paid ?? 0));
-    }
-    for (const [id, due] of Object.entries(bySup)) {
-      if (due <= 0.001) continue;
-      const s = input.suppliers.find((x) => x.id === id);
-      suppliers.push({ id, name: s?.name ?? id, due });
-    }
+  const bySup: Record<string, number> = {};
+  for (const p of input.purchases) {
+    if (!inDateRange(p.date, from, to)) continue;
+    if (!match(p)) continue;
+    bySup[p.supplierId] =
+      (bySup[p.supplierId] ?? 0) + Math.max(0, steelAmount(p) - (p.paid ?? 0));
+  }
+  for (const [id, due] of Object.entries(bySup)) {
+    if (due <= 0.001) continue;
+    const s = input.suppliers.find((x) => x.id === id);
+    suppliers.push({ id, name: s?.name ?? id, due });
   }
   suppliers.sort((a, b) => b.due - a.due);
   const supplierDue = suppliers.reduce((a, r) => a + r.due, 0);
@@ -532,6 +570,7 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
   const aging: Aging = { d0_30: 0, d31_60: 0, d61_90: 0, d90: 0 };
   const byCust: Record<string, { due: number; days: number }> = {};
   for (const s of input.sales) {
+    if (!inDateRange(s.date, from, to)) continue;
     if (productId && !s.lines.some(match)) continue;
     const due = Math.max(0, saleGrandTotal(s) - input.salePaid(s.id));
     if (due <= 0.001) continue;
@@ -550,13 +589,19 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     .sort((a, b) => b.due - a.due);
   const customerDue = customers.reduce((a, r) => a + r.due, 0);
 
-  const expenseRows: ExpenseLine[] = EXPENSE_ROWS.map((row) => ({
-    key: row.key,
-    label: row.label,
-    amount: periodExpenses
-      .filter((e) => e.category === row.key)
-      .reduce((a, e) => a + e.amount, 0),
-  }));
+  const expenseRows: ExpenseLine[] = Object.entries(
+    periodExpenses.reduce<Record<string, number>>((acc, e) => {
+      acc[e.category] = (acc[e.category] ?? 0) + e.amount;
+      return acc;
+    }, {})
+  )
+    .filter(([, amount]) => amount > 0.000001)
+    .map(([key, amount]) => ({
+      key,
+      label: EXPENSE_ROWS.find((r) => r.key === key)?.label ?? key,
+      amount,
+    }))
+    .sort((a, b) => b.amount - a.amount);
 
   const stockChecks: StockCheckView[] = stock.map((b) => {
     const check = input.stockChecks
@@ -584,12 +629,14 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     stock,
     openingValue,
     purchaseValue,
+    totalStockValue: openingValue + purchaseValue,
     remainingValue,
     salesRevenue,
     stockCost,
     profitOnSales,
     expenses,
     expensesApplied,
+    hasExpenses: input.expenses.length > 0,
     netProfit,
     profitPct: profitPctValue,
     openingCash,
@@ -604,6 +651,8 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     customers,
     aging,
     expenseRows,
+    purchaseCharges,
+    saleCharges,
     stockChecks,
   };
 }

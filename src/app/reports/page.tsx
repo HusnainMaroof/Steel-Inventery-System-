@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
-import { CustomSelect, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
-import { qtyUnitLabel } from "@/lib/format";
+import { CustomSelect, EmptyState, Modal, Page } from "@/components/ui";
+import { fmtDate, qtyUnitLabel } from "@/lib/format";
+import type { Expense } from "@/lib/types";
 import {
   StockSummary,
   ProfitLoss,
@@ -18,10 +19,19 @@ import { ExportMenu } from "@/components/reports/shared";
 import { downloadReportCsv, printReportPdf } from "@/lib/reports";
 import {
   buildProfitReport,
-  monthOptions,
+  EXPENSE_ROWS,
   yearOptions,
   type ReportMode,
 } from "@/lib/profitReport";
+
+type ReportTab = "profit" | "stock" | "cash" | "dues";
+
+const REPORT_TABS: { id: ReportTab; label: string; meaning: string }[] = [
+  { id: "profit", label: "Profit", meaning: "Did this period make money?" },
+  { id: "stock", label: "Stock", meaning: "What came in and what is left in the yard?" },
+  { id: "cash", label: "Cash", meaning: "How much money is in hand?" },
+  { id: "dues", label: "Dues", meaning: "Who owes who, and for how long?" },
+];
 
 export default function ReportsPage() {
   const store = useStore();
@@ -39,25 +49,31 @@ export default function ReportsPage() {
     byItem,
     lineUnitCost,
     salePaid,
-    supplierBalance,
     stockChecks,
     recordStockCheck,
+    addExpense,
   } = store;
 
   const now = useMemo(() => new Date(), []);
-  const [mode, setMode] = useState<ReportMode>("month");
-  const [monthKey, setMonthKey] = useState(
-    () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-  );
+  const [tab, setTab] = useState<ReportTab>("profit");
   const [year, setYear] = useState(() => String(now.getFullYear()));
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [productId, setProductId] = useState("");
   const [checkProductId, setCheckProductId] = useState("");
   const [checkQty, setCheckQty] = useState("");
   const [checkOpen, setCheckOpen] = useState(false);
   const [checkError, setCheckError] = useState("");
+  const [expOpen, setExpOpen] = useState(false);
+  const [expDate, setExpDate] = useState("");
+  const [expCategory, setExpCategory] = useState("Other");
+  const [expLabel, setExpLabel] = useState("");
+  const [expAmount, setExpAmount] = useState("");
+  const [expProductId, setExpProductId] = useState("");
+  const [expError, setExpError] = useState("");
 
-  const yearNum = mode === "month" ? Number(monthKey.slice(0, 4)) : Number(year);
-  const monthNum = mode === "month" ? Number(monthKey.slice(5, 7)) : undefined;
+  const mode: ReportMode = fromDate || toDate ? "range" : !year ? "all" : "year";
+  const yearNum = year ? Number(year) : now.getFullYear();
 
   const productOptions = useMemo(
     () => [
@@ -74,7 +90,8 @@ export default function ReportsPage() {
       buildProfitReport({
         mode,
         year: yearNum,
-        month: monthNum,
+        rangeFrom: fromDate || undefined,
+        rangeTo: toDate || undefined,
         productId,
         now,
         products,
@@ -90,13 +107,13 @@ export default function ReportsPage() {
         lineUnitCost,
         byItem,
         salePaid,
-        supplierBalance,
         stockChecks,
       }),
     [
       mode,
       yearNum,
-      monthNum,
+      fromDate,
+      toDate,
       productId,
       now,
       products,
@@ -112,7 +129,6 @@ export default function ReportsPage() {
       lineUnitCost,
       byItem,
       salePaid,
-      supplierBalance,
       stockChecks,
     ]
   );
@@ -127,6 +143,36 @@ export default function ReportsPage() {
     setCheckQty("");
     setCheckError("");
     setCheckOpen(true);
+  };
+
+  const openExpense = () => {
+    setExpDate(new Date().toISOString().slice(0, 10));
+    setExpCategory("Other");
+    setExpLabel("");
+    setExpAmount("");
+    setExpProductId(productId);
+    setExpError("");
+    setExpOpen(true);
+  };
+
+  const saveExpense = () => {
+    const amount = Number(expAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setExpError("Enter the expense amount — it must be more than 0.");
+      return;
+    }
+    if (!EXPENSE_ROWS.some((r) => r.key === expCategory)) {
+      setExpError("Pick an expense category.");
+      return;
+    }
+    addExpense({
+      date: expDate,
+      category: expCategory as Expense["category"],
+      label: expLabel.trim(),
+      amount,
+      productId: expProductId || undefined,
+    });
+    setExpOpen(false);
   };
 
   const saveCheck = () => {
@@ -151,51 +197,37 @@ export default function ReportsPage() {
 
   const hasAny = purchases.length > 0 || sales.length > 0;
   const selectCls = "min-w-[10.5rem] [&_button]:min-h-[44px]";
+  const headerLabel =
+    mode === "range"
+      ? fromDate && toDate
+        ? `${fmtDate(fromDate)} → ${fmtDate(toDate)}`
+        : fromDate
+          ? `From ${fmtDate(fromDate)}`
+          : `Until ${fmtDate(toDate)}`
+      : mode === "all"
+        ? "All time"
+        : year;
 
   return (
     <Page>
-      <PageTitle title="Profit & Reports" sub={`${report.periodLabel} · ${report.productLabel}`} />
+      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-6">
+        {headerLabel}
+        {productId ? (
+          <span className="font-medium text-base sm:text-lg text-[#171717]/70">
+            {" "}· {report.productLabel}
+          </span>
+        ) : null}
+      </h1>
 
       <div className="flex flex-wrap items-center gap-2 mb-8">
         <CustomSelect
           compact
           className={selectCls}
-          ariaLabel="Period"
-          value={mode}
-          onChange={(v) => {
-            const next = v as ReportMode;
-            setMode(next);
-            if (next === "year") setYear(monthKey.slice(0, 4));
-            else if (year === String(now.getFullYear())) {
-              setMonthKey(`${year}-${String(now.getMonth() + 1).padStart(2, "0")}`);
-            } else {
-              setMonthKey(`${year}-01`);
-            }
-          }}
-          options={[
-            { value: "month", label: "Monthly" },
-            { value: "year", label: "Yearly" },
-          ]}
+          ariaLabel="Year"
+          value={year}
+          onChange={setYear}
+          options={[{ value: "", label: "All years" }, ...yearOptions(now)]}
         />
-        {mode === "month" ? (
-          <CustomSelect
-            compact
-            className="min-w-[12rem] [&_button]:min-h-[44px]"
-            ariaLabel="Month"
-            value={monthKey}
-            onChange={setMonthKey}
-            options={monthOptions(now)}
-          />
-        ) : (
-          <CustomSelect
-            compact
-            className={selectCls}
-            ariaLabel="Year"
-            value={year}
-            onChange={setYear}
-            options={yearOptions(now)}
-          />
-        )}
         <CustomSelect
           compact
           className="min-w-[12rem] [&_button]:min-h-[44px]"
@@ -204,6 +236,38 @@ export default function ReportsPage() {
           onChange={setProductId}
           options={productOptions}
         />
+        <label className="flex items-center gap-2 min-h-[44px]">
+          <span className="text-[10px] uppercase tracking-widest font-medium text-[#171717]/70">From</span>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            aria-label="From date"
+            className="!w-auto !py-2 text-xs min-h-[44px]"
+          />
+        </label>
+        <label className="flex items-center gap-2 min-h-[44px]">
+          <span className="text-[10px] uppercase tracking-widest font-medium text-[#171717]/70">To</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            aria-label="To date"
+            className="!w-auto !py-2 text-xs min-h-[44px]"
+          />
+        </label>
+        {fromDate || toDate ? (
+          <button
+            type="button"
+            onClick={() => {
+              setFromDate("");
+              setToDate("");
+            }}
+            className="btn-ghost !py-2 !px-3 !text-xs min-h-[44px]"
+          >
+            Clear dates
+          </button>
+        ) : null}
         <div className="ml-auto shrink-0">
         <ExportMenu
           onExcel={() => downloadReportCsv(report)}
@@ -225,21 +289,58 @@ export default function ReportsPage() {
         />
       ) : (
         <>
-          <StockSummary report={report} />
-          <ProfitLoss report={report} />
-          <CashPosition report={report} />
-          <BusinessValue report={report} />
-          <MoneySides report={report} />
-          <Expenses report={report} />
-          <StockCheckPanel report={report} onRecord={openCheck} />
+          <div
+            role="tablist"
+            aria-label="Report sections"
+            className="flex w-full sm:w-auto sm:inline-flex gap-1 p-1 mb-2.5 border border-[#E5E5E5] bg-white rounded-[8px]"
+          >
+            {REPORT_TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex-1 sm:flex-none min-h-[44px] px-3 sm:px-6 text-[13px] font-medium rounded-[6px] transition-colors ${
+                  tab === t.id
+                    ? "bg-[#111] text-white"
+                    : "text-[#171717] hover:bg-[#F8F8F7]"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[13px] text-[#171717]/70 mb-5">
+            {REPORT_TABS.find((t) => t.id === tab)?.meaning}
+          </p>
+
+          {tab === "profit" ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-start">
+              <ProfitLoss report={report} className="!mb-0" />
+              <Expenses report={report} className="!mb-0" onAdd={openExpense} />
+            </div>
+          ) : tab === "stock" ? (
+            <>
+              <StockSummary report={report} />
+              <StockCheckPanel report={report} onRecord={openCheck} />
+            </>
+          ) : tab === "cash" ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-start">
+              <CashPosition report={report} className="!mb-0" />
+              <BusinessValue report={report} className="!mb-0" />
+            </div>
+          ) : (
+            <MoneySides report={report} />
+          )}
         </>
       )}
 
       <Modal
         open={checkOpen}
         onClose={() => setCheckOpen(false)}
-        title="Record Stock Check"
-        subtitle="Count what is in the yard. Do not copy the system figure."
+        title="Record Stock Count"
+        subtitle="Count what is actually in the yard. Do not copy the system figure."
         footer={
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" className="btn-ghost min-h-[44px]" onClick={() => setCheckOpen(false)}>
@@ -289,6 +390,93 @@ export default function ReportsPage() {
         ) : (
           <p className="mt-2 text-[13px] text-[#171717]/70">Type what you counted. Do not copy the system number.</p>
         )}
+      </Modal>
+
+      <Modal
+        open={expOpen}
+        onClose={() => setExpOpen(false)}
+        title="Add Expense"
+        subtitle="Shop-wide expenses apply to every product; a product expense belongs to that product only."
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className="btn-ghost min-h-[44px]" onClick={() => setExpOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary min-h-[44px]" onClick={saveExpense}>
+              Save Expense
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block">
+              Date
+              <input
+                type="date"
+                value={expDate}
+                onChange={(e) => setExpDate(e.target.value)}
+                className="mt-1"
+              />
+            </label>
+            <label className="block">
+              Category
+              <CustomSelect
+                className="mt-1"
+                ariaLabel="Expense category"
+                value={expCategory}
+                onChange={setExpCategory}
+                options={EXPENSE_ROWS.map((r) => ({ value: r.key, label: r.label }))}
+              />
+            </label>
+          </div>
+          <label className="block">
+            Label <span className="text-[#171717]/70">(optional)</span>
+            <input
+              type="text"
+              value={expLabel}
+              onChange={(e) => {
+                setExpLabel(e.target.value);
+                setExpError("");
+              }}
+              placeholder="e.g. Fare — Mughal delivery"
+              className="mt-1"
+            />
+          </label>
+          <label className="block">
+            Amount
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={expAmount}
+              onChange={(e) => {
+                setExpAmount(e.target.value);
+                setExpError("");
+              }}
+              className="mt-1"
+              aria-invalid={!!expError}
+            />
+          </label>
+          <label className="block">
+            Product
+            <CustomSelect
+              className="mt-1"
+              ariaLabel="Expense product"
+              value={expProductId}
+              onChange={setExpProductId}
+              options={[
+                { value: "", label: "Whole shop" },
+                ...productOptions.filter((o) => o.value),
+              ]}
+            />
+          </label>
+          {expError ? (
+            <p className="text-[13px] font-medium text-[#a12b1f]" role="alert">
+              {expError}
+            </p>
+          ) : null}
+        </div>
       </Modal>
     </Page>
   );

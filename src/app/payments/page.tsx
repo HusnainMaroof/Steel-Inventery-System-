@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { type ColumnDef } from "@tanstack/react-table";
 import { useStore } from "@/lib/store";
 import { Page, PageTitle, EmptyState } from "@/components/ui";
-import { DataTable } from "@/components/DataTable";
 import { fmtMoney, fmtDate } from "@/lib/format";
 
 type PaymentRow = {
@@ -106,6 +104,29 @@ export default function PaymentsPage() {
   const totalReceived = filtered.filter((p) => p.type === "customer").reduce((a, p) => a + p.amount, 0);
   const totalPaid = filtered.filter((p) => p.type === "supplier").reduce((a, p) => a + p.amount, 0);
 
+  const groups = useMemo(() => {
+    const map = new Map<string, PaymentRow[]>();
+    for (const r of [...rows].sort(
+      (a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)
+    )) {
+      const list = map.get(r.date) ?? [];
+      list.push(r);
+      map.set(r.date, list);
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([date, items]) => ({
+        date,
+        items,
+        received: items
+          .filter((i) => i.type === "customer")
+          .reduce((a, i) => a + i.amount, 0),
+        paid: items
+          .filter((i) => i.type === "supplier")
+          .reduce((a, i) => a + i.amount, 0),
+      }));
+  }, [rows]);
+
   const clearAll = () => {
     setSearchInput("");
     setAppliedSearch("");
@@ -115,59 +136,6 @@ export default function PaymentsPage() {
   };
   const hasActiveFilters =
     appliedSearch.trim() !== "" || typeFilter !== "all" || period !== "all";
-
-  const columns: ColumnDef<PaymentRow, unknown>[] = [
-    {
-      accessorKey: "date",
-      header: "Date",
-      meta: { card: { position: "date" } },
-      cell: ({ getValue }) => <span className="text-xs whitespace-nowrap">{fmtDate(getValue() as string)}</span>,
-    },
-    {
-      accessorKey: "type",
-      header: "Type",
-      meta: { card: { position: "badge" } },
-      cell: ({ getValue }) => (
-        <span className={`text-xs border px-2 py-0.5 uppercase tracking-wider ${getValue() === "customer" ? "border-[#cfe3cd] text-[#2e6b2e]" : "border-[#d2e0f2] text-[#1f4e8c]"}`}>
-          {getValue() as string}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "partyName",
-      header: "Party",
-      meta: { card: { position: "primary" } },
-      cell: ({ getValue }) => <span className="font-medium text-xs">{getValue() as string}</span>,
-    },
-    {
-      accessorKey: "invoiceNo",
-      header: "Invoice",
-      meta: { hiddenOnMobile: true, card: { position: "secondary" } },
-      cell: ({ getValue }) => <span className="text-xs text-neutral-500">{getValue() as string}</span>,
-    },
-    {
-      accessorKey: "method",
-      header: "Method",
-      meta: { hiddenOnMobile: true },
-      cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span>,
-    },
-    {
-      accessorKey: "note",
-      header: "Note",
-      meta: { hiddenOnMobile: true },
-      cell: ({ getValue }) => <span className="text-xs text-neutral-500">{(getValue() as string) ?? "—"}</span>,
-    },
-    {
-      accessorKey: "amount",
-      header: "Amount",
-      meta: { align: "right", card: { position: "amount" } },
-      cell: ({ getValue, row }) => (
-        <span className="font-medium text-xs tabular-nums">
-          {row.original.type === "customer" ? "+" : "−"} {fmtMoney(getValue() as number)}
-        </span>
-      ),
-    },
-  ];
 
   return (
     <Page>
@@ -285,7 +253,88 @@ export default function PaymentsPage() {
           action={<button onClick={clearAll} className="btn-primary">Clear filters</button>}
         />
       ) : (
-        <DataTable columns={columns} data={rows} />
+        <div className="space-y-6">
+          {groups.map((g) => {
+            const net = g.received - g.paid;
+            return (
+              <div key={g.date}>
+                {/* date group header with count + day net */}
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-sm font-bold text-black">{fmtDate(g.date)}</span>
+                  <span className="text-xs font-medium text-black">
+                    {g.items.length} payment{g.items.length > 1 ? "s" : ""}
+                  </span>
+                  <div className="flex-1 border-b border-neutral-200" />
+                  <span
+                    className={`text-sm font-bold tabular-nums ${
+                      net > 0 ? "text-[#2e6b2e]" : net < 0 ? "text-[#a12b1f]" : "text-black"
+                    }`}
+                  >
+                    {net > 0 ? "+" : net < 0 ? "−" : ""}
+                    {fmtMoney(Math.abs(net))}
+                  </span>
+                </div>
+
+                {/* desktop */}
+                <div className="hidden sm:block border border-neutral-200 bg-white">
+                  <div className="grid grid-cols-[minmax(0,1.4fr)_90px_minmax(0,0.8fr)_90px_minmax(0,1fr)_120px] gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-black font-medium border-b border-neutral-200">
+                    <span>Party</span>
+                    <span>Type</span>
+                    <span>Invoice</span>
+                    <span>Method</span>
+                    <span>Note</span>
+                    <span className="text-right">Amount</span>
+                  </div>
+                  {g.items.map((p) => (
+                    <div
+                      key={p.id}
+                      className="grid grid-cols-[minmax(0,1.4fr)_90px_minmax(0,0.8fr)_90px_minmax(0,1fr)_120px] gap-3 px-4 py-3 border-b border-neutral-100 last:border-b-0"
+                    >
+                      <span className="min-w-0 self-center font-semibold text-xs truncate">{p.partyName}</span>
+                      <span className="self-center">
+                        <span className={`text-xs border px-2 py-0.5 uppercase tracking-wider ${p.type === "customer" ? "border-[#cfe3cd] text-[#2e6b2e]" : "border-[#d2e0f2] text-[#1f4e8c]"}`}>
+                          {p.type === "customer" ? "Received" : "Paid"}
+                        </span>
+                      </span>
+                      <span className="min-w-0 self-center text-xs text-black/60 truncate">{p.invoiceNo}</span>
+                      <span className="self-center text-xs truncate">{p.method}</span>
+                      <span className="min-w-0 self-center text-xs text-black/60 truncate">{p.note || "—"}</span>
+                      <span className="self-center text-right font-medium text-xs tabular-nums">
+                        {p.type === "customer" ? "+" : "−"} {fmtMoney(p.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* mobile */}
+                <div className="sm:hidden border border-neutral-200 bg-white divide-y divide-neutral-100">
+                  {g.items.map((p) => (
+                    <div key={p.id} className="p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0">
+                          <span className="block font-semibold text-sm truncate">{p.partyName}</span>
+                          <span className="block text-[11px] text-black/60">
+                            {p.invoiceNo !== "—" ? `${p.invoiceNo} · ` : ""}
+                            {p.method}
+                          </span>
+                        </span>
+                        <span
+                          className={`shrink-0 text-xs border px-2 py-0.5 uppercase tracking-wider ${p.type === "customer" ? "border-[#cfe3cd] text-[#2e6b2e]" : "border-[#d2e0f2] text-[#1f4e8c]"}`}
+                        >
+                          {p.type === "customer" ? "Received" : "Paid"}
+                        </span>
+                      </div>
+                      {p.note ? <p className="mt-1.5 text-xs text-black/60">{p.note}</p> : null}
+                      <div className="mt-1.5 text-right font-medium text-sm tabular-nums">
+                        {p.type === "customer" ? "+" : "−"} {fmtMoney(p.amount)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </Page>
   );

@@ -254,7 +254,6 @@ export default function AuditPage() {
       lineUnitCost,
       byItem,
       salePaid,
-      supplierBalance,
       stockChecks,
     });
     const monthly = buildProfitReport({
@@ -275,7 +274,6 @@ export default function AuditPage() {
       lineUnitCost,
       byItem,
       salePaid,
-      supplierBalance,
       stockChecks,
     });
     let stockFormulaOk = true;

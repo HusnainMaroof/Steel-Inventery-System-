@@ -128,7 +128,11 @@ export default function PurchasesPage() {
   } = useStore();
   const { open, onOpen, onClose } = useToggle();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"all" | "dues">("all");
+  const [tab, setTab] = useState<"all" | "dues">(() =>
+    typeof window !== "undefined" && window.location.search.includes("tab=dues")
+      ? "dues"
+      : "all"
+  );
   const [payId, setPayId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState(0);
   const [payError, setPayError] = useState("");

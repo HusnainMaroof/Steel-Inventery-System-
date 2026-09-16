@@ -234,7 +234,7 @@ export const seedPurchases: Purchase[] = [
     1200, "kg", 285, { transport: 9000, loading: 3000, labour: 2000, other: 0, sellRate: 315, paid: 342000 }, { locationId: "loc-steel", lotNumber: "LOT-B18-02" }),
   mkPurchase("pur-07", 52, "sup-dgkhan", "var-grey-lucky53", "Lucky Cement · 53 OPC", "Cement", { brand: "Lucky Cement", grade: "53 OPC" },
     600, "bag", 1385, { transport: 22000, loading: 4000, labour: 3000, other: 0, sellRate: 1520, paid: 500000 }, { locationId: "loc-cement", batchNumber: "LC-77342" }),
-  mkPurchase("pur-08", 45, "sup-mughal", "var-gi-16", "16 Gauge", "Wire", { gauge: "16 Gauge" },
+  mkPurchase("pur-08", 60, "sup-mughal", "var-gi-16", "16 Gauge", "Wire", { gauge: "16 Gauge" },
     800, "kg", 395, { transport: 7000, loading: 2500, labour: 2000, other: 0, sellRate: 435, paid: 316000 }, { locationId: "loc-steel", lotNumber: "LOT-GI16-01" }),
   mkPurchase("pur-09", 38, "sup-ittefaq", "var-rebar-5s40", "5 Sutar · 40 Grade", "Steel", { size: "5 Sutar", grade: "40 Grade" },
     2000, "kg", 262, { transport: 14000, loading: 5000, labour: 4500, other: 0, sellRate: 292, paid: 300000 }, { locationId: "loc-steel", heatNumber: "H-90412" }),
@@ -424,15 +424,7 @@ export const seedPayments: Payment[] = [...customerPayments, ...supplierFollowUp
 
 /* ---- business expenses ---- */
 
-export const seedExpenses: Expense[] = [
-  { id: "exp-01", date: dateAgo(85), label: "Godown rent — month 1", category: "Rent", amount: 40000 },
-  { id: "exp-02", date: dateAgo(70), label: "Electricity bill", category: "Utilities", amount: 12000 },
-  { id: "exp-03", date: dateAgo(55), label: "Staff salaries", category: "Labor", amount: 85000 },
-  { id: "exp-04", date: dateAgo(40), label: "Electricity bill", category: "Utilities", amount: 13500 },
-  { id: "exp-05", date: dateAgo(25), label: "Staff salaries", category: "Labor", amount: 85000 },
-  { id: "exp-06", date: dateAgo(18), label: "Truck maintenance", category: "Transport", amount: 9000 },
-  { id: "exp-07", date: dateAgo(10), label: "Electricity bill", category: "Utilities", amount: 14000 },
-];
+export const seedExpenses: Expense[] = [];
 
 export const seedInitialState = {
   suppliers: seedSuppliers,

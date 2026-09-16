@@ -15,137 +15,119 @@ function checkQty(n: number, unit: string) {
   return u ? `${v} ${u}` : v;
 }
 
-function FlowCell({
+function FlowRow({
+  no,
   label,
+  prefix,
   qty,
   unit,
-  prefix,
+  amount,
   strong,
 }: {
+  no: string;
   label: string;
+  prefix?: string;
   qty: number;
   unit: string;
-  prefix?: string;
+  amount?: number | null;
   strong?: boolean;
 }) {
   return (
-    <div className={strong ? "min-w-0" : "min-w-0"}>
-      <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70">{label}</p>
-      <p className={`mt-1.5 tabular-nums leading-tight ${strong ? "text-[18px] sm:text-[20px] font-bold" : "text-[15px] font-semibold"}`}>
-        {prefix ? <span className="text-[#171717]/60 font-medium mr-1">{prefix}</span> : null}
-        {stockQty(qty, unit)}
-      </p>
+    <div className="flex items-baseline justify-between gap-4 py-2.5 text-[14px]">
+      <span className="flex items-baseline gap-2 min-w-0">
+        <span className="tabular-nums text-[11px] font-medium text-[#171717]/70 w-4 shrink-0">{no}</span>
+        <span className="text-[#171717]/70">
+          {prefix ? <span className="mr-1.5 font-medium">{prefix}</span> : null}
+          {label}
+        </span>
+      </span>
+      <span className="flex items-baseline gap-3 sm:gap-4 shrink-0">
+        <span className={`w-20 sm:w-28 text-right tabular-nums ${strong ? "font-bold" : "font-medium"}`}>
+          {stockQty(qty, unit)}
+        </span>
+        <span className={`w-24 sm:w-32 text-right tabular-nums ${strong ? "font-bold" : "font-medium"}`}>
+          {amount == null ? "" : fmtMoney(amount)}
+        </span>
+      </span>
     </div>
   );
 }
 
 function StockBlock({ row }: { row: QtyBlock }) {
+  const totalStockValue = row.openingValue + row.purchaseValue;
   return (
-    <div>
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 sm:gap-3">
-        <FlowCell label="Opening Stock" qty={row.openingQty} unit={row.unit} />
-        <FlowCell label="Purchase" qty={row.purchaseQty} unit={row.unit} prefix="+" />
-        <FlowCell label="Total Stock" qty={row.totalQty} unit={row.unit} prefix="=" />
-        <FlowCell label="Sold Stock" qty={row.soldQty} unit={row.unit} prefix="−" />
-        <FlowCell label="Remaining Stock" qty={row.remainingQty} unit={row.unit} prefix="=" strong />
-      </div>
-      <div className="mt-4 pt-4 border-t border-[#E5E5E5] grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
-          <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70">Opening Value</p>
-          <p className="mt-1 tabular-nums font-semibold">{fmtMoney(row.openingValue)}</p>
+    <div className="border border-[#E5E5E5] rounded-[8px] p-4 sm:p-5">
+      <p className="font-semibold mb-3">{row.productName}</p>
+      <div>
+        <div className="flex items-baseline justify-between gap-4 pb-1.5 border-b border-[#E5E5E5]">
+          <span className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70">
+            Stock Flow
+          </span>
+          <span className="flex items-baseline gap-3 sm:gap-4 shrink-0">
+            <span className="w-20 sm:w-28 text-right text-[10px] uppercase tracking-widest font-medium text-[#171717]/70">
+              Qty{qtyUnitLabel(row.unit) ? ` (${qtyUnitLabel(row.unit)})` : ""}
+            </span>
+            <span className="w-24 sm:w-32 text-right text-[10px] uppercase tracking-widest font-medium text-[#171717]/70">
+              Rs
+            </span>
+          </span>
         </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70">Purchase Value</p>
-          <p className="mt-1 tabular-nums font-semibold">{fmtMoney(row.purchaseValue)}</p>
-        </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70">Remaining Stock Value</p>
-          <p className="mt-1 tabular-nums font-bold">{fmtMoney(row.remainingValue)}</p>
-        </div>
+        <FlowRow no="1" label="Opening Stock" qty={row.openingQty} unit={row.unit} amount={row.openingValue} />
+        <FlowRow no="2" label="Purchase" prefix="+" qty={row.purchaseQty} unit={row.unit} amount={row.purchaseValue} />
+        <FlowRow no="3" label="Total Stock" prefix="=" qty={row.totalQty} unit={row.unit} amount={totalStockValue} strong />
+        <FlowRow no="4" label="Sold" prefix="−" qty={row.soldQty} unit={row.unit} amount={row.salesAmount} />
+        <FlowRow no="5" label="Remaining (Closing)" prefix="=" qty={row.remainingQty} unit={row.unit} strong />
+        <StatementTotal label="Valuation of Remaining Stock" value={row.remainingValue} dark />
       </div>
     </div>
   );
 }
 
-export function StockSummary({ report }: { report: ProfitReport }) {
-  const many = report.stock.length > 1;
+export function StockSummary({
+  report,
+  className = "",
+}: {
+  report: ProfitReport;
+  className?: string;
+}) {
   return (
-    <Section title="Stock Summary">
+    <Section title="Stock Summary" className={className}>
       {report.stock.length === 0 ? (
         <p className="text-[14px] text-[#171717]">No products to measure yet.</p>
-      ) : many ? (
-        <>
-          <div className="lg:hidden space-y-6">
-            {report.stock.map((r) => (
-              <div key={r.productId}>
-                <p className="text-[13px] font-semibold mb-3">{r.productName}</p>
-                <StockBlock row={r} />
-              </div>
-            ))}
-          </div>
-          <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full min-w-[640px] text-[13px]">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-widest font-medium border-b border-[#E5E5E5]">
-                <th className="text-left py-2 pr-3 font-medium">Product</th>
-                <th className="text-right py-2 px-2 font-medium">Opening</th>
-                <th className="text-right py-2 px-2 font-medium">Purchase</th>
-                <th className="text-right py-2 px-2 font-medium">Total</th>
-                <th className="text-right py-2 px-2 font-medium">Sold</th>
-                <th className="text-right py-2 pl-2 font-medium">Remaining</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.stock.map((r) => (
-                <tr key={r.productId} className="border-b border-[#E5E5E5] last:border-b-0">
-                  <td className="py-3 pr-3 font-semibold">{r.productName}</td>
-                  <td className="py-3 px-2 text-right tabular-nums">{stockQty(r.openingQty, r.unit)}</td>
-                  <td className="py-3 px-2 text-right tabular-nums">{stockQty(r.purchaseQty, r.unit)}</td>
-                  <td className="py-3 px-2 text-right tabular-nums">{stockQty(r.totalQty, r.unit)}</td>
-                  <td className="py-3 px-2 text-right tabular-nums">{stockQty(r.soldQty, r.unit)}</td>
-                  <td className="py-3 pl-2 text-right tabular-nums font-bold">{stockQty(r.remainingQty, r.unit)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="mt-4 pt-4 border-t border-[#E5E5E5] grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70">Opening Value</p>
-              <p className="mt-1 tabular-nums font-semibold">{fmtMoney(report.openingValue)}</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70">Purchase Value</p>
-              <p className="mt-1 tabular-nums font-semibold">{fmtMoney(report.purchaseValue)}</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70">Remaining Stock Value</p>
-              <p className="mt-1 tabular-nums font-bold">{fmtMoney(report.remainingValue)}</p>
-            </div>
-          </div>
-          </div>
-        </>
       ) : (
-        <StockBlock row={report.stock[0]} />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-5 items-start">
+          {report.stock.map((r) => (
+            <StockBlock key={r.productId} row={r} />
+          ))}
+        </div>
       )}
     </Section>
   );
 }
 
-export function ProfitLoss({ report }: { report: ProfitReport }) {
+export function ProfitLoss({
+  report,
+  className = "",
+}: {
+  report: ProfitReport;
+  className?: string;
+}) {
   return (
-    <Section title="Profit & Loss">
+    <Section title="Profit & Loss" className={className}>
       <div className="max-w-xl">
         <StatementRow label="Sales Revenue" value={report.salesRevenue} />
         <StatementRow label="Stock Cost" value={-report.stockCost} />
         <StatementRule />
         <StatementRow label="Profit on Sales" value={report.profitOnSales} />
         {report.expensesApplied ? (
-          <StatementRow label="Expenses" value={-report.expenses} />
-        ) : (
+          report.expenses > 0.001 ? (
+            <StatementRow label="Expenses" value={-report.expenses} />
+          ) : null
+        ) : report.hasExpenses && report.productId ? (
           <p className="py-2.5 text-[13px] text-[#171717]/70">
-            Shop expenses stay on All Products — they are not this product&apos;s cost.
+            Shop-wide expenses show under All Products — these are this product&apos;s own.
           </p>
-        )}
+        ) : null}
         <StatementTotal label="Net Profit" value={report.netProfit} dark />
         <div className="flex items-baseline justify-between gap-4 pt-3">
           <span className="text-[#171717]/70 text-[14px]">Profit %</span>
@@ -156,9 +138,15 @@ export function ProfitLoss({ report }: { report: ProfitReport }) {
   );
 }
 
-export function CashPosition({ report }: { report: ProfitReport }) {
+export function CashPosition({
+  report,
+  className = "",
+}: {
+  report: ProfitReport;
+  className?: string;
+}) {
   return (
-    <Section title="Cash Position">
+    <Section title="Cash Position" className={className}>
       <div className="max-w-xl">
         <StatementRow label="Opening Cash" value={report.openingCash} />
         <StatementRow label="Cash Received" value={report.cashReceived} />
@@ -170,9 +158,15 @@ export function CashPosition({ report }: { report: ProfitReport }) {
   );
 }
 
-export function BusinessValue({ report }: { report: ProfitReport }) {
+export function BusinessValue({
+  report,
+  className = "",
+}: {
+  report: ProfitReport;
+  className?: string;
+}) {
   return (
-    <Section title="Business Value">
+    <Section title="Business Value" className={className}>
       <div className="max-w-xl">
         <StatementRow label="Remaining Stock Value" value={report.remainingValue} />
         <StatementRow label="Customer Due" value={report.customerDue} />
@@ -186,11 +180,9 @@ export function BusinessValue({ report }: { report: ProfitReport }) {
 function PartyList({
   rows,
   empty,
-  days,
 }: {
-  rows: { id: string; name: string; due: number; days?: number }[];
+  rows: { id: string; name: string; due: number }[];
   empty: string;
-  days?: boolean;
 }) {
   if (rows.length === 0) {
     return <p className="text-[14px] text-[#171717] py-1">{empty}</p>;
@@ -203,13 +195,8 @@ function PartyList({
           className="flex items-baseline justify-between gap-3 py-2.5 border-b border-[#E5E5E5] last:border-b-0"
         >
           <span className="min-w-0 truncate font-medium">{r.name}</span>
-          <span className="flex items-baseline gap-4 shrink-0">
-            {days && r.days != null ? (
-              <span className="tabular-nums text-[13px] text-[#171717]/70">{r.days} days</span>
-            ) : null}
-            <span className={`tabular-nums font-semibold ${r.due > 0 ? "text-[#a12b1f]" : "text-[#171717]"}`}>
-              {fmtCompact(r.due)}
-            </span>
+          <span className={`tabular-nums font-semibold ${r.due > 0 ? "text-[#a12b1f]" : "text-[#171717]"}`}>
+            {fmtCompact(r.due)}
           </span>
         </li>
       ))}
@@ -218,20 +205,14 @@ function PartyList({
 }
 
 export function MoneySides({ report }: { report: ProfitReport }) {
-  const aging = [
-    { label: "0–30 Days", value: report.aging.d0_30 },
-    { label: "31–60 Days", value: report.aging.d31_60 },
-    { label: "61–90 Days", value: report.aging.d61_90 },
-    { label: "90+ Days", value: report.aging.d90 },
-  ];
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
       <Section
         className="!mb-0"
         title="Money to Pay"
         action={
-          <Link href="/suppliers" className="text-[13px] font-medium min-h-[44px] inline-flex items-center">
-            View All →
+          <Link href="/purchases?tab=dues" className="text-[13px] font-medium min-h-[44px] inline-flex items-center">
+            Payment Dues →
           </Link>
         }
       >
@@ -243,46 +224,106 @@ export function MoneySides({ report }: { report: ProfitReport }) {
         className="!mb-0"
         title="Money to Receive"
         action={
-          <Link href="/customers" className="text-[13px] font-medium min-h-[44px] inline-flex items-center">
-            View All →
+          <Link href="/sales" className="text-[13px] font-medium min-h-[44px] inline-flex items-center">
+            Sales & Invoices →
           </Link>
         }
       >
         <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70 mb-1">Customer Due</p>
-        <PartyList rows={report.customers} empty="No customer dues." days />
+        <PartyList rows={report.customers} empty="No customer dues." />
         <StatementTotal label="Total Customer Due" value={report.customerDue} />
-        {report.customerDue > 0.001 ? (
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {aging.map((a) => (
-              <div key={a.label} className="border border-[#E5E5E5] rounded-[8px] p-2.5">
-                <p className="text-[10px] uppercase tracking-widest font-medium">{a.label}</p>
-                <p className="mt-1 tabular-nums text-[13px] font-semibold">{fmtCompact(a.value)}</p>
-              </div>
-            ))}
-          </div>
-        ) : null}
       </Section>
     </div>
   );
 }
 
-export function Expenses({ report }: { report: ProfitReport }) {
-  if (!report.expensesApplied) {
+export function Expenses({
+  report,
+  className = "",
+  onAdd,
+}: {
+  report: ProfitReport;
+  className?: string;
+  onAdd?: () => void;
+}) {
+  const addButton = onAdd ? (
+    <button
+      type="button"
+      className="btn-ghost !py-2 !px-3 !text-xs min-h-[44px]"
+      onClick={onAdd}
+    >
+      + Add Expense
+    </button>
+  ) : undefined;
+
+  const pc = report.purchaseCharges;
+  const sc = report.saleCharges;
+  const purchaseRows = [
+    { label: "Transport", v: pc.transport },
+    { label: "Loading", v: pc.loading },
+    { label: "Labour", v: pc.labour },
+    { label: "Other", v: pc.other },
+  ].filter((r) => r.v > 0.001);
+  const saleRows = [
+    { label: "Loading", v: sc.loading },
+    { label: "Transport", v: sc.transport },
+    { label: "Labour", v: sc.labour },
+  ].filter((r) => r.v > 0.001);
+
+  if (purchaseRows.length === 0 && saleRows.length === 0 && !report.expensesApplied) {
     return (
-      <Section title="Expenses">
+      <Section title="Expenses" className={className} action={addButton}>
         <p className="text-[14px] leading-relaxed text-[#171717]">
-          Rent, labour and other shop costs belong to the whole business. Open All Products to see them.
+          No expenses recorded in this period.
         </p>
       </Section>
     );
   }
+
   return (
-    <Section title="Expenses">
+    <Section title="Expenses" className={className} action={addButton}>
       <div className="max-w-xl">
-        {report.expenseRows.map((r) => (
-          <StatementRow key={r.key} label={r.label} value={r.amount} />
-        ))}
-        <StatementTotal label="Total" value={report.expenses} />
+        {purchaseRows.length > 0 ? (
+          <>
+            <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70 pt-1">
+              Paid on Purchases
+            </p>
+            {purchaseRows.map((r) => (
+              <StatementRow key={r.label} label={r.label} value={r.v} />
+            ))}
+            <StatementTotal
+              label="Subtotal"
+              value={purchaseRows.reduce((a, r) => a + r.v, 0)}
+            />
+          </>
+        ) : null}
+
+        {saleRows.length > 0 ? (
+          <>
+            <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70 pt-5">
+              Paid on Sales
+            </p>
+            {saleRows.map((r) => (
+              <StatementRow key={r.label} label={r.label} value={r.v} />
+            ))}
+            <StatementTotal
+              label="Subtotal"
+              value={saleRows.reduce((a, r) => a + r.v, 0)}
+            />
+          </>
+        ) : null}
+
+        {report.expensesApplied ? (
+          <>
+            <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70 pt-5">
+              Other Expenses
+            </p>
+            {report.expenseRows.map((r) => (
+              <StatementRow key={r.key} label={r.label} value={r.amount} />
+            ))}
+            <StatementTotal label="Total" value={report.expenses} />
+          </>
+        ) : null}
       </div>
     </Section>
   );
@@ -291,12 +332,14 @@ export function Expenses({ report }: { report: ProfitReport }) {
 export function StockCheckPanel({
   report,
   onRecord,
+  className = "",
 }: {
   report: ProfitReport;
   onRecord: (productId: string) => void;
+  className?: string;
 }) {
   return (
-    <Section title="Stock Check">
+    <Section title="Stock Count" className={className}>
       <div className="space-y-5">
         {report.stockChecks.map((row) => (
           <StockCheckRow key={row.productId} row={row} onRecord={() => onRecord(row.productId)} />
@@ -314,14 +357,14 @@ function StockCheckRow({ row, onRecord }: { row: StockCheckView; onRecord: () =>
       <div className="flex items-start justify-between gap-3 mb-3">
         <p className="font-semibold">{row.productName}</p>
         <button type="button" className="btn-ghost !py-2 !px-3 !text-xs min-h-[44px]" onClick={onRecord}>
-          Record Stock Check
+          Record Count
         </button>
       </div>
       <div className="max-w-xl">
-        <StatementRow label="System Stock" text={checkQty(row.systemQty, row.unit)} />
+        <StatementRow label="Stock in Records" text={checkQty(row.systemQty, row.unit)} />
         <StatementRow
-          label="Physical Stock"
-          text={row.physicalQty == null ? "Not Checked" : checkQty(row.physicalQty, row.unit)}
+          label="Counted in Yard"
+          text={row.physicalQty == null ? "Not counted yet" : checkQty(row.physicalQty, row.unit)}
         />
         {row.difference != null ? (
           <div className="flex items-baseline justify-between gap-4 py-2.5 text-[14px] border-t border-[#171717] mt-1">
@@ -337,7 +380,9 @@ function StockCheckRow({ row, onRecord }: { row: StockCheckView; onRecord: () =>
             </span>
           </div>
         ) : (
-          <p className="pt-2 text-[13px] text-[#171717]/70">Count the yard before this line can fill in.</p>
+          <p className="pt-2 text-[13px] text-[#171717]/70">
+            Count what is actually in the yard and record it — then the difference shows here.
+          </p>
         )}
       </div>
     </div>

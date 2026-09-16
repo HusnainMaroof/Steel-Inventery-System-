@@ -123,6 +123,8 @@ export interface Expense {
   label: string;
   category: "Transport" | "Labor" | "Rent" | "Utilities" | "Other";
   amount: number;
+  /** Absent = whole shop; set = this product's own expense. */
+  productId?: string;
 }
 
 /** A counted physical stock figure for one product on one day. */
