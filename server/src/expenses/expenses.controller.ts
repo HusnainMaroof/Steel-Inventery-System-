@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Param,
-  ParseUUIDPipe,
   Post,
   Query,
   UseGuards,
@@ -13,6 +12,7 @@ import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorat
 import { ExpensesService } from "./expenses.service";
 import { CreateExpenseDto } from "./dto/create-expense.dto";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("expenses")
 @UseGuards(JwtAuthGuard)
@@ -43,7 +43,7 @@ export class ExpensesController {
   }
 
   @Get(":id")
-  byId(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+  byId(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.expensesService.byId(user.businessId, id);
   }
 }

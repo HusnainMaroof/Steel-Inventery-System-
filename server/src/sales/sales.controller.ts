@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Post,
   Query,
   UseGuards,
@@ -14,6 +13,7 @@ import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorat
 import { SalesService } from "./sales.service";
 import { CreateSaleDto } from "./dto/create-sale.dto";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("sales")
 @UseGuards(JwtAuthGuard)
@@ -42,13 +42,13 @@ export class SalesController {
   }
 
   @Get(":id")
-  byId(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+  byId(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.salesService.byId(user.businessId, id);
   }
 
   /** Cascade: stock back via reversal ledger rows, invoice + allocations removed. */
   @Delete(":id")
-  remove(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+  remove(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.salesService.remove(user.businessId, id);
   }
 }

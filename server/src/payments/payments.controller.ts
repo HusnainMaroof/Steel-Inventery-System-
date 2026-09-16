@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Param,
-  ParseUUIDPipe,
   Post,
   Query,
   UseGuards,
@@ -13,6 +12,7 @@ import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorat
 import { PaymentsService } from "./payments.service";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("payments")
 @UseGuards(JwtAuthGuard)
@@ -42,7 +42,7 @@ export class PaymentsController {
 
   /** Payment history for one party — auditable (§10). */
   @Get(":id")
-  byId(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+  byId(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.paymentsService.byId(user.businessId, id);
   }
 }

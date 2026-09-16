@@ -1,4 +1,5 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
+import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { InvoicesService } from "./invoices.service";
@@ -26,7 +27,7 @@ export class InvoicesController {
   }
 
   @Get(":id")
-  byId(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+  byId(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.invoicesService.byId(user.businessId, id);
   }
 }

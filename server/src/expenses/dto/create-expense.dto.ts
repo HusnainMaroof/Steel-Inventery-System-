@@ -4,12 +4,12 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   Min,
   MinLength,
 } from "class-validator";
 import { ExpenseCategory } from "@prisma/client";
+import { IsCuid } from "../../common/decorators/is-cuid.decorator";
 
 export class CreateExpenseDto {
   @IsDateString()
@@ -29,6 +29,6 @@ export class CreateExpenseDto {
 
   /** Absent = whole shop; set = this product's own expense. */
   @IsOptional()
-  @IsUUID()
+  @IsCuid()
   productId?: string;
 }

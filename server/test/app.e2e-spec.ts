@@ -1,6 +1,9 @@
-import { INestApplication, ValidationPipe, VersioningType } from "@nestjs/common";
+import { ValidationPipe, VersioningType } from "@nestjs/common";
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from "@nestjs/platform-fastify";
 import { Test } from "@nestjs/testing";
-import request from "supertest";
 import { AppModule } from "../src/app.module";
 
 /**
@@ -11,7 +14,7 @@ import { AppModule } from "../src/app.module";
 const describeIfDb = process.env.DATABASE_URL ? describe : describe.skip;
 
 describeIfDb("Tradex API (e2e)", () => {
-  let app: INestApplication;
+  let app: NestFastifyApplication;
   let token: string;
 
   beforeAll(async () => {
@@ -19,31 +22,43 @@ describeIfDb("Tradex API (e2e)", () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleRef.createNestApplication();
+    app = moduleRef.createNestApplication(new FastifyAdapter());
     app.setGlobalPrefix("api");
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
-  });
+    await app.getHttpAdapter().getInstance().ready();
+  }, 30000);
 
   afterAll(async () => {
     await app.close();
-  });
+  }, 30000);
 
   it("rejects unauthenticated access", async () => {
-    const res = await request(app.getHttpServer()).get("/api/v1/products").expect(401);
-    expect(res.body.statusCode).toBe(401);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/products",
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().statusCode).toBe(401);
   });
 
   it("logs in and reads products", async () => {
-    const login = await request(app.getHttpServer())
-      .post("/api/v1/auth/login")
-      .send({ email: process.env.TEST_EMAIL, password: process.env.TEST_PASSWORD })
-      .expect(200);
-    token = login.body.access_token;
-    await request(app.getHttpServer())
-      .get("/api/v1/products")
-      .set("Authorization", `Bearer ${token}`)
-      .expect(200);
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        email: process.env.TEST_EMAIL,
+        password: process.env.TEST_PASSWORD,
+      },
+    });
+    expect(login.statusCode).toBe(200);
+    token = login.json().access_token as string;
+    const products = await app.inject({
+      method: "GET",
+      url: "/api/v1/products",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(products.statusCode).toBe(200);
   });
 });

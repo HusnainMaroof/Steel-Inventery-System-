@@ -112,7 +112,7 @@ export class PaymentsService {
       });
       if (!supplier) throw new BadRequestException("Supplier not found");
 
-      return tx.payment.create({
+      const payment = await tx.payment.create({
         data: {
           businessId,
           date: new Date(dto.date),
@@ -123,6 +123,32 @@ export class PaymentsService {
           note: dto.note,
         },
       });
+
+      // FIFO across the supplier's oldest unpaid purchases (goods − paid).
+      const openPurchases = await tx.purchase.findMany({
+        where: { businessId, supplierId: dto.supplierId },
+        include: { lines: true },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      });
+      let left = dto.amount;
+      for (const purchase of openPurchases) {
+        if (left <= 0.005) break;
+        const goods = purchase.lines.reduce(
+          (sum, l) => sum + Number(l.qty) * Number(l.rate),
+          0,
+        );
+        const due = Math.max(0, goods - Number(purchase.paid));
+        const take = Math.min(due, left);
+        if (take > 0.005) {
+          await tx.purchase.update({
+            where: { id: purchase.id },
+            data: { paid: { increment: take } },
+          });
+          left = Math.round((left - take) * 100) / 100;
+        }
+      }
+
+      return payment;
     });
   }
 

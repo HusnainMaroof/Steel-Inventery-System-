@@ -9,16 +9,16 @@ import {
   Min,
   MinLength,
   ValidateNested,
-  IsUUID,
 } from "class-validator";
 import { Type } from "class-transformer";
+import { IsCuid } from "../../common/decorators/is-cuid.decorator";
 
 export class CreatePurchaseLineDto {
-  @IsUUID()
+  @IsCuid()
   productId: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsCuid()
   variantId?: string;
 
   @IsOptional()
@@ -59,7 +59,7 @@ export class CreatePurchaseDto {
   @IsDateString()
   date: string;
 
-  @IsUUID()
+  @IsCuid()
   supplierId: string;
 
   @IsArray()

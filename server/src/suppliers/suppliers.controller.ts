@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -16,6 +15,7 @@ import { SuppliersService } from "./suppliers.service";
 import { CreateSupplierDto } from "./dto/create-supplier.dto";
 import { UpdateSupplierDto } from "./dto/update-supplier.dto";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("suppliers")
 @UseGuards(JwtAuthGuard)
@@ -45,14 +45,14 @@ export class SuppliersController {
 
   /** Payable history — purchases with their remaining due (§27). */
   @Get(":id/payables")
-  payables(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+  payables(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.suppliersService.payables(user.businessId, id);
   }
 
   @Patch(":id")
   update(
     @CurrentUser() user: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id", ParseIdPipe) id: string,
     @Body() dto: UpdateSupplierDto,
   ) {
     return this.suppliersService.update(user.businessId, id, dto);
@@ -61,7 +61,7 @@ export class SuppliersController {
   @Delete(":id")
   deactivate(
     @CurrentUser() user: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id", ParseIdPipe) id: string,
   ) {
     return this.suppliersService.deactivate(user.businessId, id);
   }

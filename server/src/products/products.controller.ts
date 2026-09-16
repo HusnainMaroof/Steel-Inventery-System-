@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -16,6 +15,7 @@ import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { CreateVariantDto } from "./dto/create-variant.dto";
+import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("products")
 @UseGuards(JwtAuthGuard)
@@ -33,14 +33,14 @@ export class ProductsController {
   }
 
   @Get(":id")
-  byId(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+  byId(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.productsService.byId(user.businessId, id);
   }
 
   @Patch(":id")
   update(
     @CurrentUser() user: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id", ParseIdPipe) id: string,
     @Body() dto: UpdateProductDto,
   ) {
     return this.productsService.update(user.businessId, id, dto);
@@ -50,7 +50,7 @@ export class ProductsController {
   @Delete(":id")
   deactivate(
     @CurrentUser() user: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id", ParseIdPipe) id: string,
   ) {
     return this.productsService.deactivate(user.businessId, id);
   }
@@ -58,7 +58,7 @@ export class ProductsController {
   @Post(":id/categories")
   createCategory(
     @CurrentUser() user: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id", ParseIdPipe) id: string,
     @Body() dto: CreateCategoryDto,
   ) {
     return this.productsService.createCategory(user.businessId, id, dto);
@@ -67,7 +67,7 @@ export class ProductsController {
   @Post(":id/variants")
   createVariant(
     @CurrentUser() user: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id", ParseIdPipe) id: string,
     @Body() dto: CreateVariantDto,
   ) {
     return this.productsService.createVariant(user.businessId, id, dto);

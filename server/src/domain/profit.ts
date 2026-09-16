@@ -1,10 +1,12 @@
+import { saleGrandTotal } from "./money";
+
 /**
  * Profit engine (§27): the report is computed from transaction records, so
  * it can always answer "why is this number this amount".
  *
  * Revenue attribution: an invoice's flat charges and discount/tax are spread
  * across its lines in proportion to each line's share of the subtotal — the
- * same rule the client app uses, so figures reconcile.
+ * same rule as `saleGrandTotal`, so figures reconcile with invoices.
  */
 export interface SaleLineForProfit {
   productId: string;
@@ -45,11 +47,18 @@ export function attributedLineRevenue(
 ): number {
   const subtotal = sale.lines.reduce((sum, l) => sum + l.qty * l.rate, 0);
   if (subtotal <= 0) return 0;
-  const charges =
-    sale.loading + sale.transport + sale.labour - subtotal * (sale.discountPct / 100);
-  const withTax = charges * (1 + sale.taxPct / 100);
+  const totals = saleGrandTotal(
+    sale.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
+    {
+      discountPct: sale.discountPct,
+      taxPct: sale.taxPct,
+      loading: sale.loading,
+      transport: sale.transport,
+      labour: sale.labour,
+    },
+  );
   const share = (line.qty * line.rate) / subtotal;
-  return round2(line.qty * line.rate + withTax * share);
+  return round2(totals.grandTotal * share);
 }
 
 export function computeProfit(
@@ -63,13 +72,20 @@ export function computeProfit(
   for (const sale of sales) {
     const subtotal = sale.lines.reduce((sum, l) => sum + l.qty * l.rate, 0);
     if (subtotal <= 0) continue;
-    const charges =
-      sale.loading + sale.transport + sale.labour - subtotal * (sale.discountPct / 100);
-    const withTax = charges * (1 + sale.taxPct / 100);
+    const totals = saleGrandTotal(
+      sale.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
+      {
+        discountPct: sale.discountPct,
+        taxPct: sale.taxPct,
+        loading: sale.loading,
+        transport: sale.transport,
+        labour: sale.labour,
+      },
+    );
 
     for (const line of sale.lines) {
       const share = (line.qty * line.rate) / subtotal;
-      salesRevenue += line.qty * line.rate + withTax * share;
+      salesRevenue += totals.grandTotal * share;
       stockCost += line.qty * line.unitCost;
     }
   }

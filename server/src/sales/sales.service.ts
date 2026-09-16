@@ -30,6 +30,15 @@ export class SalesService {
       });
       if (!customer) throw new BadRequestException("Customer not found");
 
+      const productIds = [...new Set(dto.lines.map((l) => l.productId))];
+      const products = await tx.product.findMany({
+        where: { businessId, id: { in: productIds } },
+        select: { id: true },
+      });
+      if (products.length !== productIds.length) {
+        throw new BadRequestException("One or more products were not found");
+      }
+
       // §22 edge case — sell more than available ⇒ reject, nothing written.
       const ledger = await tx.inventoryTransaction.groupBy({
         by: ["productId"],
@@ -122,6 +131,25 @@ export class SalesService {
             `Paid-now amount (${dto.paidNow}) exceeds the invoice total (${totals.grandTotal})`,
           );
         }
+        const payment = await tx.payment.create({
+          data: {
+            businessId,
+            date: new Date(dto.date),
+            type: "CUSTOMER",
+            customerId: dto.customerId,
+            amount: dto.paidNow,
+            method: "CASH",
+            saleId: sale.id,
+          },
+        });
+        await tx.paymentAllocation.create({
+          data: {
+            businessId,
+            paymentId: payment.id,
+            saleId: sale.id,
+            amount: dto.paidNow,
+          },
+        });
         await tx.invoice.update({
           where: { id: invoice.id },
           data: { paid: dto.paidNow },
@@ -183,12 +211,15 @@ export class SalesService {
           qty: line.qty, // goods come back
           referenceType: "SALE_DELETE",
           referenceId: sale.id,
-          date: new Date(),
+          date: sale.date,
         })),
       });
       if (sale.invoice) {
         await tx.paymentAllocation.deleteMany({
           where: { saleId: sale.id },
+        });
+        await tx.payment.deleteMany({
+          where: { businessId, saleId: sale.id },
         });
         await tx.invoice.delete({ where: { id: sale.invoice.id } });
       }

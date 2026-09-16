@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ExpenseCategory, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateExpenseDto } from "./dto/create-expense.dto";
@@ -7,7 +7,14 @@ import { CreateExpenseDto } from "./dto/create-expense.dto";
 export class ExpensesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(businessId: string, dto: CreateExpenseDto) {
+  async create(businessId: string, dto: CreateExpenseDto) {
+    if (dto.productId) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: dto.productId, businessId },
+        select: { id: true },
+      });
+      if (!product) throw new BadRequestException("Product not found");
+    }
     return this.prisma.expense.create({
       data: {
         businessId,

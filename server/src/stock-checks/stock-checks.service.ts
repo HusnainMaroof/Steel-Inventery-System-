@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateStockCheckDto } from "./dto/create-stock-check.dto";
 
@@ -11,15 +11,28 @@ export class StockChecksService {
    * so the difference stays historically true even as stock moves later.
    */
   async create(businessId: string, dto: CreateStockCheckDto) {
-    const { systemQty } = await this.systemQty(businessId, dto.productId);
-    return this.prisma.stockCheck.create({
-      data: {
-        businessId,
-        date: new Date(dto.date),
-        productId: dto.productId,
-        physicalQty: dto.physicalQty,
-        systemQty,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.findFirst({
+        where: { id: dto.productId, businessId },
+        select: { id: true },
+      });
+      if (!product) throw new BadRequestException("Product not found");
+
+      const grouped = await tx.inventoryTransaction.aggregate({
+        where: { businessId, productId: dto.productId },
+        _sum: { qty: true },
+      });
+      const systemQty = Number(grouped._sum.qty ?? 0);
+
+      return tx.stockCheck.create({
+        data: {
+          businessId,
+          date: new Date(dto.date),
+          productId: dto.productId,
+          physicalQty: dto.physicalQty,
+          systemQty,
+        },
+      });
     });
   }
 

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { purchaseGoodsTotal } from "../domain/money";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
 
@@ -23,6 +24,23 @@ export class PurchasesService {
       });
       if (!supplier) throw new BadRequestException("Supplier not found");
 
+      const productIds = [...new Set(dto.lines.map((l) => l.productId))];
+      const products = await tx.product.findMany({
+        where: { businessId, id: { in: productIds } },
+        select: { id: true },
+      });
+      if (products.length !== productIds.length) {
+        throw new BadRequestException("One or more products were not found");
+      }
+
+      const goodsTotal = purchaseGoodsTotal(dto.lines);
+      const paid = dto.paid ?? 0;
+      if (paid > goodsTotal + 0.005) {
+        throw new BadRequestException(
+          `Paid amount (${paid}) cannot exceed the goods total (${goodsTotal})`,
+        );
+      }
+
       const purchase = await tx.purchase.create({
         data: {
           businessId,
@@ -33,7 +51,7 @@ export class PurchasesService {
           loading: dto.loading ?? 0,
           labour: dto.labour ?? 0,
           otherCost: dto.otherCost ?? 0,
-          paid: dto.paid ?? 0,
+          paid,
           lines: {
             create: dto.lines.map((line) => ({
               productId: line.productId,

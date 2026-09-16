@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -16,6 +15,7 @@ import { CustomersService } from "./customers.service";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("customers")
 @UseGuards(JwtAuthGuard)
@@ -45,14 +45,14 @@ export class CustomersController {
 
   /** Ledger view — answers "why is this balance this amount?" (§27). */
   @Get(":id/ledger")
-  ledger(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+  ledger(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.customersService.ledger(user.businessId, id);
   }
 
   @Patch(":id")
   update(
     @CurrentUser() user: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id", ParseIdPipe) id: string,
     @Body() dto: UpdateCustomerDto,
   ) {
     return this.customersService.update(user.businessId, id, dto);
@@ -61,7 +61,7 @@ export class CustomersController {
   @Delete(":id")
   deactivate(
     @CurrentUser() user: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param("id", ParseIdPipe) id: string,
   ) {
     return this.customersService.deactivate(user.businessId, id);
   }

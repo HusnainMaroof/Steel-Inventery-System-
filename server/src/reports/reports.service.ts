@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { computeProfit, SaleForProfit } from "../domain/profit";
-import { saleGrandTotal } from "../domain/money";
+import { landedCostPerUnit, saleGrandTotal } from "../domain/money";
 
 export type ReportMode = "month" | "year" | "range";
 
@@ -68,17 +68,24 @@ export class ReportsService {
       },
     });
 
-    // ---- landed cost per unit: purchase charges spread by qty share ----
-    const unitCostByPurchaseLine = new Map<string, number>();
+    // ---- landed cost per unit keyed by source purchase + product ----
+    const unitCostByPurchaseProduct = new Map<string, number>();
     for (const p of purchases) {
       const goods = p.lines.reduce((sum, l) => sum + Number(l.qty) * Number(l.rate), 0);
       if (goods <= 0) continue;
       const charges =
         Number(p.transport) + Number(p.loading) + Number(p.labour) + Number(p.otherCost);
       for (const line of p.lines) {
-        unitCostByPurchaseLine.set(
-          line.id,
-          ((Number(line.qty) * Number(line.rate) + charges * (Number(line.qty) * Number(line.rate)) / goods) || 0),
+        const lineGoods = Number(line.qty) * Number(line.rate);
+        const lineCharges = charges * (lineGoods / goods);
+        const key = `${p.id}:${line.productId}`;
+        unitCostByPurchaseProduct.set(
+          key,
+          landedCostPerUnit({
+            qty: Number(line.qty),
+            rate: Number(line.rate),
+            purchaseCharges: lineCharges,
+          }),
         );
       }
     }
@@ -90,7 +97,10 @@ export class ReportsService {
         productId: l.productId,
         qty: Number(l.qty),
         rate: Number(l.rate),
-        unitCost: unitCostByPurchaseLine.get(l.purchaseId ?? "") ?? 0,
+        unitCost:
+          l.purchaseId
+            ? unitCostByPurchaseProduct.get(`${l.purchaseId}:${l.productId}`) ?? 0
+            : 0,
       })),
       discountPct: Number(s.discountPct),
       taxPct: Number(s.taxPct),
@@ -165,7 +175,11 @@ export class ReportsService {
     // ---- business value = remaining stock valuation + customer due + cash ----
     const allPurchaseLines = await this.prisma.purchaseLine.findMany({
       where: { purchase: { businessId } },
-      select: { productId: true, qty: true, rate: true, purchase: { select: { transport: true, loading: true, labour: true, otherCost: true } } },
+      select: { productId: true, qty: true, rate: true },
+    });
+    const purchasesForValuation = await this.prisma.purchase.findMany({
+      where: { businessId },
+      select: { transport: true, loading: true, labour: true, otherCost: true },
     });
     const weight = new Map<string, { qty: number; value: number }>();
     for (const line of allPurchaseLines) {
@@ -175,14 +189,14 @@ export class ReportsService {
       w.value += goods;
       weight.set(line.productId, w);
     }
-    // charges allocated across the whole ledger by goods share
-    const totalCharges = allPurchaseLines.reduce(
-      (sum, l) =>
+    // charges counted once per purchase, then spread by goods share
+    const totalCharges = purchasesForValuation.reduce(
+      (sum, p) =>
         sum +
-        Number(l.purchase.transport) +
-        Number(l.purchase.loading) +
-        Number(l.purchase.labour) +
-        Number(l.purchase.otherCost),
+        Number(p.transport) +
+        Number(p.loading) +
+        Number(p.labour) +
+        Number(p.otherCost),
       0,
     );
     const totalGoods = allPurchaseLines.reduce(

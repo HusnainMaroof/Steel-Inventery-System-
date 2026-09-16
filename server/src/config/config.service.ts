@@ -6,7 +6,7 @@ import { Injectable, OnModuleInit } from "@nestjs/common";
  */
 @Injectable()
 export class ConfigService implements OnModuleInit {
-  private readonly required = ["DATABASE_URL", "JWT_SECRET"] as const;
+  private readonly required = ["DATABASE_URL", "DIRECT_URL", "JWT_SECRET"] as const;
 
   onModuleInit(): void {
     const missing = this.required.filter((key) => !process.env[key]);

@@ -4,12 +4,12 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   Min,
   MinLength,
 } from "class-validator";
 import { PaymentMethod } from "@prisma/client";
+import { IsCuid } from "../../common/decorators/is-cuid.decorator";
 
 export class CreatePaymentDto {
   @IsDateString()
@@ -19,11 +19,11 @@ export class CreatePaymentDto {
   type: "CUSTOMER" | "SUPPLIER";
 
   @IsOptional()
-  @IsUUID()
+  @IsCuid()
   customerId?: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsCuid()
   supplierId?: string;
 
   @IsNumber()
@@ -36,7 +36,7 @@ export class CreatePaymentDto {
 
   /** Settle one specific invoice — can never exceed its remaining due. */
   @IsOptional()
-  @IsUUID()
+  @IsCuid()
   saleId?: string;
 
   @IsOptional()
