@@ -1,11 +1,11 @@
 # APIs
 
-> Status: **the backend does not exist yet.** The app is currently a
-> client-side Next.js application whose entire data layer is the in-memory
-> store in `client/src/lib/store.tsx`, seeded from `client/src/lib/seed.ts`.
-> This document records (a) the internal data API the frontend uses today
-> and (b) the REST contract the future `server/` must implement so the
-> frontend can switch from in-memory to real persistence.
+> Status: the backend **now exists as a scaffold** in `server/` — NestJS +
+> Fastify + Prisma (modular monolith), REST under `/api/v1`, PostgreSQL on
+> Neon. It compiles and its money/inventory logic is unit-tested; running it
+> and applying migrations need a Neon `DATABASE_URL` in `server/.env` (see
+> `server/README.md`). The client app still runs on its in-memory store;
+> wiring the frontend to these endpoints is the next step.
 
 ## 1. Current internal data API (client-side, no server)
 
@@ -46,7 +46,36 @@ them, so two screens can never disagree on a figure.
 Report figures come from `client/src/lib/profitReport.ts`
 (`buildProfitReport`) and exports from `client/src/lib/reports.ts`.
 
-## 2. Planned server API (`server/` — not built yet)
+## 2. Server API (`server/` — NestJS, implemented)
+
+Stack (per the backend spec): Node.js + NestJS with the Fastify adapter,
+TypeScript strict, Prisma ORM, PostgreSQL hosted on Neon, REST under
+`/api/v1`, modular monolith (one app, one database — no microservices,
+Redis, or queues).
+
+Modules: auth · users · products (categories, attributes, variants) ·
+inventory (derived stock + movement ledger + adjustments) · purchases ·
+sales · customers · suppliers · payments · invoices · expenses ·
+stock-checks · reports.
+
+Key behaviours already implemented in services:
+
+- Purchases, sales, and payments create atomically via `prisma.$transaction`
+  (§12) — a failed write rolls back everything.
+- Sales validate availability against the `InventoryTransaction` ledger and
+  reject oversells; every stock change (purchase, sale, adjustment, return)
+  writes a traceable ledger row (§7).
+- Each sale generates an `Invoice` with a per-business sequential number.
+- Customer payments targeted at an invoice can never exceed its remaining
+  due; untargeted payments settle oldest-unpaid invoices first (FIFO) with
+  recorded allocations (§10).
+- Balances (customer receivable, supplier payable) are always derived from
+  transactions, never stored (§27). Money columns are Prisma `Decimal` (§11).
+- DTO validation on every request; JWT auth on everything except login;
+  role guards (ADMIN/SUBADMIN); consistent `{ statusCode, message, error }`
+  errors; pagination on list endpoints (`?page=&limit=`).
+
+The route map below is the contract the modules implement.
 
 Conventions: JSON over HTTPS, base path `/api/v1`, every record carries
 `businessId` (multi-tenant isolation is mandatory), dates are ISO
