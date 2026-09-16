@@ -28,33 +28,41 @@ Grade/Brand/Gauge fields and no `if product === "steel"` UI logic.
 
 ## 2. Big picture
 
+### Repository layout
+
+The repo is split for the future backend:
+
+- `client/` — the complete Next.js app (all `src/`, `public/`, and its own
+  `package.json` / configs). Run it from there: `cd client && npm run dev`.
+- `server/` — empty scaffold, reserved for the backend (not built yet).
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  Browser (React 19, client-side rendering)                 │
 │                                                            │
-│  src/app — pages by route                                  │
+│  client/src/app — pages by route                           │
 │    public:  / (homepage), /login                           │
 │    owner:   /dashboard /purchases /products /inventory     │
 │             /sales /customers /suppliers /payments /reports│
 │    admin:   /admin (Owners panel, super admin only)        │
 │    prints:  /sales/[id], /invoices/[id] (no sidebar)       │
 │                                                            │
-│  src/components — Shell (sidebar/gate), shared UI,         │
+│  client/src/components — Shell (sidebar/gate), shared UI,  │
 │                  catalogue/ (AttributeFields, VariantBadge)│
 │                  sales/ (New Sale flow)                    │
-│  src/lib/store.tsx — THE single source of truth + derived  │
-│                      inventory, lots, costs, dues, stats   │
-│  src/lib/seed.ts — starter catalogue & demo data           │
-│  src/lib/catalogue.ts — variant keys, generic helpers      │
-│  src/lib/auth.tsx — roles (super admin / owners)           │
-│  src/lib/types.ts — record shapes                          │
+│  client/src/lib/store.tsx — THE single source of truth +   │
+│                      derived inventory, lots, costs, dues  │
+│  client/src/lib/seed.ts — starter catalogue & demo data    │
+│  client/src/lib/catalogue.ts — variant keys, helpers       │
+│  client/src/lib/auth.tsx — roles (super admin / owners)    │
+│  client/src/lib/types.ts — record shapes                   │
 └────────────────────────────────────────────────────────────┘
 ```
 
 ### Where the state lives
 
 - The whole ledger lives in one React context (`StoreProvider` in
-  `src/lib/store.tsx`), seeded from `src/lib/seed.ts`.
+  `client/src/lib/store.tsx`), seeded from `client/src/lib/seed.ts`.
 - Data is **in-memory only**: no database, no localStorage. A page refresh
   re-seeds the demo state. This is intentional for the current demo stage —
   there is no backend yet.
