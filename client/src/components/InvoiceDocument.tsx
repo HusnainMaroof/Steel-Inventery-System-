@@ -4,6 +4,7 @@ import type { Sale, SaleLine } from "@/lib/types";
 import type { BusinessProfile } from "@/lib/auth";
 import type { Customer } from "@/lib/types";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate } from "@/lib/format";
+import { InvoiceBrandHeader } from "@/components/invoice/InvoiceBrandHeader";
 
 export type InvoiceLineDetail = {
   product: string | null;
@@ -55,23 +56,7 @@ export default function InvoiceDocument({
       {/* header */}
       <div className="px-8 sm:px-10 pt-9 pb-6 border-b border-neutral-200">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-5">
-          <div className="min-w-0">
-            <img
-              src="/images/logo.png"
-              alt={business.businessName}
-              title={business.businessName}
-              className="h-20 w-auto max-w-full object-contain object-left"
-            />
-            <p className="text-[12px] text-neutral-500 mt-2 leading-relaxed">
-              {[business.address, business.city].filter(Boolean).join(" · ")}
-              {business.phone && (
-                <>
-                  {(business.address || business.city) && " · "}
-                  {business.phone}
-                </>
-              )}
-            </p>
-          </div>
+          <InvoiceBrandHeader business={business} />
           <div className="sm:text-right shrink-0 text-[13px]">
             <p className="text-[10px] uppercase tracking-widest text-neutral-400">Invoice</p>
             <p className="font-bold tabular-nums mt-0.5">{sale.invoiceNo}</p>
@@ -213,8 +198,8 @@ export default function InvoiceDocument({
         </div>
       </div>
 
-      <div className="px-8 sm:px-10 py-4 border-t border-neutral-100 text-center text-[11px] text-neutral-400">
-        Thank you for your business.
+      <div className="px-8 sm:px-10 py-4 border-t border-neutral-100 text-center text-[11px] text-[#171717]/70">
+        {business.invoiceNote || "Thank you for your business."}
       </div>
     </div>
   );
