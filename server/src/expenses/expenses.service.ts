@@ -1,13 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ExpenseCategory, Prisma } from "@prisma/client";
+import { AuditService } from "../common/audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateExpenseDto } from "./dto/create-expense.dto";
 
 @Injectable()
 export class ExpensesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
-  async create(businessId: string, dto: CreateExpenseDto) {
+  async create(businessId: string, dto: CreateExpenseDto, actorId?: string) {
     if (dto.productId) {
       const product = await this.prisma.product.findFirst({
         where: { id: dto.productId, businessId },
@@ -15,7 +19,7 @@ export class ExpensesService {
       });
       if (!product) throw new BadRequestException("Product not found");
     }
-    return this.prisma.expense.create({
+    const expense = await this.prisma.expense.create({
       data: {
         businessId,
         date: new Date(dto.date),
@@ -25,6 +29,15 @@ export class ExpensesService {
         productId: dto.productId, // absent = whole shop
       },
     });
+    await this.audit.log({
+      businessId,
+      actorId: actorId ?? null,
+      action: "expense.created",
+      entityType: "expense",
+      entityId: expense.id,
+      metadata: { category: dto.category, amount: dto.amount },
+    });
+    return expense;
   }
 
   async list(
@@ -61,21 +74,21 @@ export class ExpensesService {
     to: string,
     productId?: string,
   ) {
-    const expenses = await this.prisma.expense.findMany({
+    const rows = await this.prisma.expense.groupBy({
+      by: ["category"],
       where: {
         businessId,
         ...(productId ? { productId } : {}),
         date: { gte: new Date(from), lte: new Date(to) },
       },
-      select: { category: true, amount: true },
+      _sum: { amount: true },
     });
-    const totals = new Map<ExpenseCategory, number>();
-    for (const e of expenses) {
-      totals.set(e.category, (totals.get(e.category) ?? 0) + Number(e.amount));
-    }
-    return [...totals.entries()]
-      .filter(([, amount]) => amount > 0.001)
-      .map(([category, amount]) => ({ category, amount }))
+    return rows
+      .map((row) => ({
+        category: row.category as ExpenseCategory,
+        amount: Number(row._sum.amount ?? 0),
+      }))
+      .filter((row) => row.amount > 0.001)
       .sort((a, b) => b.amount - a.amount);
   }
 
@@ -85,9 +98,16 @@ export class ExpensesService {
     return expense;
   }
 
-  async remove(businessId: string, id: string) {
+  async remove(businessId: string, id: string, actorId?: string) {
     await this.byId(businessId, id);
     await this.prisma.expense.delete({ where: { id } });
+    await this.audit.log({
+      businessId,
+      actorId: actorId ?? null,
+      action: "expense.deleted",
+      entityType: "expense",
+      entityId: id,
+    });
     return { deleted: true, expenseId: id };
   }
 }

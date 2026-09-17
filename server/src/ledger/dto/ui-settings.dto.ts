@@ -45,4 +45,9 @@ export class UiSettingsDto {
   @IsString()
   @MaxLength(450_000)
   logoDataUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  logoUrl?: string;
 }

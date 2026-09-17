@@ -9,7 +9,9 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { PurchasesService } from "./purchases.service";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
@@ -18,13 +20,14 @@ import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 import { UpdatePurchaseDto } from "./dto/update-purchase.dto";
 
 @Controller("purchases")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("purchases")
 export class PurchasesController {
   constructor(private readonly purchasesService: PurchasesService) {}
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreatePurchaseDto) {
-    return this.purchasesService.create(user.businessId, dto);
+    return this.purchasesService.create(user.businessId, dto, user.sub);
   }
 
   @Get()
@@ -54,11 +57,11 @@ export class PurchasesController {
     @Param("id", ParseIdPipe) id: string,
     @Body() dto: UpdatePurchaseDto,
   ) {
-    return this.purchasesService.update(user.businessId, id, dto);
+    return this.purchasesService.update(user.businessId, id, dto, user.sub);
   }
 
   @Delete(":id")
   remove(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
-    return this.purchasesService.remove(user.businessId, id);
+    return this.purchasesService.remove(user.businessId, id, user.sub);
   }
 }

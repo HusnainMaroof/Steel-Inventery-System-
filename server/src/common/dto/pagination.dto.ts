@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import { IsInt, IsOptional, Max, Min } from "class-validator";
+import { LIMITS } from "../security/limits";
 
 export class PaginationDto {
   @IsOptional()
@@ -12,8 +13,8 @@ export class PaginationDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  limit: number = 20;
+  @Max(LIMITS.MAX_PAGE_SIZE)
+  limit: number = LIMITS.DEFAULT_PAGE_SIZE;
 }
 
 export interface Paginated<T> {

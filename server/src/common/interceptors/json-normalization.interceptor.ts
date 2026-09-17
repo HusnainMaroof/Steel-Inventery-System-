@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { Observable, map } from "rxjs";
+import { decimalToJson } from "../decimal/decimal-json";
 
 const TITLE_ENUMS: Record<string, string> = {
   CASH: "Cash",
@@ -19,7 +20,7 @@ const TITLE_ENUMS: Record<string, string> = {
 };
 
 export function normalizeJson(value: unknown, key?: string): unknown {
-  if (value instanceof Prisma.Decimal) return value.toNumber();
+  if (value instanceof Prisma.Decimal) return decimalToJson(value, key);
   if (value instanceof Date) {
     const iso = value.toISOString();
     return key === "date" || key === "purchasedAt" ? iso.slice(0, 10) : iso;
@@ -37,8 +38,9 @@ export function normalizeJson(value: unknown, key?: string): unknown {
       if (normalized.type === "RETURN" && normalized.referenceType === "SALE_DELETE") {
         normalized.type = "SALE_RETURN";
       }
-      if (normalized.type === "ADJUSTMENT" && typeof normalized.qty === "number") {
-        normalized.type = normalized.qty >= 0 ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT";
+      if (normalized.type === "ADJUSTMENT" && normalized.qty != null) {
+        const q = Number(normalized.qty);
+        normalized.type = q >= 0 ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT";
       }
     }
     return normalized;

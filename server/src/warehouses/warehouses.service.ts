@@ -11,12 +11,19 @@ import {
 export class WarehousesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(businessId: string) {
-    return this.prisma.warehouse.findMany({
-      where: { businessId },
-      include: { locations: { orderBy: { name: "asc" } } },
-      orderBy: { name: "asc" },
-    });
+  async list(businessId: string, skip: number, take: number) {
+    const where = { businessId };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.warehouse.findMany({
+        where,
+        include: { locations: { orderBy: { name: "asc" } } },
+        orderBy: { name: "asc" },
+        skip,
+        take,
+      }),
+      this.prisma.warehouse.count({ where }),
+    ]);
+    return [items, total] as const;
   }
 
   create(businessId: string, dto: CreateWarehouseDto) {

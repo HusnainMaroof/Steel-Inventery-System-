@@ -8,7 +8,9 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { ExpensesService } from "./expenses.service";
 import { CreateExpenseDto } from "./dto/create-expense.dto";
@@ -16,13 +18,14 @@ import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto"
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("expenses")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("expenses")
 export class ExpensesController {
   constructor(private readonly expensesService: ExpensesService) {}
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateExpenseDto) {
-    return this.expensesService.create(user.businessId, dto);
+    return this.expensesService.create(user.businessId, dto, user.sub);
   }
 
   @Get()
@@ -50,6 +53,6 @@ export class ExpensesController {
 
   @Delete(":id")
   remove(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
-    return this.expensesService.remove(user.businessId, id);
+    return this.expensesService.remove(user.businessId, id, user.sub);
   }
 }

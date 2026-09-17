@@ -9,7 +9,9 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { CustomersService } from "./customers.service";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
@@ -18,7 +20,8 @@ import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto"
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("customers")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("customers")
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
@@ -45,8 +48,19 @@ export class CustomersController {
 
   /** Ledger view — answers "why is this balance this amount?" (§27). */
   @Get(":id/ledger")
-  ledger(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
-    return this.customersService.ledger(user.businessId, id);
+  async ledger(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Query() pagination: PaginationDto,
+  ) {
+    const { skip, take } = skipTake(pagination.page, pagination.limit);
+    const { rows, totalDue, total } = await this.customersService.ledger(
+      user.businessId,
+      id,
+      skip,
+      take,
+    );
+    return { ...paginate(rows, total, pagination.page, pagination.limit), totalDue };
   }
 
   @Patch(":id")

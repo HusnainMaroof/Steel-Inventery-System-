@@ -2,19 +2,32 @@
 
 import { tradexFetch, type TradexRole } from "@/lib/server/tradex";
 import { sanitizeAccess, type StaffPage } from "@/lib/staff-access";
-import type { SubscriptionPlan, SubscriptionStatus } from "./platform";
+import type { BillingCycle, SubscriptionStatus } from "./platform";
 
 export type OwnerBusiness = {
   id: string;
   name: string;
   slug?: string;
   createdAt?: string;
-  subscriptionPlan?: SubscriptionPlan | null;
+  subscriptionPlanId?: string | null;
+  subscriptionPlanDef?: {
+    id: string;
+    label: string;
+    billingCycle: BillingCycle;
+    durationDays?: number | null;
+    allowedPages?: string[];
+  } | null;
   subscriptionStatus?: SubscriptionStatus | null;
   subscriptionStartsAt?: string | null;
   subscriptionEndsAt?: string | null;
   assignedTemplateIds?: string[];
   templatesAppliedAt?: string | null;
+};
+
+export type OwnerActivity30d = {
+  sales: number;
+  purchases: number;
+  payments: number;
 };
 
 export type OwnerAccount = {
@@ -23,8 +36,9 @@ export type OwnerAccount = {
   name: string;
   role: TradexRole;
   active: boolean;
-  loginPassword: string | null;
   createdAt?: string;
+  subscriptionActive?: boolean;
+  activity30d?: OwnerActivity30d;
   business: OwnerBusiness;
 };
 
@@ -38,12 +52,49 @@ export type StaffAccount = {
   createdAt?: string;
 };
 
+type Paginated<T> = {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+};
+
+async function fetchAllTradexPages<T>(path: string, limit = 100): Promise<T[]> {
+  const items: T[] = [];
+  let page = 1;
+  let pages = 1;
+  do {
+    const result = await tradexFetch<Paginated<T>>(`${path}?page=${page}&limit=${limit}`);
+    if (!result.ok) throw new Error(result.message);
+    items.push(...result.data.items);
+    pages = result.data.pages;
+    page += 1;
+    if (page > 200) break;
+  } while (page <= pages);
+  return items;
+}
+
 export async function listOwnersAction(): Promise<
   { ok: true; owners: OwnerAccount[] } | { ok: false; error: string }
 > {
-  const result = await tradexFetch<OwnerAccount[]>("/api/v1/owners");
+  try {
+    const owners = await fetchAllTradexPages<OwnerAccount>("/api/v1/owners");
+    return { ok: true, owners };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Failed to load owners",
+    };
+  }
+}
+
+export async function getOwnerAction(
+  id: string,
+): Promise<{ ok: true; owner: OwnerAccount } | { ok: false; error: string }> {
+  const result = await tradexFetch<OwnerAccount>(`/api/v1/owners/${id}`);
   if (!result.ok) return { ok: false, error: result.message };
-  return { ok: true, owners: result.data };
+  return { ok: true, owner: result.data };
 }
 
 export async function createOwnerAction(input: {
@@ -51,8 +102,9 @@ export async function createOwnerAction(input: {
   email: string;
   password: string;
   businessName: string;
-  subscriptionPlan?: SubscriptionPlan;
+  subscriptionPlanId?: string;
   templateIds?: string[];
+  logoUrl?: string;
 }): Promise<{ ok: true; owner: OwnerAccount } | { ok: false; error: string }> {
   const name = input.name.trim();
   const email = input.email.trim().toLowerCase();
@@ -74,8 +126,9 @@ export async function createOwnerAction(input: {
       email,
       password: input.password,
       businessName,
-      subscriptionPlan: input.subscriptionPlan ?? "MONTHLY",
+      subscriptionPlanId: input.subscriptionPlanId,
       templateIds: input.templateIds ?? [],
+      logoUrl: input.logoUrl,
     }),
   });
   if (!result.ok) return { ok: false, error: result.message };
@@ -100,7 +153,7 @@ export async function applyOwnerTemplatesAction(
 export async function updateOwnerSubscriptionAction(
   id: string,
   input: {
-    plan?: SubscriptionPlan;
+    planId?: string;
     status?: SubscriptionStatus;
     endsAt?: string;
   },
@@ -113,7 +166,7 @@ export async function updateOwnerSubscriptionAction(
   return { ok: true, owner: result.data };
 }
 
-export async function removeOwnerAction(
+export async function deleteOwnerAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await tradexFetch<unknown>(`/api/v1/owners/${id}`, {
@@ -141,15 +194,21 @@ export async function updateOwnerAction(
 export async function listStaffAction(): Promise<
   { ok: true; staff: StaffAccount[] } | { ok: false; error: string }
 > {
-  const result = await tradexFetch<StaffAccount[]>("/api/v1/users");
-  if (!result.ok) return { ok: false, error: result.message };
-  return {
-    ok: true,
-    staff: result.data.map((member) => ({
-      ...member,
-      access: sanitizeAccess(member.access),
-    })),
-  };
+  try {
+    const staff = await fetchAllTradexPages<StaffAccount>("/api/v1/users");
+    return {
+      ok: true,
+      staff: staff.map((member) => ({
+        ...member,
+        access: sanitizeAccess(member.access),
+      })),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Failed to load staff",
+    };
+  }
 }
 
 export async function createStaffAction(input: {

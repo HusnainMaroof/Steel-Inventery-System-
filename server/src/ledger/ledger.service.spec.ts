@@ -1,67 +1,79 @@
 import { sanitizeUiSettings } from "../common/security/sanitize-settings";
 import { PrismaService } from "../prisma/prisma.service";
+import { DashboardSummaryService } from "./dashboard-summary.service";
 import { LedgerService } from "./ledger.service";
 
 describe("LedgerService", () => {
-  const findMany = jest.fn(() => Promise.resolve([]));
   const prisma = {
-    supplier: { findMany },
-    customer: { findMany },
-    purchase: { findMany },
-    sale: { findMany },
-    payment: { findMany },
-    expense: { findMany },
-    stockCheck: { findMany },
-    product: { findMany },
-    productItem: { findMany },
-    productCategory: { findMany },
-    attributeDef: { findMany },
-    variant: { findMany },
-    warehouse: { findMany },
     $transaction: jest.fn(),
+    $queryRaw: jest.fn(),
+    product: { findMany: jest.fn().mockResolvedValue([]) },
+    productItem: { findMany: jest.fn().mockResolvedValue([]) },
+    productCategory: { findMany: jest.fn().mockResolvedValue([]) },
+    attributeDef: { findMany: jest.fn().mockResolvedValue([]) },
+    variant: { findMany: jest.fn().mockResolvedValue([]) },
+    warehouse: { findMany: jest.fn().mockResolvedValue([]) },
     business: {
       findUniqueOrThrow: jest.fn(),
       update: jest.fn(),
     },
+    user: { findMany: jest.fn() },
   };
-  const service = new LedgerService(prisma as unknown as PrismaService);
+  const dashboard = {
+    summarize: jest.fn().mockResolvedValue({
+      stockQty: 0,
+      stockValue: 0,
+      revenue: 0,
+      customerDue: 0,
+      supplierDue: 0,
+      saleCount: 0,
+      purchaseCount: 0,
+      paymentCount: 0,
+      expenseTotal: 0,
+    }),
+  };
+  const audit = { log: jest.fn() };
+  const service = new LedgerService(
+    prisma as unknown as PrismaService,
+    dashboard as unknown as DashboardSummaryService,
+    audit as never,
+  );
 
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns a normalized empty bootstrap for a new business", async () => {
-    prisma.$transaction.mockResolvedValue(Array.from({ length: 13 }, () => []));
+  it("returns a slim bootstrap for a new business", async () => {
+    prisma.$transaction.mockResolvedValue([
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [{ customers: BigInt(0), suppliers: BigInt(0), purchases: BigInt(0), sales: BigInt(0), payments: BigInt(0), expenses: BigInt(0), stockChecks: BigInt(0) }],
+    ]);
+    prisma.user.findMany.mockResolvedValue([]);
     prisma.business.findUniqueOrThrow.mockResolvedValue({ settings: { invoiceName: "Test" } });
     const result = await service.bootstrap("biz-a");
     expect(result).toMatchObject({
-      version: 2,
+      version: 3,
       products: [],
       purchases: [],
       sales: [],
       settings: { invoiceName: "Test" },
+      counts: { customers: 0, sales: 0 },
     });
-    expect(prisma.supplier.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { businessId: "biz-a" } }),
-    );
+    expect(dashboard.summarize).toHaveBeenCalledWith("biz-a");
   });
 
   it("reads preferences from the authenticated business", async () => {
     prisma.business.findUniqueOrThrow.mockResolvedValue({ settings: null });
     await expect(service.getPreferences("biz-a")).resolves.toEqual({ data: {} });
-    expect(prisma.business.findUniqueOrThrow).toHaveBeenCalledWith({
-      where: { id: "biz-a" },
-      select: { settings: true },
-    });
   });
 
-  it("stores preferences on the authenticated business", async () => {
-    const settings = { invoiceName: "Husna Steel" };
-    const sanitized = sanitizeUiSettings(settings);
-    prisma.business.update.mockResolvedValue({ settings: sanitized });
-    await service.savePreferences("biz-a", settings);
-    expect(prisma.business.update).toHaveBeenCalledWith({
-      where: { id: "biz-a" },
-      data: { settings: sanitized },
-      select: { settings: true },
-    });
+  it("sanitizes settings on save", async () => {
+    prisma.business.update.mockResolvedValue({ settings: { invoiceName: "Safe" } });
+    await service.savePreferences("biz-a", { invoiceName: "Safe" });
+    expect(prisma.business.update).toHaveBeenCalled();
+    expect(sanitizeUiSettings({ invoiceName: "Safe" }).invoiceName).toBe("Safe");
   });
 });

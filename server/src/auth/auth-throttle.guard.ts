@@ -7,26 +7,37 @@ import {
 } from "@nestjs/common";
 
 /**
- * In-memory login/register throttle (§15). One process is enough for a
- * single Nest instance; a reverse proxy can add another layer in prod.
+ * Login/register throttle keyed by email (not IP alone) so onboarding many
+ * users from one office network stays possible.
  */
+import { rateLimitStore } from "../common/rate-limit/rate-limit-store";
+
 @Injectable()
 export class AuthThrottleGuard implements CanActivate {
-  private readonly hits = new Map<string, number[]>();
   private readonly windowMs = 15 * 60 * 1000;
-  private readonly max = 10;
+
+  private maxAttempts(): number {
+    const env = process.env.NODE_ENV;
+    if (env === "production") return 15;
+    if (env === "test") return 100;
+    return 60;
+  }
 
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<{
       ip?: string;
+      body?: { email?: string };
       headers?: Record<string, string | string[] | undefined>;
     }>();
     const forwarded = req.headers?.["x-forwarded-for"];
     const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
     const ip = (req.ip ?? forwardedIp ?? "unknown").split(",")[0].trim();
-    const now = Date.now();
-    const recent = (this.hits.get(ip) ?? []).filter((t) => now - t < this.windowMs);
-    if (recent.length >= this.max) {
+    const email = req.body?.email?.trim().toLowerCase();
+    const key = email ? `email:${email}` : `ip:${ip}`;
+
+    const max = this.maxAttempts();
+    const count = rateLimitStore.hit(key, this.windowMs);
+    if (count > max) {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -36,8 +47,6 @@ export class AuthThrottleGuard implements CanActivate {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    recent.push(now);
-    this.hits.set(ip, recent);
     return true;
   }
 }

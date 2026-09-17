@@ -1,6 +1,15 @@
 import { fmtDate, fmtMoney, fmtPct } from "./format";
 import { ymd, type ProfitReport } from "./profitReport";
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function periodText(ex: ProfitReport) {
   return ex.mode === "range" ? `${fmtDate(ex.from)} → ${fmtDate(ex.to)}` : ex.periodLabel;
 }
@@ -141,14 +150,14 @@ function money(n: number) {
 }
 
 function tr(label: string, value: string, strong = false) {
-  return `<tr class="${strong ? "strong" : ""}"><td>${label}</td><td>${value}</td></tr>`;
+  return `<tr class="${strong ? "strong" : ""}"><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`;
 }
 
 export function printReportPdf(ex: ProfitReport) {
   const stockRows = ex.stock
     .map(
       (r) => `<tr>
-        <td>${r.productName}</td>
+        <td>${escapeHtml(r.productName)}</td>
         <td>${qty(r.openingQty, r.unit)}</td>
         <td>${qty(r.purchaseQty, r.unit)}</td>
         <td>${qty(r.totalQty, r.unit)}</td>
@@ -185,7 +194,7 @@ export function printReportPdf(ex: ProfitReport) {
   const checkRows = ex.stockChecks
     .map(
       (r) => `<tr>
-        <td>${r.productName}</td>
+        <td>${escapeHtml(r.productName)}</td>
         <td>${qty(r.systemQty, r.unit)}</td>
         <td>${r.physicalQty == null ? "Not counted yet" : qty(r.physicalQty, r.unit)}</td>
         <td>${r.difference == null ? "—" : qty(r.difference, r.unit)}</td>
@@ -193,7 +202,7 @@ export function printReportPdf(ex: ProfitReport) {
     )
     .join("");
 
-  const html = `<!doctype html><html><head><title>Profit & Reports — ${periodText(ex)}</title>
+  const html = `<!doctype html><html><head><title>Profit & Reports — ${escapeHtml(periodText(ex))}</title>
 <style>
   body { font-family: Inter, Arial, sans-serif; color: #171717; padding: 28px; }
   h1 { font-size: 20px; margin: 0 0 4px; }
@@ -207,7 +216,7 @@ export function printReportPdf(ex: ProfitReport) {
   tr.strong td { font-weight: 700; border-top: 1px solid #171717; border-bottom: none; }
 </style></head><body>
 <h1>Profit & Reports</h1>
-<p class="meta">${periodText(ex)} · ${ex.productLabel}</p>
+<p class="meta">${escapeHtml(periodText(ex))} · ${escapeHtml(ex.productLabel)}</p>
 <h2>Stock Summary</h2>
 <table>
 <tr><th>Product</th><th>Opening</th><th>Purchase</th><th>Total</th><th>Sold</th><th>Remaining</th><th>Opening Value</th><th>Purchase Value</th><th>Total Stock Value</th><th>Sales Amount</th><th>Valuation</th></tr>

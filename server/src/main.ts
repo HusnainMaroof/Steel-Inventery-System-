@@ -11,6 +11,7 @@ import {
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import helmet from "@fastify/helmet";
+import multipart from "@fastify/multipart";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
@@ -43,7 +44,9 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: "same-site" },
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     });
-
+    await app.register(multipart, {
+      limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+    });
     app.setGlobalPrefix("api", {
       exclude: [{ path: "health", method: RequestMethod.GET }],
     });

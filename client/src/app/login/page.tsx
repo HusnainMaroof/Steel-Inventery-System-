@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BusyButton } from "@/components/ui";
 import { homeFor, useAuth } from "@/lib/auth";
+import { isServerUnavailableMessage, redirectToOfflinePage } from "@/lib/server-offline";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -60,6 +61,10 @@ export default function LoginPage() {
     try {
       const err = await login(email, password);
       if (err) {
+        if (isServerUnavailableMessage(err)) {
+          redirectToOfflinePage("/login");
+          return;
+        }
         setError(err);
         setPassword("");
         setShowPassword(false);

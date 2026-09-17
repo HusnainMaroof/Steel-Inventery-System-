@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  isServerUnavailableMessage,
+  isServerUnavailableStatus,
+  redirectToOfflinePage,
+} from "./server-offline";
+import { redirectToNotFoundPage } from "./not-found-route";
 import { fetchWithTimeout, isTimeoutError } from "./fetch-with-timeout";
 
 export class ApiError extends Error {
@@ -38,11 +44,13 @@ export async function apiFetch<T>(
     );
   } catch (err) {
     if (isTimeoutError(err)) {
+      redirectToOfflinePage();
       throw new ApiError(
         err instanceof Error ? err.message : "Request timed out",
         504,
       );
     }
+    redirectToOfflinePage();
     throw new ApiError("Cannot reach the server. Check your connection.", 503);
   }
   const body = (await response.json().catch(() => null)) as
@@ -50,14 +58,19 @@ export async function apiFetch<T>(
     | T
     | null;
   if (!response.ok) {
-    throw new ApiError(
+    const message =
       body && typeof body === "object" && "message" in body && body.message
         ? String(body.message)
         : response.status === 504
           ? "The server took too long to respond. Try again."
-          : "Request failed",
-      response.status,
-    );
+          : "Request failed";
+    if (isServerUnavailableStatus(response.status) || isServerUnavailableMessage(message)) {
+      redirectToOfflinePage();
+    }
+    if (response.status === 404) {
+      redirectToNotFoundPage();
+    }
+    throw new ApiError(message, response.status);
   }
   return body as T;
 }

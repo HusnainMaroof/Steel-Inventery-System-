@@ -53,6 +53,7 @@ import type { ProductTemplate } from "./templates";
 import { useAuth } from "./auth";
 import { apiFetch, jsonBody } from "./api";
 import { normalizeBootstrap, type ApiBootstrap } from "./backend-adapters";
+import { fetchAllPages } from "./fetch-paginated";
 
 export const purchaseTotal = (p: Purchase) =>
   p.qty * p.rate +
@@ -123,6 +124,8 @@ export interface VariantStockRow {
 
 interface Store {
   ready: boolean;
+  /** True once transaction collections have been loaded (may lag behind ready). */
+  transactionsReady: boolean;
   /** Bumps after each successful bootstrap — use to invalidate derived caches */
   dataVersion: number;
   error: string | null;
@@ -184,7 +187,7 @@ interface Store {
   addSupplier: (s: Omit<Supplier, "id">) => Promise<void>;
   addExpense: (e: Omit<Expense, "id">) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
-  recordStockCheck: (c: Omit<StockCheck, "id">) => Promise<void>;
+  recordStockCheck: (c: Omit<StockCheck, "id" | "systemQty">) => Promise<void>;
   addProduct: (name: string, unit: string, description?: string, usesCategories?: boolean) => Promise<string>;
   updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
   addProductItem: (productId: string, name: string) => Promise<void>;
@@ -314,6 +317,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [hiddenItems, setHiddenItems] = useState<string[]>([]);
   const [hiddenVariants, setHiddenVariants] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
+  const [transactionsReady, setTransactionsReady] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -344,15 +348,99 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setUiPrefs(data.settings);
   }, []);
 
+  const applyTransactions = useCallback(
+    (raw: Pick<
+      ApiBootstrap,
+      | "customers"
+      | "suppliers"
+      | "purchases"
+      | "sales"
+      | "payments"
+      | "expenses"
+      | "stockChecks"
+    >) => {
+      const data = normalizeBootstrap({
+        version: 3,
+        customers: raw.customers,
+        suppliers: raw.suppliers,
+        purchases: raw.purchases,
+        sales: raw.sales,
+        payments: raw.payments,
+        expenses: raw.expenses,
+        stockChecks: raw.stockChecks,
+        products,
+        productItems,
+        categories,
+        attributeDefs,
+        attributeOptions,
+        variants,
+        warehouses,
+        locations,
+      });
+      setCustomers(data.customers);
+      setSuppliers(data.suppliers);
+      setPurchases(data.purchases);
+      setSales(data.sales);
+      setPayments(data.payments);
+      setExpenses(data.expenses);
+      setStockChecks(data.stockChecks);
+      setTransactionsReady(true);
+      setDataVersion((v) => v + 1);
+    },
+    [
+      products,
+      productItems,
+      categories,
+      attributeDefs,
+      attributeOptions,
+      variants,
+      warehouses,
+      locations,
+    ],
+  );
+
+  const loadTransactions = useCallback(async () => {
+    const [customers, suppliers, purchases, sales, payments, expenses, stockChecks] =
+      await Promise.all([
+        fetchAllPages<ApiBootstrap["customers"][number]>("/customers"),
+        fetchAllPages<ApiBootstrap["suppliers"][number]>("/suppliers"),
+        fetchAllPages<ApiBootstrap["purchases"][number]>("/purchases"),
+        fetchAllPages<ApiBootstrap["sales"][number]>("/sales"),
+        fetchAllPages<ApiBootstrap["payments"][number]>("/payments"),
+        fetchAllPages<ApiBootstrap["expenses"][number]>("/expenses"),
+        fetchAllPages<ApiBootstrap["stockChecks"][number]>("/stock-checks"),
+      ]);
+    applyTransactions({
+      customers,
+      suppliers,
+      purchases,
+      sales,
+      payments,
+      expenses,
+      stockChecks,
+    });
+  }, [applyTransactions]);
+
   const refreshCore = useCallback(async () => {
+    setTransactionsReady(false);
     const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
     applyBootstrap(response.data);
     setDataVersion((v) => v + 1);
-  }, [applyBootstrap]);
+    void loadTransactions().catch(() => {
+      setTransactionsReady(false);
+    });
+  }, [applyBootstrap, loadTransactions]);
+
+  const refreshFull = useCallback(async () => {
+    setTransactionsReady(false);
+    const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
+    applyBootstrap(response.data);
+    await loadTransactions();
+  }, [applyBootstrap, loadTransactions]);
 
   const refresh = useMemo(
-    () => createCoalescedRefresh(refreshCore),
-    [refreshCore],
+    () => createCoalescedRefresh(refreshFull),
+    [refreshFull],
   );
 
   useEffect(() => {
@@ -363,6 +451,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         lastTenantRef.current = null;
         lastReloadKeyRef.current = 0;
         setReady(false);
+        setTransactionsReady(false);
         setDataVersion(0);
       }
       return;
@@ -383,7 +472,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const task = window.setTimeout(() => {
       if (!hasBootstrappedRef.current) setReady(false);
       setError(null);
-      void refresh()
+      void refreshCore()
         .then(() => {
           hasBootstrappedRef.current = true;
           setReady(true);
@@ -396,7 +485,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
     }, 0);
     return () => window.clearTimeout(task);
-  }, [authReady, user?.id, user?.businessId, user?.role, reloadKey, refresh]);
+  }, [authReady, user?.id, user?.businessId, user?.role, reloadKey, refreshCore]);
 
   const updateUiPrefs = useCallback(
     async (patch: Partial<UiPreferences>) => {
@@ -920,6 +1009,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const store: Store = {
     ready,
+    transactionsReady,
     dataVersion,
     error,
     pending,

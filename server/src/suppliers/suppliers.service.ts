@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { supplierPayable } from "../domain/payment-settlement";
 import { CreateSupplierDto } from "./dto/create-supplier.dto";
 import { UpdateSupplierDto } from "./dto/update-supplier.dto";
 
@@ -53,13 +52,33 @@ export class SuppliersService {
    * Per-purchase payable: goods total (steel amount) − paid.
    * Transport/loading/labour/other charges are on us, never owed (§27).
    */
-  async payables(businessId: string, id: string) {
+  async payables(businessId: string, id: string, skip: number, take: number) {
     await this.byId(businessId, id);
-    const purchases = await this.prisma.purchase.findMany({
-      where: { businessId, supplierId: id },
-      include: { lines: true },
-      orderBy: { date: "asc" },
-    });
+    const where = { businessId, supplierId: id };
+    const [purchases, total, dueRows] = await Promise.all([
+      this.prisma.purchase.findMany({
+        where,
+        include: { lines: true },
+        orderBy: { date: "asc" },
+        skip,
+        take,
+      }),
+      this.prisma.purchase.count({ where }),
+      this.prisma.$queryRaw<{ due: string }[]>`
+        SELECT COALESCE(SUM(
+          GREATEST(
+            0,
+            COALESCE((
+              SELECT SUM(pl."qty" * pl."rate")
+              FROM "PurchaseLine" pl
+              WHERE pl."purchaseId" = p."id"
+            ), 0) - p."paid"
+          )
+        ), 0)::text AS due
+        FROM "Purchase" p
+        WHERE p."businessId" = ${businessId} AND p."supplierId" = ${id}
+      `,
+    ]);
     const rows = purchases.map((p) => {
       const goodsTotal = Number(
         p.lines.reduce((sum, l) => sum + Number(l.qty) * Number(l.rate), 0),
@@ -73,10 +92,7 @@ export class SuppliersService {
         due,
       };
     });
-    const totalDue = supplierPayable(
-      rows.map((r) => ({ goodsTotal: r.goodsTotal, paid: r.paid })),
-    );
-    return { rows, totalDue };
+    return { rows, totalDue: Number(dueRows[0]?.due ?? 0), total };
   }
 
   async update(businessId: string, id: string, dto: UpdateSupplierDto) {

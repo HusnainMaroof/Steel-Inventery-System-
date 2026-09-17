@@ -12,6 +12,7 @@ describe("sanitizeUiSettings", () => {
       invoiceName: "Husna Steel",
       showOptionalDetails: true,
       logoDataUrl: "",
+      logoUrl: "",
     });
   });
 

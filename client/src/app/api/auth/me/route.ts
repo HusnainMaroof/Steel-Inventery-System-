@@ -14,6 +14,7 @@ export async function GET() {
     business?: { name: string } | null;
     title?: string | null;
     access?: string[];
+    planPages?: string[];
   }>("/api/v1/auth/me");
 
   if (!result.ok) {

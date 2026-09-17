@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { uploadBusinessLogoAction } from "@/app/actions/media";
 import {
   applyOwnerTemplatesAction,
   createOwnerAction,
@@ -10,7 +12,7 @@ import {
 } from "@/app/actions/users";
 import type {
   ProductTemplateOption,
-  SubscriptionPlan,
+  SubscriptionPlanOption,
   SubscriptionStatus,
 } from "@/app/actions/platform";
 import { BusyButton, Modal } from "@/components/ui";
@@ -49,21 +51,20 @@ export function SubBadge({ active, status }: { active: boolean; status?: string 
   );
 }
 
-export const PLAN_OPTIONS: { value: SubscriptionPlan; label: string }[] = [
-  { value: "MONTHLY", label: "Monthly" },
-  { value: "YEARLY", label: "Yearly" },
-  { value: "LIFETIME", label: "Lifetime access" },
-];
+export function planLabel(
+  business?: { subscriptionPlanDef?: { label?: string } | null } | null,
+) {
+  return business?.subscriptionPlanDef?.label ?? "—";
+}
 
-const PLAN_LABEL: Record<string, string> = {
-  MONTHLY: "Monthly",
-  YEARLY: "Yearly",
-  LIFETIME: "Lifetime",
-};
+export function isLifetimeBusiness(
+  business?: { subscriptionPlanDef?: { billingCycle?: string } | null } | null,
+) {
+  return business?.subscriptionPlanDef?.billingCycle === "LIFETIME";
+}
 
-export function planLabel(plan?: string | null) {
-  if (!plan) return "Monthly";
-  return PLAN_LABEL[plan] ?? plan;
+function activeSubscriptionPlans(plans: SubscriptionPlanOption[]) {
+  return plans.filter((plan) => plan.active).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export function StatCard({ label, value, hint }: { label: string; value: number; hint?: string }) {
@@ -145,6 +146,97 @@ function InfoCell({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+export function PasswordReveal({ password }: { password: string | null }) {
+  const [show, setShow] = useState(false);
+  if (!password) {
+    return <span className="text-neutral-400 text-[12px]">Not stored — reset to set one</span>;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="font-mono text-[13px] text-neutral-800 tabular-nums">
+        {show ? password : "••••••••••"}
+      </span>
+      <button
+        type="button"
+        className="btn-ghost !py-1 !px-2 text-[11px] min-h-0"
+        onClick={() => setShow((value) => !value)}
+      >
+        {show ? "Hide" : "Show password"}
+      </button>
+    </div>
+  );
+}
+
+export function BusinessListTable({
+  owners,
+  planFor,
+}: {
+  owners: OwnerAccount[];
+  planFor: (owner: OwnerAccount) => string;
+}) {
+  return (
+    <div className="panel overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left">
+          <thead>
+            <tr className="border-b border-neutral-100 bg-neutral-50/80">
+              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">
+                Business
+              </th>
+              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">
+                Email
+              </th>
+              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">
+                Subscription
+              </th>
+              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500 text-right">
+                Action
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100">
+            {owners.map((owner) => (
+              <tr key={owner.id} className={`hover:bg-neutral-50/60 ${owner.active ? "" : "opacity-70"}`}>
+                <td className="px-4 py-3">
+                  <p className="text-[13px] font-semibold text-neutral-900 truncate">{owner.business.name}</p>
+                  <p className="text-[11px] text-neutral-400 mt-0.5 truncate">/{owner.business.slug}</p>
+                </td>
+                <td className="px-4 py-3">
+                  <p className="font-mono text-[12px] text-neutral-700 truncate">{owner.email}</p>
+                </td>
+                <td className="px-4 py-3">
+                  <p className="text-[12px] font-medium text-neutral-800">{planFor(owner)}</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    <StatusBadge active={owner.active} />
+                    <SubBadge
+                      active={owner.business.subscriptionStatus === "ACTIVE"}
+                      status={owner.business.subscriptionStatus}
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <Link href={`/admin/businesses/${owner.id}`} className="btn-ghost !py-1.5 !px-3 text-[12px]">
+                    View
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="py-3 border-b border-neutral-100 last:border-b-0">
+      <p className="text-[10px] uppercase tracking-[0.1em] text-neutral-400 mb-1">{label}</p>
+      <div className="text-[13px] text-neutral-800">{children}</div>
+    </div>
+  );
+}
+
 export function BusinessAccountCard({
   owner,
   subActive,
@@ -214,17 +306,12 @@ export function BusinessAccountCard({
         <InfoCell label="Owner account">
           <p className="font-medium text-[13px]">{owner.name}</p>
           <p className="font-mono text-[11px] text-neutral-600 truncate mt-0.5">{owner.email}</p>
-          {owner.loginPassword && (
-            <p className="font-mono text-[10px] text-neutral-400 mt-1">
-              Password: <span className="text-neutral-600">{owner.loginPassword}</span>
-            </p>
-          )}
         </InfoCell>
 
         <InfoCell label="Subscription">
           <p className="font-medium">{plan}</p>
           <p className="text-[11px] text-neutral-500 mt-0.5">
-            {owner.business.subscriptionPlan === "LIFETIME"
+            {isLifetimeBusiness(owner.business)
               ? "No expiry"
               : `Until ${fmtDate(owner.business.subscriptionEndsAt)}`}
           </p>
@@ -281,24 +368,36 @@ export function BusinessAccountCard({
 export function AddOwnerModal({
   open,
   templates,
+  subscriptionPlans,
   onClose,
   onCreated,
 }: {
   open: boolean;
   templates: ProductTemplateOption[];
+  subscriptionPlans: SubscriptionPlanOption[];
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
+  const defaultPlanId = activeSubscriptionPlans(subscriptionPlans)[0]?.id ?? "sub_monthly";
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     businessName: "",
     name: "",
     email: "",
     password: "",
-    subscriptionPlan: "MONTHLY" as SubscriptionPlan,
+    subscriptionPlanId: defaultPlanId,
     templateIds: [] as string[],
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  const clearLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+    if (logoInputRef.current) logoInputRef.current.value = "";
+  };
 
   const close = () => {
     setForm({
@@ -306,9 +405,10 @@ export function AddOwnerModal({
       name: "",
       email: "",
       password: "",
-      subscriptionPlan: "MONTHLY",
+      subscriptionPlanId: defaultPlanId,
       templateIds: [],
     });
+    clearLogo();
     setError(null);
     onClose();
   };
@@ -322,11 +422,42 @@ export function AddOwnerModal({
     }));
   };
 
+  const onPickLogo = (file: File | undefined) => {
+    if (!file) return;
+    const type = file.type;
+    if (type !== "image/png" && type !== "image/jpeg" && type !== "image/webp") {
+      setError("Use a PNG, JPG, or WebP image for the logo.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setError("Logo image must be under 8 MB.");
+      return;
+    }
+    setError(null);
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (pending) return;
     setPending(true);
-    const result = await createOwnerAction(form);
+    setError(null);
+
+    let logoUrl: string | undefined;
+    if (logoFile) {
+      const payload = new FormData();
+      payload.append("logo", logoFile);
+      const upload = await uploadBusinessLogoAction(payload);
+      if (!upload.ok) {
+        setPending(false);
+        setError(upload.error);
+        return;
+      }
+      logoUrl = upload.url;
+    }
+
+    const result = await createOwnerAction({ ...form, logoUrl });
     setPending(false);
     if (!result.ok) return setError(result.error);
     await onCreated();
@@ -356,16 +487,51 @@ export function AddOwnerModal({
         ))}
 
         <div>
+          <p className="text-sm font-medium mb-2">Business logo (optional)</p>
+          <p className="text-xs text-neutral-500 mb-3">
+            Uploaded to Cloudinary, compressed on the server, and shown in the owner&apos;s menu and bills.
+          </p>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="h-20 w-36 border border-neutral-200 rounded-md bg-white flex items-center justify-center p-2">
+              {logoPreview ? (
+                <img src={logoPreview} alt="Logo preview" className="max-h-full max-w-full object-contain" />
+              ) : (
+                <span className="text-[11px] text-neutral-400">No logo</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="sr-only"
+                onChange={(event) => onPickLogo(event.target.files?.[0])}
+              />
+              <button
+                type="button"
+                className="btn-ghost !text-[12px]"
+                onClick={() => logoInputRef.current?.click()}
+              >
+                {logoPreview ? "Change logo" : "Upload logo"}
+              </button>
+              {logoPreview ? (
+                <button type="button" className="btn-ghost !text-[12px]" onClick={clearLogo}>
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div>
           <label htmlFor="owner-plan">Subscription plan</label>
           <select
             id="owner-plan"
-            value={form.subscriptionPlan}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, subscriptionPlan: e.target.value as SubscriptionPlan }))
-            }
+            value={form.subscriptionPlanId}
+            onChange={(e) => setForm((f) => ({ ...f, subscriptionPlanId: e.target.value }))}
           >
-            {PLAN_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+            {activeSubscriptionPlans(subscriptionPlans).map((plan) => (
+              <option key={plan.id} value={plan.id}>{plan.label}</option>
             ))}
           </select>
         </div>
@@ -411,14 +577,16 @@ export function AddOwnerModal({
 
 export function SubscriptionModal({
   owner,
+  subscriptionPlans,
   onClose,
   onUpdated,
 }: {
   owner: OwnerAccount | null;
+  subscriptionPlans: SubscriptionPlanOption[];
   onClose: () => void;
   onUpdated: () => Promise<void>;
 }) {
-  const [plan, setPlan] = useState<SubscriptionPlan>("MONTHLY");
+  const [planId, setPlanId] = useState("sub_monthly");
   const [status, setStatus] = useState<SubscriptionStatus>("ACTIVE");
   const [endsAt, setEndsAt] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -426,7 +594,7 @@ export function SubscriptionModal({
 
   useEffect(() => {
     if (!owner) return;
-    setPlan(owner.business.subscriptionPlan ?? "MONTHLY");
+    setPlanId(owner.business.subscriptionPlanId ?? owner.business.subscriptionPlanDef?.id ?? "sub_monthly");
     setStatus(owner.business.subscriptionStatus ?? "ACTIVE");
     setEndsAt(owner.business.subscriptionEndsAt?.slice(0, 10) ?? "");
     setError(null);
@@ -441,10 +609,11 @@ export function SubscriptionModal({
     event.preventDefault();
     if (!owner || pending) return;
     setPending(true);
+    const selected = subscriptionPlans.find((item) => item.id === planId);
     const result = await updateOwnerSubscriptionAction(owner.id, {
-      plan,
+      planId,
       status,
-      endsAt: plan === "LIFETIME" ? undefined : endsAt || undefined,
+      endsAt: selected?.billingCycle === "LIFETIME" ? undefined : endsAt || undefined,
     });
     setPending(false);
     if (!result.ok) return setError(result.error);
@@ -458,9 +627,9 @@ export function SubscriptionModal({
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
           <label htmlFor="sub-plan">Plan</label>
-          <select id="sub-plan" value={plan} onChange={(e) => setPlan(e.target.value as SubscriptionPlan)}>
-            {PLAN_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+          <select id="sub-plan" value={planId} onChange={(e) => setPlanId(e.target.value)}>
+            {activeSubscriptionPlans(subscriptionPlans).map((plan) => (
+              <option key={plan.id} value={plan.id}>{plan.label}</option>
             ))}
           </select>
         </div>
@@ -477,7 +646,7 @@ export function SubscriptionModal({
             <option value="PENDING">Pending</option>
           </select>
         </div>
-        {plan !== "LIFETIME" && (
+        {subscriptionPlans.find((item) => item.id === planId)?.billingCycle !== "LIFETIME" && (
           <div>
             <label htmlFor="sub-ends">Access until</label>
             <input

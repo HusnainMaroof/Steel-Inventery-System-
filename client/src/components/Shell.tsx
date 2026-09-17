@@ -33,11 +33,14 @@ const ICONS: Record<string, ReactNode> = {
   staff: <path d="M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 13.5c.7-2.2 3-3.5 5.5-3.5s4.8 1.3 5.5 3.5M11.5 6.5h3M13 5v3" />,
   overview: <path d="M2 8.5 8 3l6 5.5V14a.5.5 0 0 1-.5.5h-3v-4h-3v4h-3A.5.5 0 0 1 2 14Z" />,
   businesses: <path d="M2.5 3.5h11v9h-11ZM5 6.5h6M5 9h4M8 12.5v2.5M6 15h4" />,
+  subscriptions: <path d="M2 5.5h12v7H2ZM2 5.5 8 2.5l6 3M11.5 9h.01" />,
 };
 
 const PLATFORM_ADMIN_NAV = [
   { key: "overview" as const, href: "/admin/overview", label: "Overview" },
   { key: "businesses" as const, href: "/admin/businesses", label: "Businesses" },
+  { key: "products" as const, href: "/admin/products", label: "Products" },
+  { key: "subscriptions" as const, href: "/admin/subscriptions", label: "Subscriptions" },
 ];
 
 function UserBlock({
@@ -259,7 +262,11 @@ export default function Shell({ children }: { children: ReactNode }) {
   const { prefs } = useUiPreferences();
   const router = useRouter();
 
-  const isPublic = pathname === "/" || pathname === "/login";
+  const isPublic =
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname === "/offline" ||
+    pathname === "/404";
   const isAdminRoute = pathname === "/admin" || pathname?.startsWith("/admin/");
   const tenantPage = pagePathFromBusinessRoute(pathname ?? "") ?? "";
   const isPrintable =
@@ -322,10 +329,11 @@ export default function Shell({ children }: { children: ReactNode }) {
     user.role === "SUPERADMIN"
       ? "Tradex"
       : user.businessName?.trim() || user.name;
+  const businessLogo = prefs.logoUrl.trim() || prefs.logoDataUrl.trim();
   const logoSrc =
     user.role === "SUPERADMIN"
       ? null
-      : prefs.logoDataUrl.trim() || TRADEX_LOGO;
+      : businessLogo || TRADEX_LOGO;
 
   const roleNav =
     user.role === "SUPERADMIN"

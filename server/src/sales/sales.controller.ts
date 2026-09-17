@@ -8,7 +8,9 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { SalesService } from "./sales.service";
 import { CreateSaleDto } from "./dto/create-sale.dto";
@@ -16,7 +18,8 @@ import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto"
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("sales")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("sales")
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
@@ -49,6 +52,6 @@ export class SalesController {
   /** Cascade: stock back via reversal ledger rows, invoice + allocations removed. */
   @Delete(":id")
   remove(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
-    return this.salesService.remove(user.businessId, id);
+    return this.salesService.remove(user.businessId, id, user.sub);
   }
 }

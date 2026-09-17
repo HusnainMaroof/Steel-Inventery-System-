@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { normalizeJson } from "./json-normalization.interceptor";
 
 describe("JSON response normalization", () => {
-  it("converts Decimal, dates, and client-facing enums recursively", () => {
+  it("serializes Decimal as exact strings and normalizes enums", () => {
     expect(
       normalizeJson({
         amount: new Prisma.Decimal("125.50"),
@@ -19,17 +19,17 @@ describe("JSON response normalization", () => {
         },
       }),
     ).toEqual({
-      amount: 125.5,
+      amount: "125.50",
       date: "2026-09-17",
       createdAt: "2026-09-17T12:30:00.000Z",
       type: "customer",
       method: "Bank",
       category: "Labor",
-      rows: [{ qty: 2.5 }],
+      rows: [{ qty: "2.500" }],
       movement: {
         type: "PURCHASE_RECEIPT",
         referenceType: "PURCHASE",
-        qty: 2.5,
+        qty: "2.500",
       },
     });
   });

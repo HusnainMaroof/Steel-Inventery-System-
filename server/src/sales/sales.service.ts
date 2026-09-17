@@ -4,6 +4,15 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { AuditService } from "../common/audit/audit.service";
+import {
+  lockInventoryKeys,
+  lotLockKey,
+  stockLockKey,
+} from "../common/inventory/stock-locks";
+import {
+  incrementInvoicePaidOrThrow,
+} from "../common/payments/invoice-atomic";
 import { assertMoney, assertQty, LIMITS } from "../common/security/limits";
 import {
   sanitizeAttributeSnapshot,
@@ -15,7 +24,10 @@ import { CreateSaleDto } from "./dto/create-sale.dto";
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * §9/§12 — atomic sale creation. Availability is checked against the
@@ -44,6 +56,15 @@ export class SalesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const lockKeys = dto.lines.flatMap((line) => {
+        const keys = [stockLockKey(businessId, line.productId, line.variantId)];
+        if (line.purchaseId) {
+          keys.push(lotLockKey(businessId, line.purchaseId, line.productId, line.variantId));
+        }
+        return keys;
+      });
+      await lockInventoryKeys(tx, lockKeys);
+
       const customer = await tx.customer.findFirst({
         where: { id: dto.customerId, businessId },
         select: { id: true },
@@ -219,18 +240,8 @@ export class SalesService {
         })),
       });
 
-      // Invoice generated with the sale (§9).
-      const count = await tx.invoice.count({ where: { businessId } });
-      const invoice = await tx.invoice.create({
-        data: {
-          businessId,
-          saleId: sale.id,
-          number: `INV-${String(count + 1).padStart(4, "0")}`,
-          total: totals.grandTotal,
-        },
-      });
+      const invoice = await this.createInvoice(tx, businessId, sale.id, totals.grandTotal);
 
-      // Amount paid now (if any) immediately settles the new invoice.
       if (dto.paidNow && dto.paidNow > 0) {
         if (dto.paidNow > totals.grandTotal + 0.005) {
           throw new BadRequestException(
@@ -256,14 +267,46 @@ export class SalesService {
             amount: dto.paidNow,
           },
         });
-        await tx.invoice.update({
-          where: { id: invoice.id },
-          data: { paid: dto.paidNow },
-        });
+        await incrementInvoicePaidOrThrow(tx, businessId, invoice.id, dto.paidNow);
       }
+
+      await this.audit.logTx(tx, {
+        businessId,
+        action: "sale.created",
+        entityType: "sale",
+        entityId: sale.id,
+        metadata: { customerId: dto.customerId, lineCount: sale.lines.length },
+      });
 
       return { sale, invoice: { ...invoice, total: totals.grandTotal } };
     });
+  }
+
+  private async createInvoice(
+    tx: Prisma.TransactionClient,
+    businessId: string,
+    saleId: string,
+    total: number,
+  ) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const count = await tx.invoice.count({ where: { businessId } });
+      const number = `INV-${String(count + 1).padStart(4, "0")}`;
+      try {
+        return await tx.invoice.create({
+          data: { businessId, saleId, number, total },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2002" &&
+          attempt < 3
+        ) {
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new BadRequestException("Could not allocate an invoice number");
   }
 
   async list(businessId: string, skip: number, take: number, customerId?: string) {
@@ -301,14 +344,22 @@ export class SalesService {
     return sale;
   }
 
-  /** Delete = reversal ledger rows + invoice gone + allocations gone, atomically. */
-  async remove(businessId: string, id: string) {
+  /** Delete = reversal ledger rows + payment cleanup + invoice gone, atomically. */
+  async remove(businessId: string, id: string, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.findFirst({
         where: { id, businessId },
         include: { invoice: true, lines: true },
       });
       if (!sale) throw new NotFoundException("Sale not found");
+
+      const lockKeys = sale.lines.flatMap((line) => [
+        stockLockKey(businessId, line.productId, line.variantId),
+        ...(line.purchaseId
+          ? [lotLockKey(businessId, line.purchaseId, line.productId, line.variantId)]
+          : []),
+      ]);
+      await lockInventoryKeys(tx, lockKeys);
 
       await tx.inventoryTransaction.createMany({
         data: sale.lines.map((line) => ({
@@ -320,22 +371,42 @@ export class SalesService {
           attributeSnapshot: line.attributeSnapshot ?? undefined,
           unit: line.unit,
           type: "RETURN" as const,
-          qty: line.qty, // goods come back
+          qty: line.qty,
           referenceType: "SALE_DELETE",
           referenceId: sale.id,
           date: sale.date,
         })),
       });
-      if (sale.invoice) {
-        await tx.paymentAllocation.deleteMany({
-          where: { saleId: sale.id },
-        });
-        await tx.payment.deleteMany({
-          where: { businessId, saleId: sale.id },
-        });
-        await tx.invoice.delete({ where: { id: sale.invoice.id } });
+
+      const allocations = await tx.paymentAllocation.findMany({
+        where: { businessId, saleId: sale.id },
+        select: { paymentId: true },
+      });
+      const paymentIds = [...new Set(allocations.map((a) => a.paymentId))];
+
+      await tx.paymentAllocation.deleteMany({ where: { businessId, saleId: sale.id } });
+      await tx.payment.deleteMany({ where: { businessId, saleId: sale.id } });
+
+      for (const paymentId of paymentIds) {
+        const remaining = await tx.paymentAllocation.count({ where: { paymentId } });
+        if (remaining === 0) {
+          await tx.payment.deleteMany({ where: { id: paymentId, businessId, saleId: null } });
+        }
       }
-      await tx.sale.delete({ where: { id: sale.id } });
+
+      if (sale.invoice) {
+        await tx.invoice.delete({ where: { id: sale.invoice.id, businessId } });
+      }
+      await tx.sale.delete({ where: { id: sale.id, businessId } });
+
+      await this.audit.logTx(tx, {
+        businessId,
+        actorId: actorId ?? null,
+        action: "sale.deleted",
+        entityType: "sale",
+        entityId: sale.id,
+      });
+
       return { deleted: true, saleId: sale.id };
     });
   }

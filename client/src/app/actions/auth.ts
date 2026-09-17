@@ -24,6 +24,7 @@ type TokenResponse = {
     businessSlug?: string;
     title?: string | null;
     access?: string[];
+    planPages?: string[];
   };
 };
 
@@ -42,6 +43,7 @@ async function sessionFromToken(token: string, fallback: TokenResponse["user"]):
     business?: { name: string; slug?: string } | null;
     title?: string | null;
     access?: string[];
+    planPages?: string[];
   }>("/api/v1/auth/me", {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -65,6 +67,17 @@ export async function loginAction(
   return sessionFromToken(result.data.access_token, result.data.user);
 }
 
+export async function clearSessionAction(): Promise<void> {
+  await deleteSession();
+}
+
 export async function logoutAction(): Promise<void> {
+  const token = await import("@/lib/server/session").then((m) => m.getSessionToken());
+  if (token) {
+    await tradexFetch("/api/v1/auth/logout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
   await deleteSession();
 }

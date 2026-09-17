@@ -7,9 +7,13 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from "@nestjs/common";
+import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { ProductsService } from "./products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
@@ -28,7 +32,8 @@ import {
 } from "./dto/catalogue.dto";
 
 @Controller("products")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("products")
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
@@ -38,8 +43,14 @@ export class ProductsController {
   }
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.productsService.list(user.businessId);
+  async list(@CurrentUser() user: AuthUser, @Query() pagination: PaginationDto) {
+    const { skip, take } = skipTake(pagination.page, pagination.limit);
+    const [items, total] = await this.productsService.list(
+      user.businessId,
+      skip,
+      take,
+    );
+    return paginate(items, total, pagination.page, pagination.limit);
   }
 
   @Get(":id")

@@ -31,19 +31,26 @@ export class ProductsService {
     });
   }
 
-  list(businessId: string) {
-    return this.prisma.product.findMany({
-      where: { businessId },
-      include: {
-        categories: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
-        attributeDefs: {
-          include: { options: { orderBy: [{ sortOrder: "asc" }, { label: "asc" }] } },
-          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  async list(businessId: string, skip: number, take: number) {
+    const where = { businessId };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where,
+        include: {
+          categories: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+          attributeDefs: {
+            include: { options: { orderBy: [{ sortOrder: "asc" }, { label: "asc" }] } },
+            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+          },
+          variants: { orderBy: { createdAt: "asc" } },
         },
-        variants: { orderBy: { createdAt: "asc" } },
-      },
-      orderBy: { createdAt: "asc" },
-    });
+        orderBy: { createdAt: "asc" },
+        skip,
+        take,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+    return [items, total] as const;
   }
 
   async byId(businessId: string, id: string) {

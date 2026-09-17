@@ -261,36 +261,96 @@ export function AdminOverviewSkeleton() {
   );
 }
 
-/* Platform admin — business account cards */
-export function AdminBusinessesSkeleton({ cards = 3 }: { cards?: number }) {
+/* Platform admin — businesses table */
+export function AdminBusinessesSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <PageShell>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
         <div className="space-y-2">
-          <Skeleton className="h-7 w-52" />
-          <Skeleton className="h-3.5 w-72" />
+          <Skeleton className="h-7 w-36" />
+          <Skeleton className="h-3.5 w-64" />
         </div>
         <Skeleton className="h-9 w-44 rounded-lg" />
       </div>
-      <Skeleton className="h-3 w-40 mb-3" />
-      <div className="grid gap-3">
-        {Array.from({ length: cards }).map((_, i) => (
-          <div key={i} className="panel p-4 space-y-4">
-            <div className="space-y-2 pb-3 border-b border-neutral-100">
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-3 w-32" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Skeleton className="h-16 rounded-md" />
-              <Skeleton className="h-16 rounded-md" />
-              <Skeleton className="h-16 rounded-md" />
-            </div>
-            <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
-              <Skeleton className="h-7 w-24 rounded-md" />
-              <Skeleton className="h-7 w-20 rounded-md" />
-              <Skeleton className="h-7 w-16 rounded-md" />
-            </div>
+      <Skeleton className="h-3 w-24 mb-3" />
+      <div className="panel overflow-hidden">
+        <div className="border-b border-neutral-100 bg-neutral-50/80 px-4 py-2.5 flex gap-8">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between gap-4">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3 w-48 hidden sm:block" />
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-7 w-14 rounded-md" />
           </div>
+        ))}
+      </div>
+    </PageShell>
+  );
+}
+
+export function AdminBusinessDetailSkeleton() {
+  return (
+    <PageShell>
+      <Skeleton className="h-3 w-32 mb-4" />
+      <div className="flex flex-wrap justify-between gap-3 mb-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-56" />
+          <Skeleton className="h-3 w-28" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-24 rounded-md" />
+          <Skeleton className="h-8 w-24 rounded-md" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-52 rounded-lg" />
+        ))}
+      </div>
+    </PageShell>
+  );
+}
+
+export function AdminSubscriptionsSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <PageShell>
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-3.5 w-80" />
+        </div>
+        <Skeleton className="h-9 w-28 rounded-lg" />
+      </div>
+      <div className="panel overflow-hidden">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="px-4 py-3 border-b border-neutral-100 flex justify-between gap-4">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-14 rounded-md" />
+          </div>
+        ))}
+      </div>
+    </PageShell>
+  );
+}
+
+export function AdminProductsSkeleton({ cards = 4 }: { cards?: number }) {
+  return (
+    <PageShell>
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-44" />
+          <Skeleton className="h-3.5 w-80" />
+        </div>
+        <Skeleton className="h-9 w-32 rounded-lg" />
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: cards }).map((_, i) => (
+          <Skeleton key={i} className="h-16 rounded-lg" />
         ))}
       </div>
     </PageShell>
@@ -299,7 +359,12 @@ export function AdminBusinessesSkeleton({ cards = 3 }: { cards?: number }) {
 
 /** Pick the skeleton that best matches the current tenant route */
 export function skeletonForPath(pathname: string) {
+  if (pathname.startsWith("/admin/businesses/") && pathname !== "/admin/businesses") {
+    return <AdminBusinessDetailSkeleton />;
+  }
   if (pathname.startsWith("/admin/businesses")) return <AdminBusinessesSkeleton />;
+  if (pathname.startsWith("/admin/products")) return <AdminProductsSkeleton />;
+  if (pathname.startsWith("/admin/subscriptions")) return <AdminSubscriptionsSkeleton />;
   if (pathname.startsWith("/admin")) return <AdminOverviewSkeleton />;
 
   const page = pathname.replace(/^\/[^/]+/, "") || "/dashboard";

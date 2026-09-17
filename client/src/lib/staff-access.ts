@@ -16,6 +16,14 @@ export const STAFF_PAGES = [
 
 export type StaffPage = (typeof STAFF_PAGES)[number];
 
+export const BUSINESS_PANEL_PAGES = [
+  ...STAFF_PAGES,
+  "staff",
+  "settings",
+] as const;
+
+export type BusinessPanelPage = (typeof BUSINESS_PANEL_PAGES)[number];
+
 export const STAFF_TITLE_PRESETS = [
   "Sales manager",
   "Store keeper",
@@ -36,6 +44,7 @@ export function navPagesFor(slug: string) {
     { key: "payments" as const, href: businessPath(slug, "payments"), label: "Payments" },
     { key: "expenses" as const, href: businessPath(slug, "expenses"), label: "Expenses" },
     { key: "reports" as const, href: businessPath(slug, "reports"), label: "Profit & Reports" },
+    { key: "staff" as const, href: businessPath(slug, "staff"), label: "Staff" },
     { key: "settings" as const, href: businessPath(slug, "settings"), label: "Settings" },
   ];
 }
@@ -44,6 +53,10 @@ export const APP_PAGES = navPagesFor("shop");
 
 export function allStaffPages(): StaffPage[] {
   return [...STAFF_PAGES];
+}
+
+export function allBusinessPanelPages(): BusinessPanelPage[] {
+  return [...BUSINESS_PANEL_PAGES];
 }
 
 export function sanitizeAccess(pages: string[] | undefined): StaffPage[] {
@@ -58,8 +71,30 @@ export function sanitizeAccess(pages: string[] | undefined): StaffPage[] {
   return out;
 }
 
+export function sanitizePlanPages(pages: string[] | undefined): BusinessPanelPage[] {
+  if (!pages?.length) return allBusinessPanelPages();
+  const allowed = new Set<string>(BUSINESS_PANEL_PAGES);
+  const out: BusinessPanelPage[] = [];
+  for (const page of pages) {
+    if (allowed.has(page) && !out.includes(page as BusinessPanelPage)) {
+      out.push(page as BusinessPanelPage);
+    }
+  }
+  return out.length ? out : allBusinessPanelPages();
+}
+
+function planPageSet(pages?: BusinessPanelPage[]): Set<BusinessPanelPage> {
+  return new Set(sanitizePlanPages(pages));
+}
+
 export function pageLabel(key: StaffPage): string {
   return APP_PAGES.find((p) => p.key === key)?.label ?? key;
+}
+
+export function panelPageLabel(key: BusinessPanelPage): string {
+  if (key === "staff") return "Staff";
+  if (key === "settings") return "Settings";
+  return pageLabel(key as StaffPage);
 }
 
 export function accessSummary(access: StaffPage[]): string {
@@ -67,43 +102,52 @@ export function accessSummary(access: StaffPage[]): string {
   return access.map(pageLabel).join(", ");
 }
 
-export function pagesFor(user: Pick<TradexUser, "role" | "access" | "businessSlug">) {
+export function planPagesSummary(pages?: BusinessPanelPage[]): string {
+  const list = sanitizePlanPages(pages);
+  if (list.length === allBusinessPanelPages().length) return "All modules";
+  return list.map(panelPageLabel).join(", ");
+}
+
+type NavUser = Pick<TradexUser, "role" | "access" | "businessSlug" | "planPages">;
+
+export function pagesFor(user: NavUser) {
   const slug = user.businessSlug;
   const pages = navPagesFor(slug);
-  if (user.role === "ADMIN") {
-    return [
-      ...pages,
-      { key: "staff" as const, href: businessPath(slug, "staff"), label: "Staff" },
-    ];
-  }
+  const plan = planPageSet(user.planPages);
+
+  const filtered = pages.filter((page) => plan.has(page.key as BusinessPanelPage));
+
+  if (user.role === "ADMIN") return filtered;
+
   const allowed = new Set(sanitizeAccess(user.access));
-  return pages.filter(
-    (p) => (STAFF_PAGES as readonly string[]).includes(p.key) && allowed.has(p.key as StaffPage),
+  return filtered.filter(
+    (page) =>
+      (STAFF_PAGES as readonly string[]).includes(page.key) &&
+      allowed.has(page.key as StaffPage),
   );
 }
 
-export function homePathFor(user: Pick<TradexUser, "role" | "access" | "businessSlug"> | null | undefined): string {
+export function homePathFor(user: NavUser | null | undefined): string {
   if (!user) return "/login";
   if (user.role === "SUPERADMIN") return "/admin/overview";
   const first = pagesFor(user)[0];
   return first?.href ?? businessPath(user.businessSlug, "dashboard");
 }
 
-function staffPageKey(path: string): StaffPage | "staff" | "settings" | null {
+function staffPageKey(path: string): BusinessPanelPage | null {
   const segment = path.replace(/^\/+/, "").split("/")[0] ?? "";
-  if (segment === "staff" || segment === "settings") return segment;
-  if ((STAFF_PAGES as readonly string[]).includes(segment)) return segment as StaffPage;
-  if (segment === "sales" || segment === "purchases" || segment === "invoices") {
-    const root = segment as StaffPage;
-    return (STAFF_PAGES as readonly string[]).includes(root) ? root : "sales";
+  if ((BUSINESS_PANEL_PAGES as readonly string[]).includes(segment)) {
+    return segment as BusinessPanelPage;
   }
+  if (segment === "sales" || segment === "purchases" || segment === "invoices") {
+    if (segment === "invoices") return "sales";
+    return segment as BusinessPanelPage;
+  }
+  if (segment === "profit") return "reports";
   return null;
 }
 
-export function canOpenPath(
-  user: Pick<TradexUser, "role" | "access" | "businessSlug"> | null | undefined,
-  pathname: string,
-): boolean {
+export function canOpenPath(user: NavUser | null | undefined, pathname: string): boolean {
   if (!user) return false;
   const admin = pathname === "/admin" || pathname.startsWith("/admin/");
   if (user.role === "SUPERADMIN") return admin;
@@ -115,11 +159,16 @@ export function canOpenPath(
   if (slug !== user.businessSlug) return false;
 
   const pagePath = pagePathFromBusinessRoute(pathname) ?? "/dashboard";
+  const key = staffPageKey(pagePath);
+  if (!key) return true;
+
+  const plan = planPageSet(user.planPages);
+  if (!plan.has(key)) return false;
+
   if (user.role === "ADMIN") return true;
 
-  const key = staffPageKey(pagePath);
-  if (!key || key === "staff" || key === "settings") return false;
-  return sanitizeAccess(user.access).includes(key);
+  if (key === "staff" || key === "settings") return false;
+  return sanitizeAccess(user.access).includes(key as StaffPage);
 }
 
-export type AccessUser = Pick<TradexUser, "role" | "access" | "businessSlug">;
+export type AccessUser = Pick<TradexUser, "role" | "access" | "businessSlug" | "planPages">;

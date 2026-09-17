@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "./auth";
+import { logoSrcFromPrefs } from "./logo-src";
 import { useUiPreferences } from "./preferences";
 
 export interface BusinessProfile {
@@ -33,7 +34,7 @@ export function useBusinessProfile(): BusinessProfile {
     DEFAULT_PROFILE.businessName;
   const email = prefs.invoiceEmail.trim() || user?.email || "";
   const logoSrc =
-    user?.role === "SUPERADMIN" ? undefined : prefs.logoDataUrl.trim() || undefined;
+    user?.role === "SUPERADMIN" ? undefined : logoSrcFromPrefs(prefs) || undefined;
   const invoiceNote = prefs.invoiceNote.trim() || undefined;
   if (!user) {
     return {

@@ -4,29 +4,45 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getPlatformOverviewAction,
   listProductTemplatesAction,
+  listSubscriptionPlansAction,
   type PlatformOverview,
   type ProductTemplateOption,
+  type SubscriptionPlanOption,
 } from "@/app/actions/platform";
 import { listOwnersAction, type OwnerAccount } from "@/app/actions/users";
 import { invalidateAdminCache, readAdminCache, writeAdminCache } from "@/lib/admin-cache";
 
-type LoadOpts = { owners?: boolean; overview?: boolean; templates?: boolean };
+type LoadOpts = {
+  owners?: boolean;
+  overview?: boolean;
+  templates?: boolean;
+  subscriptionPlans?: boolean;
+};
 
 function cacheReady(needs: LoadOpts, hit: NonNullable<ReturnType<typeof readAdminCache>>) {
   if (needs.owners && !hit.loaded.owners) return false;
   if (needs.overview && !hit.loaded.overview) return false;
   if (needs.templates && !hit.loaded.templates) return false;
+  if (needs.subscriptionPlans && !hit.loaded.subscriptionPlans) return false;
   return true;
 }
 
 export function usePlatformAdminData(
   enabled: boolean,
-  needs: LoadOpts = { owners: true, overview: true, templates: true },
+  needs: LoadOpts = {
+    owners: true,
+    overview: true,
+    templates: true,
+    subscriptionPlans: true,
+  },
 ) {
   const initial = readAdminCache();
   const [owners, setOwners] = useState<OwnerAccount[]>(initial?.owners ?? []);
   const [overview, setOverview] = useState<PlatformOverview | null>(initial?.overview ?? null);
   const [templates, setTemplates] = useState<ProductTemplateOption[]>(initial?.templates ?? []);
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlanOption[]>(
+    initial?.subscriptionPlans ?? [],
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => {
     if (!enabled) return false;
@@ -43,6 +59,7 @@ export function usePlatformAdminData(
         if (needs.owners) setOwners(hit.owners);
         if (needs.overview) setOverview(hit.overview);
         if (needs.templates) setTemplates(hit.templates);
+        if (needs.subscriptionPlans) setSubscriptionPlans(hit.subscriptionPlans);
         setLoadError(null);
         setLoading(false);
         return;
@@ -56,7 +73,13 @@ export function usePlatformAdminData(
         let nextOwners: OwnerAccount[] | undefined;
         let nextOverview: PlatformOverview | null | undefined;
         let nextTemplates: ProductTemplateOption[] | undefined;
-        const loaded = { owners: false, overview: false, templates: false };
+        let nextPlans: SubscriptionPlanOption[] | undefined;
+        const loaded = {
+          owners: false,
+          overview: false,
+          templates: false,
+          subscriptionPlans: false,
+        };
 
         if (needs.owners) {
           tasks.push(
@@ -88,16 +111,28 @@ export function usePlatformAdminData(
             }),
           );
         }
+        if (needs.subscriptionPlans) {
+          tasks.push(
+            listSubscriptionPlansAction(true).then((result) => {
+              if (!result.ok) throw new Error(result.error);
+              nextPlans = result.plans;
+              loaded.subscriptionPlans = true;
+              setSubscriptionPlans(result.plans);
+            }),
+          );
+        }
 
         await Promise.all(tasks);
         writeAdminCache({
           ...(nextOwners !== undefined ? { owners: nextOwners } : {}),
           ...(nextOverview !== undefined ? { overview: nextOverview } : {}),
           ...(nextTemplates !== undefined ? { templates: nextTemplates } : {}),
+          ...(nextPlans !== undefined ? { subscriptionPlans: nextPlans } : {}),
           loaded: {
             ...(loaded.owners ? { owners: true } : {}),
             ...(loaded.overview ? { overview: true } : {}),
             ...(loaded.templates ? { templates: true } : {}),
+            ...(loaded.subscriptionPlans ? { subscriptionPlans: true } : {}),
           },
         });
       } catch (reason) {
@@ -106,7 +141,13 @@ export function usePlatformAdminData(
         setLoading(false);
       }
     },
-    [enabled, needs.owners, needs.overview, needs.templates],
+    [
+      enabled,
+      needs.owners,
+      needs.overview,
+      needs.templates,
+      needs.subscriptionPlans,
+    ],
   );
 
   const invalidate = useCallback(() => {
@@ -123,6 +164,7 @@ export function usePlatformAdminData(
     owners,
     overview,
     templates,
+    subscriptionPlans,
     loading,
     loadError,
     refresh: () => refresh(true),

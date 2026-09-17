@@ -1,4 +1,6 @@
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
+import type { BusinessPanelPage } from "../panel-access";
+import type { StaffPage } from "../staff-access";
 import type { UserRole } from "../types/jwt-payload";
 
 export interface AuthUser {
@@ -7,6 +9,10 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   businessId: string;
+  businessSlug?: string;
+  tokenVersion?: number;
+  access?: StaffPage[];
+  planPages?: BusinessPanelPage[];
 }
 
 export const CurrentUser = createParamDecorator(

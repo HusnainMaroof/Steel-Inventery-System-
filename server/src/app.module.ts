@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { ApiThrottleGuard } from "./common/guards/api-throttle.guard";
+import { StaffAccessGuard } from "./common/guards/staff-access.guard";
 import { ConfigModule } from "./config/config.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
@@ -20,11 +21,14 @@ import { HealthModule } from "./health/health.module";
 import { LedgerModule } from "./ledger/ledger.module";
 import { WarehousesModule } from "./warehouses/warehouses.module";
 import { PlatformModule } from "./platform/platform.module";
+import { MediaModule } from "./media/media.module";
+import { AuditModule } from "./common/audit/audit.module";
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
+    AuditModule,
     HealthModule,
     AuthModule,
     UsersModule,
@@ -42,7 +46,11 @@ import { PlatformModule } from "./platform/platform.module";
     LedgerModule,
     WarehousesModule,
     PlatformModule,
+    MediaModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ApiThrottleGuard }],
+  providers: [
+    StaffAccessGuard,
+    { provide: APP_GUARD, useClass: ApiThrottleGuard },
+  ],
 })
 export class AppModule {}

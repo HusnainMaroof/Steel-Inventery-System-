@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProductsService } from "../products/products.service";
+import type { CreateCatalogTemplateDto } from "../platform/dto/create-catalog-template.dto";
 import {
   PRODUCT_TEMPLATES,
   TEMPLATE_BY_ID,
@@ -15,25 +16,104 @@ export class TemplateProvisionService {
     private readonly products: ProductsService,
   ) {}
 
-  listTemplates() {
-    return PRODUCT_TEMPLATES.map((t) => ({
-      id: t.id,
-      label: t.label,
-      usesCategories: t.usesCategories,
-      productName: t.product.name,
-      productUnit: t.product.unit,
-    }));
+  async listTemplates() {
+    const custom = await this.prisma.catalogTemplate.findMany({
+      where: { active: true },
+      orderBy: { createdAt: "asc" },
+    });
+    const builtIn = PRODUCT_TEMPLATES.map((t) => this.toSummary(t));
+    const customSummaries = custom.map((row) => {
+      const def = row.definition as ProductTemplate;
+      return this.toSummary(def);
+    });
+    return [...builtIn, ...customSummaries];
+  }
+
+  async listTemplatesFull(): Promise<ProductTemplate[]> {
+    const custom = await this.prisma.catalogTemplate.findMany({
+      where: { active: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return [
+      ...PRODUCT_TEMPLATES,
+      ...custom.map((row) => row.definition as ProductTemplate),
+    ];
+  }
+
+  async getTemplateById(id: string): Promise<ProductTemplate | undefined> {
+    const builtIn = TEMPLATE_BY_ID.get(id);
+    if (builtIn) return builtIn;
+    const row = await this.prisma.catalogTemplate.findFirst({
+      where: { templateId: id, active: true },
+    });
+    return row ? (row.definition as ProductTemplate) : undefined;
+  }
+
+  async filterValidTemplateIds(ids: string[]): Promise<string[]> {
+    const custom = await this.prisma.catalogTemplate.findMany({
+      where: { templateId: { in: ids }, active: true },
+      select: { templateId: true },
+    });
+    const valid = new Set([
+      ...TEMPLATE_BY_ID.keys(),
+      ...custom.map((row) => row.templateId),
+    ]);
+    const out: string[] = [];
+    for (const id of ids) {
+      if (valid.has(id) && !out.includes(id)) out.push(id);
+    }
+    return out;
+  }
+
+  async createCatalogTemplate(dto: CreateCatalogTemplateDto): Promise<ProductTemplate> {
+    const templateId = `custom_${crypto.randomUUID().replace(/-/g, "")}`;
+    const definition: ProductTemplate = {
+      id: templateId,
+      label: dto.label.trim(),
+      usesCategories: dto.usesCategories ?? false,
+      product: {
+        name: dto.productName.trim(),
+        unit: dto.productUnit.trim(),
+        description: dto.description?.trim() || undefined,
+      },
+      attributes: dto.attributes.map((attribute) => ({
+        name: attribute.name.trim(),
+        type: attribute.type,
+        required: attribute.required,
+        unit: attribute.unit?.trim() || undefined,
+        options: attribute.options?.map((option) => option.trim()).filter(Boolean),
+      })),
+    };
+    await this.prisma.catalogTemplate.create({
+      data: {
+        templateId,
+        label: definition.label,
+        definition,
+      },
+    });
+    return definition;
   }
 
   async applyTemplates(businessId: string, templateIds: string[]): Promise<string[]> {
     const applied: string[] = [];
     for (const templateId of templateIds) {
-      const template = TEMPLATE_BY_ID.get(templateId);
+      const template = await this.getTemplateById(templateId);
       if (!template) continue;
       const productId = await this.applyOne(businessId, template);
       if (productId) applied.push(templateId);
     }
     return applied;
+  }
+
+  private toSummary(template: ProductTemplate) {
+    return {
+      id: template.id,
+      label: template.label,
+      usesCategories: template.usesCategories,
+      productName: template.product.name,
+      productUnit: template.product.unit,
+      custom: template.id.startsWith("custom_"),
+    };
   }
 
   private async applyOne(businessId: string, template: ProductTemplate): Promise<string | null> {

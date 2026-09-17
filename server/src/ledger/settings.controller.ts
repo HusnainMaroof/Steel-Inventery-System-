@@ -1,11 +1,14 @@
 import { Body, Controller, Get, Put, UseGuards } from "@nestjs/common";
 import { AuthUser, CurrentUser } from "../common/decorators/current-user.decorator";
+import { Roles } from "../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
 import { SaveLedgerDto } from "./dto/save-ledger.dto";
 import { LedgerService } from "./ledger.service";
 
 @Controller("settings")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles("ADMIN")
 export class SettingsController {
   constructor(private readonly ledger: LedgerService) {}
 
@@ -23,6 +26,7 @@ export class SettingsController {
     return this.ledger.savePreferences(
       user.businessId,
       dto.data as Record<string, unknown>,
+      user.sub,
     );
   }
 }

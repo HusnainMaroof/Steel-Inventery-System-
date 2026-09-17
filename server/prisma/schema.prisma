@@ -40,10 +40,11 @@ enum InventoryTxType {
   RETURN
 }
 
-enum SubscriptionPlan {
+enum BillingCycle {
   MONTHLY
   YEARLY
   LIFETIME
+  CUSTOM_DAYS
 }
 
 enum SubscriptionStatus {
@@ -53,6 +54,35 @@ enum SubscriptionStatus {
   CANCELLED
 }
 
+/// Super-admin subscription plans — assigned to businesses on registration.
+model SubscriptionPlanDefinition {
+  id           String       @id
+  label        String
+  billingCycle BillingCycle
+  durationDays Int?
+  description  String?
+  price        Decimal?     @db.Decimal(10, 2)
+  /// Sidebar modules included for businesses on this plan (empty = all modules).
+  allowedPages String[]     @default([])
+  active       Boolean      @default(true)
+  sortOrder    Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  businesses Business[]
+}
+
+/// Super-admin product catalogue templates (custom variants beyond built-in defaults).
+model CatalogTemplate {
+  id         String   @id @default(cuid())
+  templateId String   @unique
+  label      String
+  definition Json
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model Business {
   id        String   @id @default(cuid())
   name      String
@@ -60,7 +90,8 @@ model Business {
   settings  Json?
   createdAt DateTime @default(now())
 
-  subscriptionPlan     SubscriptionPlan?
+  subscriptionPlanId   String?
+  subscriptionPlanDef  SubscriptionPlanDefinition? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
   subscriptionStatus   SubscriptionStatus @default(ACTIVE)
   subscriptionStartsAt DateTime?
   subscriptionEndsAt   DateTime?
@@ -87,15 +118,29 @@ model Business {
   locations          Location[]
 }
 
+model AuditLog {
+  id         String   @id @default(cuid())
+  businessId String?
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([entityType, entityId])
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
-  /// Plain login password — visible only to Super Admin in the owners panel.
-  loginPassword String?
   name         String
   role         Role     @default(ADMIN)
   active       Boolean  @default(true)
+  /// Incremented to invalidate outstanding JWTs (logout, password change, deactivation).
+  tokenVersion Int      @default(0)
   /// Job title for staff (Sales manager, Store keeper, …). Unused for owners.
   title        String?
   /// Pages a staff login may open. Empty for owners = full access.
@@ -220,6 +265,7 @@ model Variant {
 
   @@unique([businessId, identityKey])
   @@index([productId])
+  @@index([businessId])
 }
 
 model Warehouse {
@@ -361,6 +407,7 @@ model Sale {
   customer Customer        @relation(fields: [customerId], references: [id])
   lines    SaleLine[]
   invoice  Invoice?
+  payments Payment[]
   allocations PaymentAllocation[]
 
   @@index([businessId, date])
@@ -427,6 +474,7 @@ model Payment {
   business    Business            @relation(fields: [businessId], references: [id])
   customer    Customer?           @relation(fields: [customerId], references: [id])
   supplier    Supplier?           @relation(fields: [supplierId], references: [id])
+  sale        Sale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
   allocations PaymentAllocation[]
 
   @@index([businessId, date])
@@ -449,6 +497,7 @@ model PaymentAllocation {
 
   @@index([paymentId])
   @@index([saleId])
+  @@index([businessId])
 }
 
 model Expense {
@@ -481,6 +530,7 @@ model StockCheck {
   business Business @relation(fields: [businessId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
 
+  @@index([businessId, date])
   @@index([productId, date])
 }
 
@@ -518,4 +568,5 @@ model InventoryTransaction {
   @@index([businessId, variantId, date])
   @@index([purchaseLineId])
   @@index([saleLineId])
+  @@index([businessId, productId])
 }

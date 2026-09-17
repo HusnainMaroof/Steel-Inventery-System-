@@ -1,12 +1,15 @@
 import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { InvoicesService } from "./invoices.service";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
 
 @Controller("invoices")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("sales")
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 

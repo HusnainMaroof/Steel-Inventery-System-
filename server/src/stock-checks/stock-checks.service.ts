@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateStockCheckDto } from "./dto/create-stock-check.dto";
 
@@ -6,10 +7,6 @@ import { CreateStockCheckDto } from "./dto/create-stock-check.dto";
 export class StockChecksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * A count is stored together with the system quantity at that moment —
-   * so the difference stays historically true even as stock moves later.
-   */
   async create(businessId: string, dto: CreateStockCheckDto) {
     return this.prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({
@@ -45,22 +42,34 @@ export class StockChecksService {
     return { systemQty: Number(grouped._sum.qty ?? 0) };
   }
 
-  list(businessId: string, from?: string, to?: string) {
-    return this.prisma.stockCheck.findMany({
-      where: {
-        businessId,
-        ...(from || to
-          ? {
-              date: {
-                ...(from ? { gte: new Date(from) } : {}),
-                ...(to ? { lte: new Date(to) } : {}),
-              },
-            }
-          : {}),
-      },
-      include: { product: { select: { id: true, name: true, unit: true } } },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: 500,
-    });
+  async list(
+    businessId: string,
+    skip: number,
+    take: number,
+    from?: string,
+    to?: string,
+  ) {
+    const where: Prisma.StockCheckWhereInput = {
+      businessId,
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: new Date(from) } : {}),
+              ...(to ? { lte: new Date(to) } : {}),
+            },
+          }
+        : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.stockCheck.findMany({
+        where,
+        include: { product: { select: { id: true, name: true, unit: true } } },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        skip,
+        take,
+      }),
+      this.prisma.stockCheck.count({ where }),
+    ]);
+    return [items, total] as const;
   }
 }

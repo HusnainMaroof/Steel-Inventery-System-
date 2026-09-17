@@ -49,11 +49,17 @@ export default function AdminOverviewPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="panel p-4">
               <h2 className="text-sm font-semibold mb-3">Subscription mix</h2>
-              <dl className="grid grid-cols-2 gap-3 text-sm">
-                <div><dt className="text-neutral-500">Monthly</dt><dd className="font-semibold tabular-nums">{overview.subscriptions.monthly}</dd></div>
-                <div><dt className="text-neutral-500">Yearly</dt><dd className="font-semibold tabular-nums">{overview.subscriptions.yearly}</dd></div>
-                <div><dt className="text-neutral-500">Lifetime</dt><dd className="font-semibold tabular-nums">{overview.subscriptions.lifetime}</dd></div>
-                <div><dt className="text-neutral-500">Revoked logins</dt><dd className="font-semibold tabular-nums">{totals?.revokedOwners ?? 0}</dd></div>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                {overview.subscriptions.byPlan.map((plan) => (
+                  <div key={plan.id}>
+                    <dt className="text-neutral-500">{plan.label}</dt>
+                    <dd className="font-semibold tabular-nums">{plan.count}</dd>
+                  </div>
+                ))}
+                <div>
+                  <dt className="text-neutral-500">Revoked logins</dt>
+                  <dd className="font-semibold tabular-nums">{totals?.revokedOwners ?? 0}</dd>
+                </div>
               </dl>
             </div>
 

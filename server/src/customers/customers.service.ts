@@ -52,13 +52,27 @@ export class CustomersService {
    * Receivable history: each invoice with its paid/due — the balance is
    * never a stored number (§27).
    */
-  async ledger(businessId: string, id: string) {
+  async ledger(businessId: string, id: string, skip: number, take: number) {
     await this.byId(businessId, id);
-    const sales = await this.prisma.sale.findMany({
-      where: { businessId, customerId: id },
-      include: { invoice: true },
-      orderBy: { date: "asc" },
-    });
+    const where = { businessId, customerId: id };
+    const [sales, total, dueRows] = await Promise.all([
+      this.prisma.sale.findMany({
+        where,
+        include: { invoice: true },
+        orderBy: { date: "asc" },
+        skip,
+        take,
+      }),
+      this.prisma.sale.count({ where }),
+      this.prisma.$queryRaw<{ due: string }[]>`
+        SELECT COALESCE(SUM(
+          GREATEST(0, COALESCE(i."total", 0) - COALESCE(i."paid", 0))
+        ), 0)::text AS due
+        FROM "Sale" s
+        LEFT JOIN "Invoice" i ON i."saleId" = s."id"
+        WHERE s."businessId" = ${businessId} AND s."customerId" = ${id}
+      `,
+    ]);
     const rows = sales.map((s) => ({
       saleId: s.id,
       invoiceNo: s.invoice?.number,
@@ -67,8 +81,7 @@ export class CustomersService {
       paid: Number(s.invoice?.paid ?? 0),
       due: Number(s.invoice?.total ?? 0) - Number(s.invoice?.paid ?? 0),
     }));
-    const due = rows.reduce((sum, r) => sum + Math.max(0, r.due), 0);
-    return { rows, totalDue: due };
+    return { rows, totalDue: Number(dueRows[0]?.due ?? 0), total };
   }
 
   async update(businessId: string, id: string, dto: UpdateCustomerDto) {

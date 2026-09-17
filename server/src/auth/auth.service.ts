@@ -13,7 +13,10 @@ import { ConfigService } from "../config/config.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import type { JwtPayload, UserRole } from "../common/types/jwt-payload";
+import { AuditService } from "../common/audit/audit.service";
+import { sanitizePlanPages } from "../common/panel-access";
 import { slugifyName } from "../common/slug";
+import { TokenVersionService } from "./token-version.service";
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -23,6 +26,8 @@ export class AuthService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly tokenVersions: TokenVersionService,
+    private readonly audit: AuditService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -50,11 +55,7 @@ export class AuthService implements OnModuleInit {
       where: { role: "SUPERADMIN" },
     });
     if (existingAdmin) {
-      const patch: { passwordHash?: string; name?: string; active?: boolean } = {};
-      if (existingAdmin.email === email) {
-        const same = await bcrypt.compare(password, existingAdmin.passwordHash);
-        if (!same) patch.passwordHash = await bcrypt.hash(password, 10);
-      }
+      const patch: { name?: string; active?: boolean } = {};
       if (existingAdmin.name === "Platform Admin") patch.name = "Super Admin";
       if (!existingAdmin.active) patch.active = true;
       if (Object.keys(patch).length > 0) {
@@ -62,9 +63,6 @@ export class AuthService implements OnModuleInit {
           where: { id: existingAdmin.id },
           data: patch,
         });
-        if (patch.passwordHash) {
-          this.logger.log("super admin password synced from environment");
-        }
       }
       this.logger.log(`super admin ready email=${existingAdmin.email}`);
       return;
@@ -99,16 +97,52 @@ export class AuthService implements OnModuleInit {
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
-      include: { business: { select: { name: true, slug: true } } },
+      include: {
+        business: {
+          select: {
+            name: true,
+            slug: true,
+            subscriptionPlanDef: { select: { allowedPages: true } },
+          },
+        },
+      },
     });
     if (
       !user ||
       !user.active ||
       !(await bcrypt.compare(dto.password, user.passwordHash))
     ) {
+      if (user?.active) {
+        await this.audit.log({
+          actorId: user.id,
+          businessId: user.businessId,
+          action: "auth.login_failed",
+          entityType: "user",
+          entityId: user.id,
+        });
+      }
       throw new UnauthorizedException("Invalid email or password");
     }
+    await this.audit.log({
+      actorId: user.id,
+      businessId: user.businessId,
+      action: "auth.login",
+      entityType: "user",
+      entityId: user.id,
+    });
     return this.issueToken(user);
+  }
+
+  async logout(userId: string, businessId: string) {
+    await this.tokenVersions.bump(userId);
+    await this.audit.log({
+      actorId: userId,
+      businessId,
+      action: "auth.logout",
+      entityType: "user",
+      entityId: userId,
+    });
+    return { ok: true };
   }
 
   /** Public self-signup is closed. Owners are created by Super Admin. */
@@ -129,11 +163,25 @@ export class AuthService implements OnModuleInit {
         title: true,
         access: true,
         businessId: true,
-        business: { select: { id: true, name: true, slug: true } },
+        business: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            subscriptionPlanDef: { select: { allowedPages: true } },
+          },
+        },
       },
     });
     if (!user) throw new UnauthorizedException();
-    return user;
+    return {
+      ...user,
+      planPages: sanitizePlanPages(user.business?.subscriptionPlanDef?.allowedPages),
+    };
+  }
+
+  async invalidateSessions(userId: string): Promise<void> {
+    await this.tokenVersions.bump(userId);
   }
 
   private async issueToken(user: {
@@ -142,17 +190,27 @@ export class AuthService implements OnModuleInit {
     name: string;
     role: UserRole;
     businessId: string;
+    tokenVersion: number;
     title?: string | null;
     access?: string[];
-    business?: { name: string; slug: string } | null;
+    business?: {
+      name: string;
+      slug: string;
+      subscriptionPlanDef?: { allowedPages: string[] } | null;
+    } | null;
   }) {
     const business =
       user.business ??
       (await this.prisma.business.findUnique({
         where: { id: user.businessId },
-        select: { name: true, slug: true },
+        select: {
+          name: true,
+          slug: true,
+          subscriptionPlanDef: { select: { allowedPages: true } },
+        },
       }));
     const businessSlug = business?.slug ?? slugifyName(business?.name ?? "business");
+    const planPages = sanitizePlanPages(business?.subscriptionPlanDef?.allowedPages);
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -160,6 +218,8 @@ export class AuthService implements OnModuleInit {
       role: user.role,
       businessId: user.businessId,
       businessSlug,
+      tokenVersion: user.tokenVersion,
+      planPages,
     };
     const businessName = business?.name ?? "";
     return {
@@ -171,6 +231,7 @@ export class AuthService implements OnModuleInit {
         role: user.role,
         title: user.title ?? null,
         access: user.access ?? [],
+        planPages,
         businessId: user.businessId,
         businessName,
         businessSlug,

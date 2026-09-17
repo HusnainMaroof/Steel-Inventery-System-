@@ -17,6 +17,7 @@ import type {
   Warehouse,
   WarehouseLocation,
 } from "./types";
+import { parseDecimal } from "./decimal";
 import { hydratePurchasePaymentHistories } from "./purchase-utils";
 import { sanitizeAccess } from "./staff-access";
 import { mergeUiPreferences, type UiPreferences } from "./ui-preferences";
@@ -87,6 +88,11 @@ type ApiExpense = Omit<Expense, "category"> & {
   category: "TRANSPORT" | "LABOR" | "RENT" | "UTILITIES" | "OTHER";
 };
 
+type ApiStockCheck = Omit<StockCheck, "physicalQty" | "systemQty"> & {
+  physicalQty: number | string;
+  systemQty: number | string;
+};
+
 export type ApiBootstrap = {
   version: number;
   suppliers: Supplier[];
@@ -95,7 +101,7 @@ export type ApiBootstrap = {
   sales: ApiSale[];
   payments: ApiPayment[];
   expenses: ApiExpense[];
-  stockChecks: StockCheck[];
+  stockChecks: ApiStockCheck[];
   products: Product[];
   productItems: ProductItem[];
   categories: ProductCategory[];
@@ -117,18 +123,18 @@ function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
   if (lines.length === 0) return [];
 
   const goodsTotal = lines.reduce(
-    (sum, line) => sum + Number(line.qty) * Number(line.rate),
+    (sum, line) => sum + parseDecimal(line.qty) * parseDecimal(line.rate),
     0,
   );
   const chargeTotal =
-    Number(purchase.transport) +
-    Number(purchase.loading) +
-    Number(purchase.labour) +
-    Number(purchase.otherCost);
-  const paid = Number(purchase.paid);
+    parseDecimal(purchase.transport) +
+    parseDecimal(purchase.loading) +
+    parseDecimal(purchase.labour) +
+    parseDecimal(purchase.otherCost);
+  const paid = parseDecimal(purchase.paid);
 
   return lines.map((line, index) => {
-    const lineGoods = Number(line.qty) * Number(line.rate);
+    const lineGoods = parseDecimal(line.qty) * parseDecimal(line.rate);
     const share = goodsTotal > 0 ? lineGoods / goodsTotal : 1 / lines.length;
     const lineId = line.id ?? `${purchase.id}:${index}`;
     const rowId = lines.length === 1 ? purchase.id : `${purchase.id}::${lineId}`;
@@ -151,17 +157,45 @@ function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
       batchNumber: line.batchNumber ?? undefined,
       warehouseId: line.warehouseId ?? undefined,
       locationId: line.locationId ?? undefined,
-      qty: Number(line.qty),
+      qty: parseDecimal(line.qty),
       unit: line.unit,
-      rate: Number(line.rate),
-      transport: Number(purchase.transport) * share,
-      loadingCharges: Number(purchase.loading) * share,
-      labourCharges: Number(purchase.labour) * share,
-      otherCost: Number(purchase.otherCost) * share,
-      sellRate: line.sellRate == null ? undefined : Number(line.sellRate),
+      rate: parseDecimal(line.rate),
+      transport: parseDecimal(purchase.transport) * share,
+      loadingCharges: parseDecimal(purchase.loading) * share,
+      labourCharges: parseDecimal(purchase.labour) * share,
+      otherCost: parseDecimal(purchase.otherCost) * share,
+      sellRate: line.sellRate == null ? undefined : parseDecimal(line.sellRate),
       paid,
     };
   });
+}
+
+export function mapApiSale(sale: ApiBootstrap["sales"][number]): Sale {
+  return {
+    id: sale.id,
+    invoiceNo: sale.invoice?.number ?? sale.id,
+    date: dateOnly(sale.date),
+    createdAt: sale.createdAt,
+    customerId: sale.customerId,
+    discountPct: parseDecimal(sale.discountPct),
+    taxPct: parseDecimal(sale.taxPct),
+    loadingCharges: parseDecimal(sale.loadingCharges),
+    transportCharges: parseDecimal(sale.transportCharges),
+    labourCharges: parseDecimal(sale.labourCharges),
+    invoicePaid: sale.invoice ? parseDecimal(sale.invoice.paid) : undefined,
+    invoiceTotal: sale.invoice ? parseDecimal(sale.invoice.total) : undefined,
+    lines: sale.lines.map((line) => ({
+      item: line.item,
+      qty: parseDecimal(line.qty),
+      rate: parseDecimal(line.rate),
+      unit: line.unit,
+      qualityName: line.qualityName ?? undefined,
+      purchaseId: line.purchaseId ?? undefined,
+      categoryId: line.categoryId ?? undefined,
+      variantId: line.variantId ?? undefined,
+      attributeSnapshot: line.attributeSnapshot ?? undefined,
+    })),
+  };
 }
 
 export function normalizeBootstrap(raw: ApiBootstrap) {
@@ -170,34 +204,16 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
     expandPurchaseLines(purchase),
   );
 
-  const sales: Sale[] = raw.sales.map((sale) => ({
-    id: sale.id,
-    invoiceNo: sale.invoice?.number ?? sale.id,
-    date: dateOnly(sale.date),
-    createdAt: sale.createdAt,
-    customerId: sale.customerId,
-    discountPct: Number(sale.discountPct),
-    taxPct: Number(sale.taxPct),
-    loadingCharges: Number(sale.loadingCharges),
-    transportCharges: Number(sale.transportCharges),
-    labourCharges: Number(sale.labourCharges),
-    invoicePaid: sale.invoice ? Number(sale.invoice.paid) : undefined,
-    invoiceTotal: sale.invoice ? Number(sale.invoice.total) : undefined,
-    lines: sale.lines.map((line) => ({
-      item: line.item,
-      qty: Number(line.qty),
-      rate: Number(line.rate),
-      unit: line.unit,
-      qualityName: line.qualityName ?? undefined,
-      purchaseId: line.purchaseId ?? undefined,
+  const sales: Sale[] = raw.sales.map((sale) => {
+    const mapped = mapApiSale(sale);
+    mapped.lines = mapped.lines.map((line) => ({
+      ...line,
       supplierId: line.purchaseId
         ? purchaseById.get(line.purchaseId)?.supplierId
         : undefined,
-      categoryId: line.categoryId ?? undefined,
-      variantId: line.variantId ?? undefined,
-      attributeSnapshot: line.attributeSnapshot ?? undefined,
-    })),
-  }));
+    }));
+    return mapped;
+  });
 
   const payments: Payment[] = raw.payments.map((payment) => ({
     id: payment.id,
@@ -207,13 +223,13 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
       payment.type === "CUSTOMER"
         ? payment.customerId ?? ""
         : payment.supplierId ?? "",
-    amount: Number(payment.amount),
+    amount: parseDecimal(payment.amount),
     method: titleCase<Payment["method"]>(payment.method),
     saleId: payment.saleId ?? undefined,
     note: payment.note ?? undefined,
     allocations: payment.allocations?.map((a) => ({
       saleId: a.saleId,
-      amount: Number(a.amount),
+      amount: parseDecimal(a.amount),
     })),
   }));
 
@@ -222,7 +238,7 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
   const expenses: Expense[] = raw.expenses.map((expense) => ({
     ...expense,
     date: dateOnly(expense.date),
-    amount: Number(expense.amount),
+    amount: parseDecimal(expense.amount),
     category: titleCase<Expense["category"]>(expense.category),
   }));
 
@@ -237,7 +253,8 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
     stockChecks: raw.stockChecks.map((check) => ({
       ...check,
       date: dateOnly(check.date),
-      physicalQty: Number(check.physicalQty),
+      physicalQty: parseDecimal(check.physicalQty),
+      systemQty: parseDecimal(check.systemQty),
     })),
     products: raw.products,
     productItems: raw.productItems,

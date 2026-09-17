@@ -7,7 +7,9 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { PaymentsService } from "./payments.service";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
@@ -15,13 +17,14 @@ import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto"
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("payments")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("payments")
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentDto) {
-    return this.paymentsService.create(user.businessId, dto);
+    return this.paymentsService.create(user.businessId, dto, user.sub);
   }
 
   @Get()

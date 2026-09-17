@@ -5,7 +5,8 @@ import { BusyButton, Page, PageTitle } from "@/components/ui";
 import { useAuth, type BusinessProfile } from "@/lib/auth";
 import { displayName, roleLabel } from "@/lib/auth-types";
 import { useUiPreferences } from "@/lib/preferences";
-import { fileToLogoDataUrl } from "@/lib/logo";
+import { uploadBusinessLogoAction } from "@/app/actions/media";
+import { logoSrcFromPrefs } from "@/lib/logo-src";
 import { InvoiceBrandHeader } from "@/components/invoice/InvoiceBrandHeader";
 import { WarehousePanel } from "@/components/settings/WarehousePanel";
 
@@ -33,7 +34,7 @@ export default function SettingsPage() {
     city,
     phone,
     email: invoiceEmail.trim() || user?.email || "",
-    logoSrc: prefs.logoDataUrl.trim() || undefined,
+    logoSrc: logoSrcFromPrefs(prefs) || undefined,
     invoiceNote: invoiceNote.trim() || undefined,
   };
 
@@ -65,8 +66,11 @@ export default function SettingsPage() {
     setLogoBusy(true);
     setLogoError("");
     try {
-      const url = await fileToLogoDataUrl(file);
-      setPref("logoDataUrl", url);
+      const payload = new FormData();
+      payload.append("logo", file);
+      const upload = await uploadBusinessLogoAction(payload);
+      if (!upload.ok) throw new Error(upload.error);
+      await patchPrefs({ logoUrl: upload.url, logoDataUrl: "" });
     } catch (err) {
       setLogoError(err instanceof Error ? err.message : "Could not use that image.");
     } finally {
@@ -91,9 +95,9 @@ export default function SettingsPage() {
           </p>
           <div className="flex flex-wrap items-center gap-4">
             <div className="h-20 w-40 border border-[#e5e5e5] bg-white flex items-center justify-center p-2">
-              {prefs.logoDataUrl ? (
+              {logoSrcFromPrefs(prefs) ? (
                 <img
-                  src={prefs.logoDataUrl}
+                  src={logoSrcFromPrefs(prefs)}
                   alt={shopName}
                   className="max-h-full max-w-full object-contain"
                 />
@@ -114,14 +118,14 @@ export default function SettingsPage() {
                 loading={logoBusy}
                 onClick={() => fileRef.current?.click()}
               >
-                {prefs.logoDataUrl ? "Change logo" : "Add logo"}
+                {logoSrcFromPrefs(prefs) ? "Change logo" : "Add logo"}
               </BusyButton>
-              {prefs.logoDataUrl ? (
+              {logoSrcFromPrefs(prefs) ? (
                 <button
                   type="button"
                   className="btn-ghost"
                   onClick={() => {
-                    setPref("logoDataUrl", "");
+                    void patchPrefs({ logoUrl: "", logoDataUrl: "" });
                     setLogoError("");
                   }}
                 >

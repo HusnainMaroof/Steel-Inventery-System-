@@ -1,5 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { AuditService } from "../common/audit/audit.service";
+import {
+  incrementInvoicePaidOrThrow,
+  incrementPurchasePaid,
+} from "../common/payments/invoice-atomic";
 import { assertPositiveMoney, LIMITS } from "../common/security/limits";
 import { sanitizeOptionalText } from "../common/security/sanitize-text";
 import { PrismaService } from "../prisma/prisma.service";
@@ -8,7 +13,10 @@ import { CreatePaymentDto } from "./dto/create-payment.dto";
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * §10 — payments are records, never balance overwrites.
@@ -42,7 +50,7 @@ export class PaymentsService {
     }
   }
 
-  async create(businessId: string, dto: CreatePaymentDto) {
+  async create(businessId: string, dto: CreatePaymentDto, actorId?: string) {
     assertPositiveMoney(dto.amount, "Payment amount");
     dto.note = sanitizeOptionalText(dto.note, 300);
 
@@ -50,6 +58,9 @@ export class PaymentsService {
       await this.assertDailyPaymentCap(tx, businessId, dto.date, dto.amount);
 
       if (dto.type === "CUSTOMER") {
+        if (dto.customerId) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`custpay:${businessId}:${dto.customerId}`}))`;
+        }
         if (!dto.customerId) {
           throw new BadRequestException("Customer payments need customerId");
         }
@@ -83,10 +94,7 @@ export class PaymentsService {
               `Payment (${dto.amount}) exceeds the remaining due (${Math.max(0, due)})`,
             );
           }
-          await tx.invoice.update({
-            where: { id: invoice.id },
-            data: { paid: Number(invoice.paid) + dto.amount },
-          });
+          await incrementInvoicePaidOrThrow(tx, businessId, invoice.id, dto.amount);
           await tx.paymentAllocation.create({
             data: {
               businessId,
@@ -116,6 +124,14 @@ export class PaymentsService {
             }));
           const { allocations } = settleFifo(open, dto.amount);
           for (const a of allocations) {
+            const invoice = await tx.invoice.findFirst({
+              where: { businessId, saleId: a.saleId },
+              select: { id: true },
+            });
+            if (!invoice) {
+              throw new BadRequestException("Invoice not found for allocation");
+            }
+            await incrementInvoicePaidOrThrow(tx, businessId, invoice.id, a.amount);
             await tx.paymentAllocation.create({
               data: {
                 businessId,
@@ -124,19 +140,23 @@ export class PaymentsService {
                 amount: a.amount,
               },
             });
-            await tx.invoice.updateMany({
-              where: { businessId, saleId: a.saleId },
-              data: { paid: { increment: a.amount } },
-            });
           }
         }
+        await this.audit.logTx(tx, {
+          businessId,
+          actorId: actorId ?? null,
+          action: "payment.created",
+          entityType: "payment",
+          entityId: payment.id,
+          metadata: { type: "CUSTOMER", amount: dto.amount },
+        });
         return payment;
       }
 
-      // SUPPLIER payment — journal record of money sent to the mill.
       if (!dto.supplierId) {
         throw new BadRequestException("Supplier payments need supplierId");
       }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`suppay:${businessId}:${dto.supplierId}`}))`;
       const supplier = await tx.supplier.findFirst({
         where: { id: dto.supplierId, businessId },
         select: { id: true },
@@ -171,14 +191,30 @@ export class PaymentsService {
         const due = Math.max(0, goods - Number(purchase.paid));
         const take = Math.min(due, left);
         if (take > 0.005) {
-          await tx.purchase.update({
-            where: { id: purchase.id },
-            data: { paid: { increment: take } },
-          });
+          const ok = await incrementPurchasePaid(
+            tx,
+            businessId,
+            purchase.id,
+            take,
+            goods,
+          );
+          if (!ok) {
+            throw new BadRequestException(
+              "Supplier payment would exceed the purchase goods total",
+            );
+          }
           left = Math.round((left - take) * 100) / 100;
         }
       }
 
+      await this.audit.logTx(tx, {
+        businessId,
+        actorId: actorId ?? null,
+        action: "payment.created",
+        entityType: "payment",
+        entityId: payment.id,
+        metadata: { type: "SUPPLIER", amount: dto.amount },
+      });
       return payment;
     });
   }

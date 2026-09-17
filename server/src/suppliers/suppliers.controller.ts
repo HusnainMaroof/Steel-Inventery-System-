@@ -9,7 +9,9 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { SuppliersService } from "./suppliers.service";
 import { CreateSupplierDto } from "./dto/create-supplier.dto";
@@ -18,7 +20,8 @@ import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto"
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("suppliers")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("suppliers")
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
@@ -45,8 +48,19 @@ export class SuppliersController {
 
   /** Payable history — purchases with their remaining due (§27). */
   @Get(":id/payables")
-  payables(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
-    return this.suppliersService.payables(user.businessId, id);
+  async payables(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Query() pagination: PaginationDto,
+  ) {
+    const { skip, take } = skipTake(pagination.page, pagination.limit);
+    const { rows, totalDue, total } = await this.suppliersService.payables(
+      user.businessId,
+      id,
+      skip,
+      take,
+    );
+    return { ...paginate(rows, total, pagination.page, pagination.limit), totalDue };
   }
 
   @Patch(":id")

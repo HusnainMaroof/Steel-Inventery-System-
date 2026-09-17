@@ -9,6 +9,7 @@ export type UiPreferences = {
   invoiceName: string;
   invoiceNote: string;
   logoDataUrl: string;
+  logoUrl: string;
 };
 
 export const UI_PREFERENCES_DEFAULTS: UiPreferences = {
@@ -20,6 +21,7 @@ export const UI_PREFERENCES_DEFAULTS: UiPreferences = {
   invoiceName: "",
   invoiceNote: "",
   logoDataUrl: "",
+  logoUrl: "",
 };
 
 export function mergeUiPreferences(raw?: Partial<UiPreferences> | null): UiPreferences {

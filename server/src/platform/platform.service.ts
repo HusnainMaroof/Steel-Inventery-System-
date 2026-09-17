@@ -1,17 +1,42 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { TemplateProvisionService } from "../catalog/template-provision.service";
-import { isSubscriptionActive, planLabel } from "../subscription/subscription.util";
+import { SubscriptionPlansService } from "../subscription/subscription-plans.service";
+import { isSubscriptionActive } from "../subscription/subscription.util";
+import { CreateSubscriptionPlanDto } from "../subscription/dto/create-subscription-plan.dto";
+import { UpdateSubscriptionPlanDto } from "../subscription/dto/update-subscription-plan.dto";
+import { CreateCatalogTemplateDto } from "./dto/create-catalog-template.dto";
 
 @Injectable()
 export class PlatformService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly templates: TemplateProvisionService,
+    private readonly subscriptionPlans: SubscriptionPlansService,
   ) {}
 
   listProductTemplates() {
     return this.templates.listTemplates();
+  }
+
+  listProductTemplatesFull() {
+    return this.templates.listTemplatesFull();
+  }
+
+  createCatalogTemplate(dto: CreateCatalogTemplateDto) {
+    return this.templates.createCatalogTemplate(dto);
+  }
+
+  listSubscriptionPlans(includeInactive = false) {
+    return this.subscriptionPlans.list(includeInactive);
+  }
+
+  createSubscriptionPlan(dto: CreateSubscriptionPlanDto) {
+    return this.subscriptionPlans.create(dto);
+  }
+
+  updateSubscriptionPlan(id: string, dto: UpdateSubscriptionPlanDto) {
+    return this.subscriptionPlans.update(id, dto);
   }
 
   async overview() {
@@ -37,7 +62,10 @@ export class PlatformService {
               id: true,
               name: true,
               slug: true,
-              subscriptionPlan: true,
+              subscriptionPlanId: true,
+              subscriptionPlanDef: {
+                select: { id: true, label: true, billingCycle: true },
+              },
               subscriptionStatus: true,
               subscriptionStartsAt: true,
               subscriptionEndsAt: true,
@@ -80,32 +108,38 @@ export class PlatformService {
     const activeOwners = owners.filter((o) => o.active).length;
     const revokedOwners = owners.length - activeOwners;
 
-    const subscriptionCounts = {
-      monthly: 0,
-      yearly: 0,
-      lifetime: 0,
-      expired: 0,
-      active: 0,
-    };
+    const planCatalog = await this.subscriptionPlans.list(true);
+    const planCounts = new Map(planCatalog.map((plan) => [plan.id, 0]));
+    let activeSubscriptions = 0;
+    let expiredSubscriptions = 0;
 
     for (const owner of owners) {
       const b = owner.business;
-      if (!b?.subscriptionPlan) continue;
-      if (b.subscriptionPlan === "MONTHLY") subscriptionCounts.monthly++;
-      if (b.subscriptionPlan === "YEARLY") subscriptionCounts.yearly++;
-      if (b.subscriptionPlan === "LIFETIME") subscriptionCounts.lifetime++;
+      if (!b?.subscriptionPlanId) continue;
+      planCounts.set(b.subscriptionPlanId, (planCounts.get(b.subscriptionPlanId) ?? 0) + 1);
       if (
         isSubscriptionActive({
-          subscriptionPlan: b.subscriptionPlan,
+          billingCycle: b.subscriptionPlanDef?.billingCycle,
           subscriptionStatus: b.subscriptionStatus,
           subscriptionEndsAt: b.subscriptionEndsAt,
         })
       ) {
-        subscriptionCounts.active++;
+        activeSubscriptions++;
       } else {
-        subscriptionCounts.expired++;
+        expiredSubscriptions++;
       }
     }
+
+    const subscriptionCounts = {
+      active: activeSubscriptions,
+      expired: expiredSubscriptions,
+      byPlan: planCatalog.map((plan) => ({
+        id: plan.id,
+        label: plan.label,
+        billingCycle: plan.billingCycle,
+        count: planCounts.get(plan.id) ?? 0,
+      })),
+    };
 
     const perBusiness = await Promise.all(
       owners.map(async (owner) => {
@@ -173,7 +207,7 @@ export class PlatformService {
         const subActive =
           b &&
           isSubscriptionActive({
-            subscriptionPlan: b.subscriptionPlan,
+            billingCycle: b.subscriptionPlanDef?.billingCycle,
             subscriptionStatus: b.subscriptionStatus,
             subscriptionEndsAt: b.subscriptionEndsAt,
           });
@@ -183,8 +217,15 @@ export class PlatformService {
           businessId: b?.id ?? "",
           businessName: b?.name ?? "",
           businessSlug: b?.slug ?? "",
-          subscriptionPlan: b?.subscriptionPlan ?? null,
-          subscriptionPlanLabel: planLabel(b?.subscriptionPlan ?? null),
+          subscriptionPlanId: b?.subscriptionPlanId ?? null,
+          subscriptionPlanLabel: b?.subscriptionPlanDef?.label ?? "—",
+          subscriptionPlan: b?.subscriptionPlanDef
+            ? {
+                id: b.subscriptionPlanDef.id,
+                label: b.subscriptionPlanDef.label,
+                billingCycle: b.subscriptionPlanDef.billingCycle,
+              }
+            : null,
           subscriptionStatus: b?.subscriptionStatus ?? null,
           subscriptionActive: subActive ?? true,
           subscriptionStartsAt: b?.subscriptionStartsAt?.toISOString() ?? null,

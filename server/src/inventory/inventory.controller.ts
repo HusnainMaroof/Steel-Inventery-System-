@@ -1,11 +1,15 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { InventoryService } from "./inventory.service";
 import { AdjustInventoryDto } from "./dto/adjust-inventory.dto";
 
 @Controller("inventory")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StaffAccessGuard)
+@RequireStaffPage("inventory")
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
@@ -21,19 +25,32 @@ export class InventoryController {
   }
 
   @Get("lots")
-  lots(@CurrentUser() user: AuthUser) {
-    return this.inventoryService.lots(user.businessId);
+  async lots(@CurrentUser() user: AuthUser, @Query() pagination: PaginationDto) {
+    const { skip, take } = skipTake(pagination.page, pagination.limit);
+    const [items, totalPurchases] = await Promise.all([
+      this.inventoryService.lots(user.businessId, skip, take),
+      this.inventoryService.lotsCount(user.businessId),
+    ]);
+    return paginate(items, totalPurchases, pagination.page, pagination.limit);
   }
 
   /** Movement history — answers "why is stock this quantity?" (§27). */
   @Get("movements")
-  movements(
+  async movements(
     @CurrentUser() user: AuthUser,
+    @Query() pagination: PaginationDto,
     @Query("productId") productId?: string,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    return this.inventoryService.movements(user.businessId, { productId, from, to });
+    const { skip, take } = skipTake(pagination.page, pagination.limit);
+    const [items, total] = await this.inventoryService.movements(
+      user.businessId,
+      skip,
+      take,
+      { productId, from, to },
+    );
+    return paginate(items, total, pagination.page, pagination.limit);
   }
 
   /**

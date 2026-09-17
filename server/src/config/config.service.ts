@@ -68,4 +68,13 @@ export class ConfigService implements OnModuleInit {
   get databaseTarget(): DatabaseTarget {
     return parseDatabaseTarget(this.databaseUrl);
   }
+
+  get cloudinary() {
+    return {
+      cloudName: (process.env.CLOUDINARY_CLOUD_NAME ?? "").trim(),
+      apiKey: (process.env.CLOUDINARY_API_KEY ?? "").trim(),
+      apiSecret: (process.env.CLOUDINARY_API_SECRET ?? "").trim(),
+      folder: (process.env.CLOUDINARY_FOLDER ?? "tradex/business-logos").trim(),
+    };
+  }
 }

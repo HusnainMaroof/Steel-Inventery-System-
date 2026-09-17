@@ -1,38 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { mapApiSale, type ApiBootstrap } from "@/lib/backend-adapters";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
-import { useStore } from "@/lib/store";
+import type { Sale } from "@/lib/types";
+import { useServerPaginated } from "./use-server-paginated";
 
 /**
- * Client-side invoice pagination from the ledger store.
- * Data is loaded once via bootstrap — switching tabs does not refetch.
+ * Server-paginated sales list — does not require full ledger hydration.
  */
 export function usePaginatedSales(limit = DEFAULT_PAGE_SIZE) {
-  const { sales, ready } = useStore();
-  const [page, setPage] = useState(1);
-
-  const total = sales.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-
-  const pageSales = useMemo(() => {
-    const start = (page - 1) * limit;
-    return sales.slice(start, start + limit);
-  }, [sales, page, limit]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  const result = useServerPaginated<Sale>({
+    path: "/sales",
+    limit,
+    mapItem: (raw) => mapApiSale(raw as ApiBootstrap["sales"][number]),
+  });
 
   return {
-    sales: pageSales,
-    loading: !ready,
-    error: null as string | null,
-    page,
-    setPage,
-    total,
-    totalPages,
-    limit,
-    refetch: async () => {},
+    sales: result.items,
+    loading: result.loading,
+    error: result.error,
+    page: result.page,
+    setPage: result.setPage,
+    total: result.total,
+    totalPages: result.totalPages,
+    limit: result.limit,
+    refetch: result.refetch,
   };
 }

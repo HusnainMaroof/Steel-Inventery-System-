@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { computeProfit, SaleForProfit } from "../domain/profit";
 import { landedCostPerUnit, saleGrandTotal } from "../domain/money";
@@ -68,10 +69,31 @@ export class ReportsService {
       },
     });
 
-    // Source purchases may predate the report period. COGS must still use
-    // their landed cost instead of silently becoming zero.
+    const productIdsInSales = [
+      ...new Set(sales.flatMap((s) => s.lines.map((l) => l.productId))),
+    ];
+    const purchaseIdsFromLines = [
+      ...new Set(
+        sales.flatMap((s) =>
+          s.lines.map((l) => l.purchaseId).filter((id): id is string => Boolean(id)),
+        ),
+      ),
+    ];
     const costPurchases = await this.prisma.purchase.findMany({
-      where: { businessId, date: { lte: period.to } },
+      where: {
+        businessId,
+        date: { lte: period.to },
+        ...(productId
+          ? { lines: { some: { productId } } }
+          : productIdsInSales.length
+            ? {
+                OR: [
+                  { id: { in: purchaseIdsFromLines } },
+                  { lines: { some: { productId: { in: productIdsInSales } } } },
+                ],
+              }
+            : {}),
+      },
       include: { lines: true },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     });
@@ -146,19 +168,29 @@ export class ReportsService {
       where: { businessId, ...(productId ? { id: productId } : {}) },
       select: { id: true, name: true, unit: true },
     });
-    const allTx = await this.prisma.inventoryTransaction.findMany({
-      where: { businessId, ...(productId ? { productId } : {}), date: { lte: period.to } },
-      select: { productId: true, qty: true, date: true },
-    });
-    const openingBy = new Map<string, number>();
-    const closingBy = new Map<string, number>();
-    for (const t of allTx) {
-      const q = Number(t.qty);
-      closingBy.set(t.productId, (closingBy.get(t.productId) ?? 0) + q);
-      if (t.date < period.from) {
-        openingBy.set(t.productId, (openingBy.get(t.productId) ?? 0) + q);
-      }
-    }
+    const productFilter = productId
+      ? Prisma.sql`AND "productId" = ${productId}`
+      : Prisma.empty;
+    const [openingRows, closingRows] = await Promise.all([
+      this.prisma.$queryRaw<{ productId: string; qty: string }[]>`
+        SELECT "productId", COALESCE(SUM(qty), 0)::text AS qty
+        FROM "InventoryTransaction"
+        WHERE "businessId" = ${businessId}
+          AND date < ${period.from}
+          ${productFilter}
+        GROUP BY "productId"
+      `,
+      this.prisma.$queryRaw<{ productId: string; qty: string }[]>`
+        SELECT "productId", COALESCE(SUM(qty), 0)::text AS qty
+        FROM "InventoryTransaction"
+        WHERE "businessId" = ${businessId}
+          AND date <= ${period.to}
+          ${productFilter}
+        GROUP BY "productId"
+      `,
+    ]);
+    const openingBy = new Map(openingRows.map((r) => [r.productId, Number(r.qty)]));
+    const closingBy = new Map(closingRows.map((r) => [r.productId, Number(r.qty)]));
     const stock = products.map((p) => ({
       productId: p.id,
       productName: p.name,
@@ -168,7 +200,7 @@ export class ReportsService {
     }));
 
     // ---- dues (balances are derived, never stored — §27) ----
-    const [invoiceTotals, invoicePaid, purchasesAll] = await Promise.all([
+    const [invoiceTotals, invoicePaid, supplierDueRows] = await Promise.all([
       this.prisma.invoice.aggregate({
         where: { businessId },
         _sum: { total: true },
@@ -177,67 +209,83 @@ export class ReportsService {
         where: { businessId },
         _sum: { paid: true },
       }),
-      this.prisma.purchase.findMany({
-        where: { businessId },
-        select: {
-          paid: true,
-          lines: { select: { qty: true, rate: true } },
-        },
-      }),
+      this.prisma.$queryRaw<{ due: string }[]>`
+        SELECT COALESCE(SUM(
+          GREATEST(
+            0,
+            COALESCE((
+              SELECT SUM(pl."qty" * pl."rate")
+              FROM "PurchaseLine" pl
+              WHERE pl."purchaseId" = p."id"
+            ), 0) - p."paid"
+          )
+        ), 0)::text AS due
+        FROM "Purchase" p
+        WHERE p."businessId" = ${businessId}
+      `,
     ]);
     const customerDue = Math.max(
       0,
       Number(invoiceTotals._sum.total ?? 0) - Number(invoicePaid._sum.paid ?? 0),
     );
-    const supplierDue = purchasesAll.reduce((sum, p) => {
-      const goods = p.lines.reduce((s, l) => s + Number(l.qty) * Number(l.rate), 0);
-      return sum + Math.max(0, goods - Number(p.paid));
-    }, 0);
+    const supplierDue = Number(supplierDueRows[0]?.due ?? 0);
 
     // ---- cash ----
-    const paymentsInRange = await this.prisma.payment.findMany({
-      where: { businessId, date: { gte: period.from, lte: period.to } },
-    });
-    const cashReceived = paymentsInRange
-      .filter((p) => p.type === "CUSTOMER")
-      .reduce((s, p) => s + Number(p.amount), 0);
-    const cashPaid = paymentsInRange
-      .filter((p) => p.type === "SUPPLIER")
-      .reduce((s, p) => s + Number(p.amount), 0);
+    const [customerCash, supplierCash] = await Promise.all([
+      this.prisma.payment.aggregate({
+        where: {
+          businessId,
+          type: "CUSTOMER",
+          date: { gte: period.from, lte: period.to },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.payment.aggregate({
+        where: {
+          businessId,
+          type: "SUPPLIER",
+          date: { gte: period.from, lte: period.to },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+    const cashReceived = Number(customerCash._sum.amount ?? 0);
+    const cashPaid = Number(supplierCash._sum.amount ?? 0);
     const expensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const cashInHand = cashReceived - cashPaid - expensesTotal;
 
     // ---- business value = remaining stock valuation + customer due + cash ----
-    const allPurchaseLines = await this.prisma.purchaseLine.findMany({
-      where: { purchase: { businessId } },
-      select: { productId: true, qty: true, rate: true },
-    });
-    const purchasesForValuation = await this.prisma.purchase.findMany({
-      where: { businessId },
-      select: { transport: true, loading: true, labour: true, otherCost: true },
-    });
-    const weight = new Map<string, { qty: number; value: number }>();
-    for (const line of allPurchaseLines) {
-      const goods = Number(line.qty) * Number(line.rate);
-      const w = weight.get(line.productId) ?? { qty: 0, value: 0 };
-      w.qty += Number(line.qty);
-      w.value += goods;
-      weight.set(line.productId, w);
-    }
-    // charges counted once per purchase, then spread by goods share
-    const totalCharges = purchasesForValuation.reduce(
-      (sum, p) =>
-        sum +
-        Number(p.transport) +
-        Number(p.loading) +
-        Number(p.labour) +
-        Number(p.otherCost),
-      0,
+    const [lineWeights, chargeTotals] = await Promise.all([
+      this.prisma.$queryRaw<{ productId: string; qty: string; goods: string }[]>`
+        SELECT pl."productId",
+          COALESCE(SUM(pl.qty), 0)::text AS qty,
+          COALESCE(SUM(pl.qty * pl.rate), 0)::text AS goods
+        FROM "PurchaseLine" pl
+        INNER JOIN "Purchase" p ON p.id = pl."purchaseId"
+        WHERE p."businessId" = ${businessId}
+        GROUP BY pl."productId"
+      `,
+      this.prisma.$queryRaw<{ totalCharges: string; totalGoods: string }[]>`
+        SELECT
+          COALESCE(SUM(p.transport + p.loading + p.labour + p."otherCost"), 0)::text AS "totalCharges",
+          COALESCE((
+            SELECT SUM(pl.qty * pl.rate)
+            FROM "PurchaseLine" pl
+            INNER JOIN "Purchase" p2 ON p2.id = pl."purchaseId"
+            WHERE p2."businessId" = ${businessId}
+          ), 0)::text AS "totalGoods"
+        FROM "Purchase" p
+        WHERE p."businessId" = ${businessId}
+      `,
+    ]);
+    const weight = new Map(
+      lineWeights.map((row) => [
+        row.productId,
+        { qty: Number(row.qty), value: Number(row.goods) },
+      ]),
     );
-    const totalGoods = allPurchaseLines.reduce(
-      (sum, l) => sum + Number(l.qty) * Number(l.rate),
-      0,
-    );
+    const totalCharges = Number(chargeTotals[0]?.totalCharges ?? 0);
+    const totalGoods = Number(chargeTotals[0]?.totalGoods ?? 0);
     const remainingValuation = products.reduce((sum, p) => {
       const w = weight.get(p.id);
       if (!w || w.qty <= 0) return sum;
@@ -273,9 +321,15 @@ export class ReportsService {
   private periodOf(input: ProfitReportInput): Period {
     const now = new Date();
     if (input.mode === "range" && (input.from || input.to)) {
+      const from = input.from ? new Date(input.from) : new Date("2000-01-01");
+      const to = input.to ? new Date(input.to) : now;
+      const days = (to.getTime() - from.getTime()) / 86_400_000;
+      if (days > 731) {
+        throw new BadRequestException("Report date range cannot exceed two years");
+      }
       return {
-        from: input.from ? new Date(input.from) : new Date("2000-01-01"),
-        to: input.to ? new Date(input.to) : now,
+        from,
+        to,
         label: `${input.from ?? "start"} → ${input.to ?? "today"}`,
       };
     }

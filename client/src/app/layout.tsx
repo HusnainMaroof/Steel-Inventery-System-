@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { StoreProvider } from "@/lib/store";
+import { ServerStatusMonitor } from "@/components/ServerStatusMonitor";
 import Shell from "@/components/Shell";
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <StoreProvider>
+            <ServerStatusMonitor />
             <Shell>{children}</Shell>
           </StoreProvider>
         </AuthProvider>

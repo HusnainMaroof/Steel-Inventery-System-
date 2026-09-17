@@ -2,7 +2,7 @@ import "server-only";
 import { fetchWithTimeout, isTimeoutError } from "../fetch-with-timeout";
 import { getSessionToken } from "./session";
 import type { TradexRole, TradexUser } from "../auth-types";
-import { sanitizeAccess, type StaffPage } from "../staff-access";
+import { sanitizeAccess, sanitizePlanPages, type StaffPage } from "../staff-access";
 
 export type { TradexRole, TradexUser, StaffPage };
 
@@ -99,6 +99,7 @@ export function toPublicUser(raw: {
   businessSlug?: string;
   title?: string | null;
   access?: string[];
+  planPages?: string[];
   business?: { name: string; slug?: string } | null;
 }): TradexUser {
   return {
@@ -108,6 +109,7 @@ export function toPublicUser(raw: {
     role: raw.role,
     title: raw.title ?? null,
     access: sanitizeAccess(raw.access),
+    planPages: sanitizePlanPages(raw.planPages),
     businessId: raw.businessId,
     businessName: raw.businessName ?? raw.business?.name ?? "",
     businessSlug: raw.businessSlug ?? raw.business?.slug ?? "",

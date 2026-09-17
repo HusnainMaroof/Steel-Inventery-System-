@@ -144,6 +144,7 @@ export interface StockCheck {
   date: string; // ISO yyyy-mm-dd
   productId: string;
   physicalQty: number;
+  systemQty: number;
   note?: string;
 }
 

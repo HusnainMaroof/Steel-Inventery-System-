@@ -17,6 +17,10 @@ export const LIMITS = {
   /** Attribute snapshot keys per line. */
   MAX_ATTRIBUTE_KEYS: 20,
   MAX_ATTRIBUTE_VALUE_LEN: 120,
+  /** Default list page size. */
+  DEFAULT_PAGE_SIZE: 50,
+  /** Maximum records per API page request. */
+  MAX_PAGE_SIZE: 100,
 } as const;
 
 import { BadRequestException } from "@nestjs/common";

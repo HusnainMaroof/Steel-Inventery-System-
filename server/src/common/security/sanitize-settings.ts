@@ -3,6 +3,7 @@ import { LIMITS } from "./limits";
 import { sanitizeOptionalText, sanitizeText } from "./sanitize-text";
 
 const LOGO_RE = /^data:image\/(png|jpeg|webp);base64,[a-zA-Z0-9+/=]+$/;
+const LOGO_URL_RE = /^https:\/\/res\.cloudinary\.com\/[a-z0-9_-]+\/image\/upload\/.+/i;
 
 export type SanitizedUiSettings = {
   showOptionalDetails: boolean;
@@ -13,6 +14,7 @@ export type SanitizedUiSettings = {
   invoiceName: string;
   invoiceNote: string;
   logoDataUrl: string;
+  logoUrl: string;
 };
 
 export function sanitizeUiSettings(raw: Record<string, unknown>): SanitizedUiSettings {
@@ -26,6 +28,17 @@ export function sanitizeUiSettings(raw: Record<string, unknown>): SanitizedUiSet
       throw new BadRequestException(
         "Logo must be a PNG, JPEG, or WebP image encoded as a data URL",
       );
+    }
+  }
+
+  const logoUrl =
+    typeof raw.logoUrl === "string" ? raw.logoUrl.trim() : "";
+  if (logoUrl) {
+    if (logoUrl.length > 500) {
+      throw new BadRequestException("Logo URL is too long");
+    }
+    if (!LOGO_URL_RE.test(logoUrl)) {
+      throw new BadRequestException("Logo URL must be a valid Cloudinary image URL");
     }
   }
 
@@ -52,5 +65,6 @@ export function sanitizeUiSettings(raw: Record<string, unknown>): SanitizedUiSet
       500,
     ) ?? "",
     logoDataUrl: logo,
+    logoUrl,
   };
 }

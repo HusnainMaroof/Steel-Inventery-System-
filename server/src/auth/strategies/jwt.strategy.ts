@@ -10,6 +10,8 @@ import { ConfigService } from "../../config/config.service";
 import type { JwtPayload } from "../../common/types/jwt-payload";
 import { PrismaService } from "../../prisma/prisma.service";
 import { slugifyName } from "../../common/slug";
+import { sanitizePlanPages } from "../../common/panel-access";
+import { sanitizeAccess } from "../../common/staff-access";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
@@ -27,21 +29,29 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     if (!payload.sub || !payload.businessId) {
       throw new UnauthorizedException();
     }
+    if (payload.tokenVersion === undefined) {
+      throw new UnauthorizedException();
+    }
     const user = await this.prisma.user.findFirst({
       where: {
         id: payload.sub,
         businessId: payload.businessId,
         role: payload.role,
         active: true,
+        tokenVersion: payload.tokenVersion,
       },
       select: {
         id: true,
+        access: true,
+        tokenVersion: true,
         business: {
           select: {
             slug: true,
-            subscriptionPlan: true,
             subscriptionStatus: true,
             subscriptionEndsAt: true,
+            subscriptionPlanDef: {
+              select: { billingCycle: true, allowedPages: true },
+            },
           },
         },
       },
@@ -54,7 +64,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
       payload.role !== "SUPERADMIN" &&
       user.business &&
       !isSubscriptionActive({
-        subscriptionPlan: user.business.subscriptionPlan,
+        billingCycle: user.business.subscriptionPlanDef?.billingCycle,
         subscriptionStatus: user.business.subscriptionStatus,
         subscriptionEndsAt: user.business.subscriptionEndsAt,
       })
@@ -63,6 +73,14 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         "This business subscription has expired. Contact the platform administrator.",
       );
     }
-    return payload;
+    const planPages = sanitizePlanPages(
+      user.business?.subscriptionPlanDef?.allowedPages,
+    );
+    return {
+      ...payload,
+      tokenVersion: user.tokenVersion,
+      access: sanitizeAccess(user.access),
+      planPages,
+    };
   }
 }

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { AuditService } from "../common/audit/audit.service";
 import { assertMoney, assertQty, LIMITS } from "../common/security/limits";
 import {
   sanitizeAttributeSnapshot,
@@ -23,14 +24,17 @@ export function replacementStockShortage(
 
 @Injectable()
 export class PurchasesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * §8/§12: purchase + lines + inventory ledger rows are created inside one
    * PostgreSQL transaction. Supplier payable is derived (goods − paid), so
    * nothing else needs updating.
    */
-  async create(businessId: string, dto: CreatePurchaseDto) {
+  async create(businessId: string, dto: CreatePurchaseDto, actorId?: string) {
     if (dto.lines.length === 0) {
       throw new BadRequestException("A purchase needs at least one line");
     }
@@ -149,6 +153,15 @@ export class PurchasesService {
         });
       }
 
+      await this.audit.logTx(tx, {
+        businessId,
+        actorId: actorId ?? null,
+        action: "purchase.created",
+        entityType: "purchase",
+        entityId: purchase.id,
+        metadata: { supplierId: dto.supplierId, lineCount: dto.lines.length },
+      });
+
       return purchase;
     });
   }
@@ -186,7 +199,7 @@ export class PurchasesService {
     return purchase;
   }
 
-  async update(businessId: string, id: string, dto: UpdatePurchaseDto) {
+  async update(businessId: string, id: string, dto: UpdatePurchaseDto, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.purchase.findFirst({
         where: { id, businessId },
@@ -252,11 +265,18 @@ export class PurchasesService {
         include: { lines: true },
       });
       await this.createMovements(tx, businessId, purchase);
+      await this.audit.logTx(tx, {
+        businessId,
+        actorId: actorId ?? null,
+        action: "purchase.updated",
+        entityType: "purchase",
+        entityId: purchase.id,
+      });
       return purchase;
     });
   }
 
-  async remove(businessId: string, id: string) {
+  async remove(businessId: string, id: string, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
       const purchase = await tx.purchase.findFirst({
         where: { id, businessId },
@@ -274,6 +294,13 @@ export class PurchasesService {
         where: { businessId, referenceType: "PURCHASE", referenceId: id },
       });
       await tx.purchase.delete({ where: { id } });
+      await this.audit.logTx(tx, {
+        businessId,
+        actorId: actorId ?? null,
+        action: "purchase.deleted",
+        entityType: "purchase",
+        entityId: id,
+      });
       return { deleted: true, purchaseId: id };
     });
   }

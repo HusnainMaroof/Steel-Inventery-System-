@@ -1,11 +1,10 @@
-import { SubscriptionPlan } from "@prisma/client";
 import {
   ArrayMaxSize,
   IsArray,
   IsEmail,
-  IsEnum,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   MinLength,
 } from "class-validator";
@@ -30,12 +29,17 @@ export class CreateOwnerDto {
   businessName: string;
 
   @IsOptional()
-  @IsEnum(SubscriptionPlan)
-  subscriptionPlan?: SubscriptionPlan;
+  @IsString()
+  subscriptionPlanId?: string;
 
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   @ArrayMaxSize(10)
   templateIds?: string[];
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["https"] })
+  @MaxLength(500)
+  logoUrl?: string;
 }

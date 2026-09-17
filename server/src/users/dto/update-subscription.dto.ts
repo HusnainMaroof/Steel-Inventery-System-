@@ -1,16 +1,16 @@
-import { SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
-import { IsEnum, IsIn, IsOptional, IsString } from "class-validator";
+import { SubscriptionStatus } from "@prisma/client";
+import { IsIn, IsOptional, IsString } from "class-validator";
 
 export class UpdateSubscriptionDto {
   @IsOptional()
-  @IsEnum(SubscriptionPlan)
-  plan?: SubscriptionPlan;
+  @IsString()
+  planId?: string;
 
   @IsOptional()
   @IsIn(["ACTIVE", "EXPIRED", "CANCELLED", "PENDING"])
   status?: SubscriptionStatus;
 
-  /** Extend or set expiry — ISO date (yyyy-mm-dd). Ignored for LIFETIME. */
+  /** Extend or set expiry — ISO date (yyyy-mm-dd). Ignored for lifetime plans. */
   @IsOptional()
   @IsString()
   endsAt?: string;

@@ -1,16 +1,8 @@
 export type TradexRole = "SUPERADMIN" | "ADMIN" | "SUBADMIN";
 
-export type StaffPage =
-  | "dashboard"
-  | "purchases"
-  | "products"
-  | "inventory"
-  | "sales"
-  | "customers"
-  | "suppliers"
-  | "payments"
-  | "expenses"
-  | "reports";
+import type { BusinessPanelPage, StaffPage } from "./staff-access";
+
+export type { StaffPage, BusinessPanelPage };
 
 export type TradexUser = {
   id: string;
@@ -19,6 +11,7 @@ export type TradexUser = {
   role: TradexRole;
   title: string | null;
   access: StaffPage[];
+  planPages: BusinessPanelPage[];
   businessId: string;
   businessName: string;
   businessSlug: string;

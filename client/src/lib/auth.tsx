@@ -40,6 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch("/api/auth/me", { cache: "no-store" });
       if (!res.ok) {
+        if (res.status === 401) {
+          const { clearSessionAction } = await import("@/app/actions/auth");
+          await clearSessionAction();
+        }
         setUser(null);
         return;
       }

@@ -59,14 +59,17 @@ export class InventoryService {
     });
   }
 
-  async lots(businessId: string) {
+  async lots(businessId: string, skip: number, take: number) {
+    const where = { businessId };
     const purchases = await this.prisma.purchase.findMany({
-      where: { businessId },
+      where,
       include: {
         supplier: { select: { name: true } },
         lines: true,
       },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      skip,
+      take,
     });
     const consumed = await this.prisma.saleLine.groupBy({
       by: ["purchaseId", "productId", "variantId"],
@@ -124,26 +127,38 @@ export class InventoryService {
     });
   }
 
-  movements(
+  async lotsCount(businessId: string) {
+    return this.prisma.purchase.count({ where: { businessId } });
+  }
+
+  async movements(
     businessId: string,
+    skip: number,
+    take: number,
     filter: { productId?: string; from?: string; to?: string },
   ) {
-    return this.prisma.inventoryTransaction.findMany({
-      where: {
-        businessId,
-        ...(filter.productId ? { productId: filter.productId } : {}),
-        ...(filter.from || filter.to
-          ? {
-              date: {
-                ...(filter.from ? { gte: new Date(filter.from) } : {}),
-                ...(filter.to ? { lte: new Date(filter.to) } : {}),
-              },
-            }
-          : {}),
-      },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: 500,
-    });
+    const where = {
+      businessId,
+      ...(filter.productId ? { productId: filter.productId } : {}),
+      ...(filter.from || filter.to
+        ? {
+            date: {
+              ...(filter.from ? { gte: new Date(filter.from) } : {}),
+              ...(filter.to ? { lte: new Date(filter.to) } : {}),
+            },
+          }
+        : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.inventoryTransaction.findMany({
+        where,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        skip,
+        take,
+      }),
+      this.prisma.inventoryTransaction.count({ where }),
+    ]);
+    return [items, total] as const;
   }
 
   /** Manual stock correction — recorded as an ADJUSTMENT ledger row. */
