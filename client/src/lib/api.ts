@@ -1,5 +1,7 @@
 "use client";
 
+import { fetchWithTimeout, isTimeoutError } from "./fetch-with-timeout";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -7,6 +9,15 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+const REPORT_TIMEOUT_MS = 60_000;
+
+function timeoutForPath(path: string): number {
+  if (path.includes("/reports/")) return REPORT_TIMEOUT_MS;
+  if (path.includes("/ledger/bootstrap")) return 45_000;
+  return DEFAULT_TIMEOUT_MS;
 }
 
 export async function apiFetch<T>(
@@ -18,11 +29,22 @@ export async function apiFetch<T>(
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`/api/tradex${path}`, {
-    ...init,
-    headers,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `/api/tradex${path}`,
+      { ...init, headers, cache: "no-store" },
+      timeoutForPath(path),
+    );
+  } catch (err) {
+    if (isTimeoutError(err)) {
+      throw new ApiError(
+        err instanceof Error ? err.message : "Request timed out",
+        504,
+      );
+    }
+    throw new ApiError("Cannot reach the server. Check your connection.", 503);
+  }
   const body = (await response.json().catch(() => null)) as
     | { message?: string }
     | T
@@ -30,8 +52,10 @@ export async function apiFetch<T>(
   if (!response.ok) {
     throw new ApiError(
       body && typeof body === "object" && "message" in body && body.message
-        ? body.message
-        : "Request failed",
+        ? String(body.message)
+        : response.status === 504
+          ? "The server took too long to respond. Try again."
+          : "Request failed",
       response.status,
     );
   }

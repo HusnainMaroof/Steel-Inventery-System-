@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
-import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
+import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
 import type { Sale } from "@/lib/types";
@@ -15,7 +15,7 @@ type DateGroup = {
 };
 
 export default function CustomersPage() {
-  const { customers, sales, salePaid, attributeDefs, addCustomer, deleteCustomer } = useStore();
+  const { customers, sales, salePaid, attributeDefs, addCustomer, deleteCustomer, isPending } = useStore();
   const activeCustomers = customers.filter((customer) => customer.active !== false);
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const { open, onOpen, onClose } = useToggle();
@@ -67,7 +67,7 @@ export default function CustomersPage() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || isPending("customer:create")) return;
     await addCustomer({ name: form.name.trim(), shop: form.shop.trim(), phone: form.phone.trim() });
     setForm({ name: "", shop: "", phone: "" });
     onClose();
@@ -315,7 +315,9 @@ export default function CustomersPage() {
           <div><label>Phone</label><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" /></div>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={!form.name.trim()}>Add Customer</button>
+            <BusyButton type="submit" loading={isPending("customer:create")} disabled={!form.name.trim()}>
+              Add Customer
+            </BusyButton>
           </div>
         </form>
       </Modal>
@@ -327,6 +329,7 @@ export default function CustomersPage() {
         onConfirm={confirmDeleteCustomer}
         title="Delete this customer?"
         confirmLabel="Delete Customer"
+        loading={deleteTarget ? isPending(`customer:delete:${deleteTarget.id}`) : false}
       >
         {deleteTarget && (() => {
           const t = deleteTarget;

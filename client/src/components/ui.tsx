@@ -213,6 +213,53 @@ export function StaggerItem({
   );
 }
 
+/** Inline spinner for buttons — label stays visible while loading */
+export function ButtonSpinner({ className = "" }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full border-2 border-current border-r-transparent opacity-90 animate-spin ${className}`}
+    />
+  );
+}
+
+/** Primary/ghost button that disables and shows a spinner while busy (no label swap) */
+export function BusyButton({
+  loading = false,
+  disabled,
+  children,
+  className = "",
+  type = "button",
+  form,
+  onClick,
+  variant = "primary",
+}: {
+  loading?: boolean;
+  disabled?: boolean;
+  children: ReactNode;
+  className?: string;
+  type?: "button" | "submit";
+  form?: string;
+  onClick?: () => void;
+  variant?: "primary" | "ghost";
+}) {
+  const busy = Boolean(loading);
+  const base = variant === "ghost" ? "btn-ghost" : "btn-primary";
+  return (
+    <button
+      type={type}
+      form={form}
+      onClick={onClick}
+      disabled={disabled || busy}
+      aria-busy={busy}
+      className={`${base} inline-flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none ${className}`}
+    >
+      {busy ? <ButtonSpinner /> : null}
+      <span>{children}</span>
+    </button>
+  );
+}
+
 export function PageTitle({
   title,
   sub,
@@ -371,29 +418,33 @@ export function ConfirmModal({
   onConfirm,
   title = "Are you sure?",
   confirmLabel = "Delete",
+  loading = false,
   children,
 }: {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title?: string;
   confirmLabel?: string;
+  loading?: boolean;
   children: ReactNode;
 }) {
+  const busy = Boolean(loading);
   return (
-    <Modal open={open} onClose={onClose} title={title}>
+    <Modal open={open} onClose={busy ? () => undefined : onClose} title={title}>
       <div className="mb-6">{children}</div>
       <div className="flex justify-end gap-3">
-        <button type="button" className="btn-ghost" onClick={onClose}>
+        <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>
           Cancel
         </button>
-        <button
+        <BusyButton
           type="button"
           onClick={onConfirm}
-          className="btn-primary !bg-[#a12b1f] hover:!bg-[#8a241a]"
+          loading={busy}
+          className="!bg-[#a12b1f] hover:!bg-[#8a241a]"
         >
           {confirmLabel}
-        </button>
+        </BusyButton>
       </div>
     </Modal>
   );
@@ -554,5 +605,71 @@ export function EmptyState({
       )}
       {action && <div className="mt-4">{action}</div>}
     </motion.div>
+  );
+}
+
+export function ErrorState({
+  title,
+  message,
+  onRetry,
+}: {
+  title: string;
+  message?: string | null;
+  onRetry?: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center text-center px-6 py-16 max-w-md mx-auto"
+    >
+      <p className="text-base font-semibold text-[#a12b1f]">{title}</p>
+      {message && (
+        <p className="text-sm text-neutral-600 mt-2 leading-relaxed">{message}</p>
+      )}
+      {onRetry && (
+        <button type="button" className="btn-primary mt-5" onClick={onRetry}>
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function PaginationBar({
+  page,
+  pages,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pages: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (total === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-neutral-200">
+      <p className="text-xs text-neutral-500 tabular-nums">
+        Page {page} of {pages} · {total} total
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className="btn-ghost !py-1.5 !px-3 text-xs"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          className="btn-ghost !py-1.5 !px-3 text-xs"
+          disabled={page >= pages}
+          onClick={() => onPageChange(page + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
   );
 }

@@ -4,12 +4,14 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
 } from "class-validator";
 import { PaymentMethod } from "@prisma/client";
 import { IsCuid } from "../../common/decorators/is-cuid.decorator";
+import { LIMITS } from "../../common/security/limits";
 
 export class CreatePaymentDto {
   @IsDateString()
@@ -28,6 +30,7 @@ export class CreatePaymentDto {
 
   @IsNumber()
   @Min(0.01)
+  @Max(LIMITS.MAX_PAYMENT_AMOUNT)
   amount: number;
 
   @IsOptional()

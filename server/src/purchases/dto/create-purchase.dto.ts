@@ -1,10 +1,12 @@
 import {
+  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -12,6 +14,7 @@ import {
 } from "class-validator";
 import { Type } from "class-transformer";
 import { IsCuid } from "../../common/decorators/is-cuid.decorator";
+import { LIMITS } from "../../common/security/limits";
 
 export class CreatePurchaseLineDto {
   @IsCuid()
@@ -37,6 +40,7 @@ export class CreatePurchaseLineDto {
 
   @IsNumber()
   @Min(0.001)
+  @Max(LIMITS.MAX_QTY)
   qty: number;
 
   @IsString()
@@ -46,6 +50,7 @@ export class CreatePurchaseLineDto {
 
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   rate: number;
 
   /** Planned selling price recorded at purchase time. */
@@ -72,6 +77,7 @@ export class CreatePurchaseDto {
   supplierId: string;
 
   @IsArray()
+  @ArrayMaxSize(LIMITS.MAX_LINES_PER_DOC)
   @ValidateNested({ each: true })
   @Type(() => CreatePurchaseLineDto)
   lines: CreatePurchaseLineDto[];
@@ -84,26 +90,31 @@ export class CreatePurchaseDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   transport?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   loading?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   labour?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   otherCost?: number;
 
   /** Amount paid to the mill now — can never exceed the goods total. */
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   paid?: number;
 }

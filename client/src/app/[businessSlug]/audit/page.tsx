@@ -9,7 +9,12 @@
  */
 
 import { useMemo } from "react";
-import { useStore, steelAmount, saleGrandTotal } from "@/lib/store";
+import { useStore, saleGrandTotal } from "@/lib/store";
+import {
+  groupPurchasesByParent,
+  purchaseDocumentTotals,
+  steelAmount,
+} from "@/lib/purchase-utils";
 import { buildProfitReport } from "@/lib/profitReport";
 import { Page, PageTitle } from "@/components/ui";
 
@@ -103,15 +108,16 @@ export default function AuditPage() {
     let varOk = true;
     let moveOk = true;
     let moveTotal = 0;
-    const moveByPurchase = new Map<string, number>();
+    const moveByPurchaseRow = new Map<string, number>();
     const moveBySaleLine = new Map<string, number>();
     for (const m of stockMovements) {
-      if (m.type === "PURCHASE_RECEIPT" && m.purchaseId) moveByPurchase.set(m.purchaseId, (moveByPurchase.get(m.purchaseId) ?? 0) + m.qty);
+      if (m.type === "PURCHASE_RECEIPT" && m.id.startsWith("mv-p-"))
+        moveByPurchaseRow.set(m.id.slice(5), m.qty);
       if (m.type === "SALE" && m.saleId && m.saleLineIndex !== undefined)
         moveBySaleLine.set(`${m.saleId}:${m.saleLineIndex}`, (moveBySaleLine.get(`${m.saleId}:${m.saleLineIndex}`) ?? 0) + m.qty);
       moveTotal += m.qty;
     }
-    for (const p of purchases) if (Math.abs((moveByPurchase.get(p.id) ?? 0) - p.qty) > eps) moveOk = false;
+    for (const p of purchases) if (Math.abs((moveByPurchaseRow.get(p.id) ?? 0) - p.qty) > eps) moveOk = false;
     for (const s of sales)
       s.lines.forEach((l, i) => {
         if (Math.abs((moveBySaleLine.get(`${s.id}:${i}`) ?? 0) + l.qty) > eps) moveOk = false;
@@ -160,15 +166,12 @@ export default function AuditPage() {
     L.push("== INVOICES / CUSTOMERS ==");
     let invoiceTotalsOk = true;
     for (const s of sales) {
-      const sub = s.lines.reduce((a, l) => a + l.qty * l.rate, 0);
-      const disc = sub * ((s.discountPct ?? 0) / 100);
-      const grand = (sub - disc) * (1 + (s.taxPct ?? 0) / 100);
+      const grand = saleGrandTotal(s);
       const paid = salePaid(s.id);
-      if (Math.abs(grand - saleGrandTotal(s)) > eps || paid < -eps || paid > grand + eps)
-        invoiceTotalsOk = false;
+      if (paid < -eps || paid > grand + eps) invoiceTotalsOk = false;
       check(
         `${s.invoiceNo}: grand ${money(grand)} = paid ${money(paid)} + due ${money(Math.max(0, grand - paid))} (${s.customerId})`,
-        Math.abs(grand - saleGrandTotal(s)) < eps && paid >= -eps && paid <= grand + eps
+        paid >= -eps && paid <= grand + eps
       );
     }
     check("All invoice grand totals reconcile", invoiceTotalsOk);
@@ -188,14 +191,21 @@ export default function AuditPage() {
 
     /* ---------- SUPPLIERS ---------- */
     L.push("== SUPPLIERS ==");
-    const millBilled = purchases.reduce((a, p) => a + steelAmount(p), 0);
-    const millPaid = purchases.reduce((a, p) => a + (p.paid ?? 0), 0);
-    const millDue = purchases.reduce((a, p) => a + Math.max(0, steelAmount(p) - (p.paid ?? 0)), 0);
+    let millBilled = 0;
+    let millPaid = 0;
+    let millDue = 0;
+    for (const lines of groupPurchasesByParent(purchases).values()) {
+      const t = purchaseDocumentTotals(lines);
+      millBilled += t.goods;
+      millPaid += t.paid;
+      millDue += t.remaining;
+    }
     check("Mill dues = billed − paid", Math.abs(millBilled - millPaid - millDue) < eps, `${money(millDue)}`);
     const supplierDues = suppliers.reduce((a, s) => a + Math.max(0, supplierBalance(s.id)), 0);
     check("Dashboard mills dues = Σ purchase dues", Math.abs(supplierDues - stats.supplierDues) < eps && Math.abs(supplierDues - millDue) < eps, `${money(supplierDues)}`);
     for (const s of suppliers) {
-      const ownDue = purchases.filter((p) => p.supplierId === s.id).reduce((a, p) => a + Math.max(0, steelAmount(p) - (p.paid ?? 0)), 0);
+      const ownDue = [...groupPurchasesByParent(purchases.filter((p) => p.supplierId === s.id)).values()]
+        .reduce((a, lines) => a + purchaseDocumentTotals(lines).remaining, 0);
       check(`${s.name} due ${money(ownDue)}`, Math.abs(ownDue - Math.max(0, supplierBalance(s.id))) < eps);
     }
     const journalToMills = payments.filter((p) => p.type === "supplier").reduce((a, p) => a + p.amount, 0);

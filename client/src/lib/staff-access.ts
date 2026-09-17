@@ -84,7 +84,7 @@ export function pagesFor(user: Pick<TradexUser, "role" | "access" | "businessSlu
 
 export function homePathFor(user: Pick<TradexUser, "role" | "access" | "businessSlug"> | null | undefined): string {
   if (!user) return "/login";
-  if (user.role === "SUPERADMIN") return "/admin";
+  if (user.role === "SUPERADMIN") return "/admin/overview";
   const first = pagesFor(user)[0];
   return first?.href ?? businessPath(user.businessSlug, "dashboard");
 }

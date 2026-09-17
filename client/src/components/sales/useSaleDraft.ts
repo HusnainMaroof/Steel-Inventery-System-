@@ -253,7 +253,7 @@ export function useSaleDraft() {
     // prefill the quality name from the source lot's purchase quality,
     // falling back to the variant's grade/quality attribute
     const sourcePurchase = source
-      ? purchases.find((p) => p.id === source.purchaseId)
+      ? purchases.find((p) => (p.purchaseId ?? p.id) === source.purchaseId)
       : undefined;
     const gradeAttr = Object.entries(pickVariant.attributes ?? {}).find(([k]) =>
       /grade|quality/i.test(k)

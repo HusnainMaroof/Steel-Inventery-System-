@@ -9,7 +9,7 @@ export async function createSession(token: string): Promise<void> {
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "strict",
     path: "/",
     maxAge: MAX_AGE_SECONDS,
   });

@@ -15,6 +15,8 @@ import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 import { UsersService } from "./users.service";
 import { CreateOwnerDto } from "./dto/create-owner.dto";
 import { UpdateOwnerDto } from "./dto/update-owner.dto";
+import { ApplyTemplatesDto } from "./dto/apply-templates.dto";
+import { UpdateSubscriptionDto } from "./dto/update-subscription.dto";
 
 /** Super Admin: create logins for business owners. Owners cannot self-register. */
 @Controller("owners")
@@ -36,6 +38,22 @@ export class OwnersController {
   @Patch(":id")
   update(@Param("id", ParseIdPipe) id: string, @Body() dto: UpdateOwnerDto) {
     return this.usersService.updateOwner(id, dto);
+  }
+
+  @Patch(":id/subscription")
+  updateSubscription(
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: UpdateSubscriptionDto,
+  ) {
+    return this.usersService.updateOwnerSubscription(id, dto);
+  }
+
+  @Post(":id/templates")
+  applyTemplates(
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: ApplyTemplatesDto,
+  ) {
+    return this.usersService.applyOwnerTemplates(id, dto.templateIds);
   }
 
   @Delete(":id")

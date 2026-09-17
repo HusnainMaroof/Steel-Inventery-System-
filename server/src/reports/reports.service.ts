@@ -168,18 +168,27 @@ export class ReportsService {
     }));
 
     // ---- dues (balances are derived, never stored — §27) ----
-    const invoices = await this.prisma.invoice.findMany({
-      where: { businessId },
-      include: { sale: { select: { customerId: true } } },
-    });
-    const customerDue = invoices.reduce(
-      (sum, i) => sum + Math.max(0, Number(i.total) - Number(i.paid)),
+    const [invoiceTotals, invoicePaid, purchasesAll] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        where: { businessId },
+        _sum: { total: true },
+      }),
+      this.prisma.invoice.aggregate({
+        where: { businessId },
+        _sum: { paid: true },
+      }),
+      this.prisma.purchase.findMany({
+        where: { businessId },
+        select: {
+          paid: true,
+          lines: { select: { qty: true, rate: true } },
+        },
+      }),
+    ]);
+    const customerDue = Math.max(
       0,
+      Number(invoiceTotals._sum.total ?? 0) - Number(invoicePaid._sum.paid ?? 0),
     );
-    const purchasesAll = await this.prisma.purchase.findMany({
-      where: { businessId },
-      include: { lines: true },
-    });
     const supplierDue = purchasesAll.reduce((sum, p) => {
       const goods = p.lines.reduce((s, l) => s + Number(l.qty) * Number(l.rate), 0);
       return sum + Math.max(0, goods - Number(p.paid));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { Page, PageTitle } from "@/components/ui";
+import { BusyButton, Page, PageTitle } from "@/components/ui";
 import { useAuth, type BusinessProfile } from "@/lib/auth";
 import { displayName, roleLabel } from "@/lib/auth-types";
 import { useUiPreferences } from "@/lib/preferences";
@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [invoiceEmail, setInvoiceEmail] = useState(prefs.invoiceEmail);
   const [invoiceNote, setInvoiceNote] = useState(prefs.invoiceNote);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoError, setLogoError] = useState("");
 
@@ -38,17 +39,25 @@ export default function SettingsPage() {
 
   const markDirty = () => setSaved(false);
 
-  const saveShop = (e: FormEvent) => {
+  const saveShop = async (e: FormEvent) => {
     e.preventDefault();
-    patchPrefs({
-      invoiceName: invoiceName.trim(),
-      address: address.trim(),
-      city: city.trim(),
-      phone: phone.trim(),
-      invoiceEmail: invoiceEmail.trim(),
-      invoiceNote: invoiceNote.trim(),
-    });
-    setSaved(true);
+    if (saving) return;
+    setSaving(true);
+    try {
+      await patchPrefs({
+        invoiceName: invoiceName.trim(),
+        address: address.trim(),
+        city: city.trim(),
+        phone: phone.trim(),
+        invoiceEmail: invoiceEmail.trim(),
+        invoiceNote: invoiceNote.trim(),
+      });
+      setSaved(true);
+    } catch {
+      setSaved(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onPickLogo = async (file: File | undefined) => {
@@ -100,14 +109,13 @@ export default function SettingsPage() {
                 className="sr-only"
                 onChange={(e) => void onPickLogo(e.target.files?.[0])}
               />
-              <button
+              <BusyButton
                 type="button"
-                className="btn-primary"
-                disabled={logoBusy}
+                loading={logoBusy}
                 onClick={() => fileRef.current?.click()}
               >
-                {logoBusy ? "Reading…" : prefs.logoDataUrl ? "Change logo" : "Add logo"}
-              </button>
+                {prefs.logoDataUrl ? "Change logo" : "Add logo"}
+              </BusyButton>
               {prefs.logoDataUrl ? (
                 <button
                   type="button"
@@ -203,9 +211,9 @@ export default function SettingsPage() {
             />
           </label>
           <div className="sm:col-span-2 flex items-center gap-3">
-            <button type="submit" className="btn-primary">
+            <BusyButton type="submit" loading={saving}>
               Save bill details
-            </button>
+            </BusyButton>
             {saved ? <p className="text-[13px] text-[#171717]">Saved.</p> : null}
           </div>
         </form>

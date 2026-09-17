@@ -1,12 +1,24 @@
-import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { BadRequestException, Injectable } from "@nestjs/common";
+import { Prisma, Role } from "@prisma/client";
+import { LIMITS } from "../common/security/limits";
+import { sanitizeUiSettings } from "../common/security/sanitize-settings";
 import { PrismaService } from "../prisma/prisma.service";
+
+const staffSelect = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  title: true,
+  access: true,
+  createdAt: true,
+} satisfies Prisma.UserSelect;
 
 @Injectable()
 export class LedgerService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async bootstrap(businessId: string) {
+  async bootstrap(businessId: string, role?: Role) {
     const [
       suppliers,
       customers,
@@ -34,7 +46,11 @@ export class LedgerService {
         include: { lines: true, invoice: true },
         orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       }),
-      this.prisma.payment.findMany({ where: { businessId }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] }),
+      this.prisma.payment.findMany({
+        where: { businessId },
+        include: { allocations: { select: { saleId: true, amount: true } } },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      }),
       this.prisma.expense.findMany({ where: { businessId }, orderBy: { date: "desc" } }),
       this.prisma.stockCheck.findMany({ where: { businessId }, orderBy: { date: "desc" } }),
       this.prisma.product.findMany({ where: { businessId }, orderBy: { createdAt: "asc" } }),
@@ -50,6 +66,20 @@ export class LedgerService {
         where: { businessId },
         include: { locations: { orderBy: { name: "asc" } } },
         orderBy: { name: "asc" },
+      }),
+    ]);
+
+    const [staff, business] = await Promise.all([
+      role === "ADMIN"
+        ? this.prisma.user.findMany({
+            where: { businessId, role: "SUBADMIN", active: true },
+            select: staffSelect,
+            orderBy: { createdAt: "asc" },
+          })
+        : Promise.resolve([]),
+      this.prisma.business.findUniqueOrThrow({
+        where: { id: businessId },
+        select: { settings: true },
       }),
     ]);
 
@@ -70,6 +100,8 @@ export class LedgerService {
       variants,
       warehouses: warehouses.map(({ locations: _locations, ...warehouse }) => warehouse),
       locations: warehouses.flatMap((warehouse) => warehouse.locations),
+      staff,
+      settings: business.settings ?? {},
     };
   }
 
@@ -82,7 +114,12 @@ export class LedgerService {
   }
 
   async savePreferences(businessId: string, data: Record<string, unknown>) {
-    const settings = data as Prisma.InputJsonObject;
+    const sanitized = sanitizeUiSettings(data);
+    const serialized = JSON.stringify(sanitized);
+    if (serialized.length > LIMITS.MAX_SETTINGS_BYTES) {
+      throw new BadRequestException("Settings payload is too large");
+    }
+    const settings = sanitized as Prisma.InputJsonObject;
     const business = await this.prisma.business.update({
       where: { id: businessId },
       data: { settings },

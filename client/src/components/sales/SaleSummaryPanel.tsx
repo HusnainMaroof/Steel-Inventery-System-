@@ -1,5 +1,6 @@
 "use client";
 
+import { BusyButton } from "@/components/ui";
 import { fmtMoney } from "@/lib/format";
 
 const numVal = (n: number) => (n === 0 ? "" : String(n));
@@ -27,6 +28,7 @@ export default function SaleSummaryPanel({
   customerName,
   canSave,
   hideSubmit = false,
+  submitting = false,
 }: {
   subtotal: number;
   discountPct: number;
@@ -50,6 +52,7 @@ export default function SaleSummaryPanel({
   customerName: string;
   canSave: boolean;
   hideSubmit?: boolean;
+  submitting?: boolean;
 }) {
   return (
     <div className="border border-neutral-200 rounded-xl bg-white p-5 xl:sticky xl:top-6">
@@ -169,9 +172,9 @@ export default function SaleSummaryPanel({
 
       {!hideSubmit && (
         <>
-          <button type="submit" className="btn-primary w-full mt-5" disabled={!canSave}>
+          <BusyButton type="submit" className="w-full mt-5" loading={submitting} disabled={!canSave}>
             Save Sale
-          </button>
+          </BusyButton>
           <p className="text-[11px] text-neutral-400 text-center mt-2.5">
             Invoice for {customerName} created on save
           </p>

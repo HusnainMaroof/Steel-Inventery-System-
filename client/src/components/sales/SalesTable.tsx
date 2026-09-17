@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { saleGrandTotal } from "@/lib/store";
-import { ConfirmModal, EmptyState } from "@/components/ui";
+import { saleGrandTotal, useStore } from "@/lib/store";
+import { Skeleton } from "@/components/skeletons";
+import { ConfirmModal, EmptyState, ErrorState, PaginationBar } from "@/components/ui";
 import { fmtMoney, fmtDate, fmtTime, fmtQtyWithUnit } from "@/lib/format";
 
 type AttrRow = { label: string; value: string };
@@ -82,6 +83,13 @@ export default function SalesTable({
   onReceive,
   onDelete,
   onNewSale,
+  loading = false,
+  error = null,
+  onRetry,
+  listTotal,
+  page,
+  totalPages,
+  onPageChange,
 }: {
   sales: {
     id: string;
@@ -114,7 +122,15 @@ export default function SalesTable({
   onReceive: (id: string) => void;
   onDelete: (id: string) => Promise<void>;
   onNewSale: () => void;
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+  listTotal?: number;
+  page?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
 }) {
+  const { isPending } = useStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status>("all");
   const [dateFilter, setDateFilter] = useState("");
@@ -227,7 +243,41 @@ export default function SalesTable({
     </div>
   );
 
-  if (sales.length === 0) {
+  if (error) {
+    return (
+      <ErrorState
+        title="Could not load invoices"
+        message={error}
+        onRetry={onRetry}
+      />
+    );
+  }
+
+  if (loading && sales.length === 0) {
+    return (
+      <div className="panel bg-white overflow-hidden" role="status" aria-label="Loading invoices">
+        <div className="border-b border-neutral-200 px-4 py-3 flex gap-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-3 w-20" />
+          ))}
+        </div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-4 px-4 py-3.5 border-b border-neutral-100 last:border-0"
+          >
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 flex-1 max-w-[180px]" />
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-8 w-8 rounded-md ml-auto" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!loading && sales.length === 0 && (listTotal ?? 0) === 0) {
     return (
       <EmptyState
         emoji={hasInventory ? "🧾" : "🏗️"}
@@ -237,6 +287,8 @@ export default function SalesTable({
       />
     );
   }
+
+  const catalogTotal = listTotal ?? sales.length;
 
   return (
     <>
@@ -285,7 +337,7 @@ export default function SalesTable({
           <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Invoices</span>
           <span className="block text-2xl font-bold tabular-nums text-black mt-1">
             {filteredCount}
-            {hasFilters && <span className="text-sm font-normal text-black/60"> / {sales.length}</span>}
+            {hasFilters && <span className="text-sm font-normal text-black/60"> / {catalogTotal}</span>}
           </span>
         </div>
         <div className="text-right">
@@ -386,6 +438,15 @@ export default function SalesTable({
         </div>
       )}
 
+      {onPageChange && page != null && totalPages != null && listTotal != null && (
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={listTotal}
+          onPageChange={onPageChange}
+        />
+      )}
+
       {/* delete confirm */}
       <ConfirmModal
         open={!!deleteId}
@@ -396,6 +457,7 @@ export default function SalesTable({
         }}
         title="Delete this invoice?"
         confirmLabel="Delete Invoice"
+        loading={deleteId ? isPending(`sale:delete:${deleteId}`) : false}
       >
         {(() => {
           const s = sales.find((x) => x.id === deleteId);

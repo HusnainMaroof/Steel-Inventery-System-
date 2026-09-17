@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { usePaginatedSales } from "@/hooks/use-paginated-sales";
 import { useStore } from "@/lib/store";
 import { fmtMoney } from "@/lib/format";
-import { Page, PageTitle, Modal, useToggle } from "@/components/ui";
+import { BusyButton, Page, PageTitle, Modal, useToggle } from "@/components/ui";
 import SaleDetailModal from "@/components/SaleDetailModal";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import SalesTable from "@/components/sales/SalesTable";
@@ -14,19 +15,20 @@ import { productUsesCategories, resolveDefs } from "@/lib/catalogue";
 import { useUiPreferences } from "@/lib/preferences";
 
 export default function SalesPage() {
-  const { sales, customers, inventory, products, categories, attributeDefs, addSale, addCustomer, deleteSale, salePaid } = useStore();
+  const { sales, customers, inventory, products, categories, attributeDefs, addSale, addCustomer, deleteSale, salePaid, isPending } = useStore();
+  const invoiceList = usePaginatedSales();
   const activeCustomers = customers.filter((customer) => customer.active !== false);
   const api = useSaleDraft();
   const { prefs } = useUiPreferences();
   const [viewId, setViewId] = useState<string | null>(null);
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
-  const [tab, setTab] = useState<"invoices" | "print">(() => {
-    if (typeof window === "undefined") return "invoices";
-    return new URLSearchParams(window.location.search).get("tab") === "print"
-      ? "print"
-      : "invoices";
-  });
+  const [tab, setTab] = useState<"invoices" | "print">("invoices");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "print") {
+      setTab("print");
+    }
+  }, []);
 
   // customer add (the only popup left — a secondary action)
   const { open: newCustOpen, onOpen: onNewCustOpen, onClose: onNewCustClose } = useToggle();
@@ -74,7 +76,7 @@ export default function SalesPage() {
 
   const saveNewCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCust.name.trim()) return;
+    if (!newCust.name.trim() || isPending("customer:create")) return;
     const id = await addCustomer({
       name: newCust.name.trim(),
       shop: newCust.shop.trim(),
@@ -87,7 +89,7 @@ export default function SalesPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave) return;
+    if (!canSave || isPending("sale:create")) return;
     const paying = Number(paidNow) || 0;
     if (paying > grandTotal + 0.001) {
       setPayError(`Amount paid (${fmtMoney(paying)}) can't be more than this invoice's total of ${fmtMoney(grandTotal)}.`);
@@ -208,7 +210,7 @@ export default function SalesPage() {
 
       {tab === "invoices" ? (
         <SalesTable
-          sales={sales}
+          sales={invoiceList.sales}
           customerName={customerName}
           customers={customers}
           hasInventory={api.hasStock}
@@ -216,6 +218,13 @@ export default function SalesPage() {
           categoryNameOf={categoryNameOf}
           attrRowsOf={attrRowsOf}
           salePaid={salePaid}
+          loading={invoiceList.loading}
+          error={invoiceList.error}
+          onRetry={() => void invoiceList.refetch()}
+          listTotal={invoiceList.total}
+          page={invoiceList.page}
+          totalPages={invoiceList.totalPages}
+          onPageChange={invoiceList.setPage}
           onView={(id) => setViewId(id)}
           onReceive={(id) => setPaySaleId(id)}
           onDelete={(id) => deleteSale(id)}
@@ -264,6 +273,7 @@ export default function SalesPage() {
           canSave,
         }}
         itemsCount={api.lines.length}
+        submitting={isPending("sale:create")}
         showOptionalDetails={prefs.showOptionalDetails}
       />
 
@@ -284,9 +294,9 @@ export default function SalesPage() {
           </div>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onNewCustClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={!newCust.name.trim()}>
+            <BusyButton type="submit" loading={isPending("customer:create")} disabled={!newCust.name.trim()}>
               Add Customer
-            </button>
+            </BusyButton>
           </div>
         </form>
       </Modal>

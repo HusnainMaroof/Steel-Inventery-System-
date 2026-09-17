@@ -1,15 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  createStaffAction,
-  listStaffAction,
-  removeStaffAction,
-  updateStaffAction,
-  type StaffAccount,
-} from "@/app/actions/users";
 import { useAuth } from "@/lib/auth";
-import { roleLabel } from "@/lib/auth-types";
+import { useStore } from "@/lib/store";
+import type { StaffMember } from "@/lib/types";
 import {
   accessSummary,
   allStaffPages,
@@ -17,36 +11,28 @@ import {
   STAFF_TITLE_PRESETS,
   type StaffPage,
 } from "@/lib/staff-access";
-import { EmptyState, Modal, Page } from "@/components/ui";
+import { BusyButton, EmptyState, Modal, Page } from "@/components/ui";
 
 export default function StaffPage() {
   const { user } = useAuth();
-  const [staff, setStaff] = useState<StaffAccount[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { staff, removeStaff } = useStore();
   const [addOpen, setAddOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<StaffAccount | null>(null);
+  const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-
-  const refresh = async () => {
-    const result = await listStaffAction();
-    if (!result.ok) return setLoadError(result.error);
-    setStaff(result.staff);
-    setLoadError(null);
-  };
-
-  useEffect(() => {
-    if (user?.role !== "ADMIN") return;
-    void refresh();
-  }, [user?.role]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   if (user?.role !== "ADMIN") return null;
 
   const revoke = async (id: string) => {
     setRemovingId(id);
-    const result = await removeStaffAction(id);
-    setRemovingId(null);
-    if (!result.ok) return setLoadError(result.error);
-    await refresh();
+    setLoadError(null);
+    try {
+      await removeStaff(id);
+    } catch (reason) {
+      setLoadError(reason instanceof Error ? reason.message : "Could not remove staff member");
+    } finally {
+      setRemovingId(null);
+    }
   };
 
   return (
@@ -65,7 +51,7 @@ export default function StaffPage() {
 
       {loadError ? <p role="alert" className="text-sm text-[#a12b1f] mb-4">{loadError}</p> : null}
 
-      {staff.length === 0 && !loadError ? (
+      {staff.length === 0 ? (
         <div className="panel">
           <EmptyState
             emoji="👥"
@@ -81,27 +67,29 @@ export default function StaffPage() {
               <tr>
                 <th>Name</th>
                 <th>Email</th>
-                <th>Role</th>
-                <th>Can open</th>
+                <th>Title</th>
+                <th>Access</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {staff.map((member) => (
                 <tr key={member.id}>
-                  <td className="font-semibold">{member.name}</td>
-                  <td className="font-mono text-[13px]">{member.email}</td>
-                  <td>{roleLabel(member.role, member.title)}</td>
-                  <td className="text-[13px] text-[#171717]/80">{accessSummary(member.access)}</td>
+                  <td className="font-medium">{member.name}</td>
+                  <td>{member.email}</td>
+                  <td>{member.title ?? "—"}</td>
+                  <td className="text-xs text-[#171717]/80">{accessSummary(member.access)}</td>
                   <td className="text-right whitespace-nowrap">
                     <button
-                      className="btn-ghost !py-1.5 !px-3 text-xs mr-1"
+                      type="button"
+                      className="btn-ghost !py-1.5 !px-2.5 !text-xs mr-1"
                       onClick={() => setEditTarget(member)}
                     >
                       Edit
                     </button>
                     <button
-                      className="btn-ghost !py-1.5 !px-3 text-xs"
+                      type="button"
+                      className="btn-ghost !py-1.5 !px-2.5 !text-xs"
                       disabled={removingId === member.id}
                       onClick={() => void revoke(member.id)}
                     >
@@ -115,15 +103,16 @@ export default function StaffPage() {
         </div>
       )}
 
-      <StaffModal open={addOpen} onClose={() => setAddOpen(false)} onSaved={refresh} />
+      <StaffModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSaved={() => setAddOpen(false)}
+      />
       <StaffModal
         open={!!editTarget}
         member={editTarget ?? undefined}
         onClose={() => setEditTarget(null)}
-        onSaved={async () => {
-          await refresh();
-          setEditTarget(null);
-        }}
+        onSaved={() => setEditTarget(null)}
       />
     </Page>
   );
@@ -136,10 +125,11 @@ function StaffModal({
   onSaved,
 }: {
   open: boolean;
-  member?: StaffAccount;
+  member?: StaffMember;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }) {
+  const { addStaff, updateStaff } = useStore();
   const editing = !!member;
   const [form, setForm] = useState({
     name: member?.name ?? "",
@@ -180,18 +170,31 @@ function StaffModal({
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setPending(true);
-    const result = editing
-      ? await updateStaffAction(member!.id, {
+    setError(null);
+    try {
+      if (editing) {
+        await updateStaff(member!.id, {
           name: form.name,
           title: form.title,
           access: form.access,
           password: form.password || undefined,
-        })
-      : await createStaffAction(form);
-    setPending(false);
-    if (!result.ok) return setError(result.error);
-    await onSaved();
-    close();
+        });
+      } else {
+        await addStaff({
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          title: form.title,
+          access: form.access,
+        });
+      }
+      onSaved();
+      close();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save staff member");
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
@@ -269,9 +272,9 @@ function StaffModal({
         </fieldset>
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={pending}>
-            {pending ? "Saving…" : editing ? "Save changes" : "Create staff login"}
-          </button>
+          <BusyButton type="submit" loading={pending}>
+            {editing ? "Save changes" : "Create staff login"}
+          </BusyButton>
         </div>
       </form>
     </Modal>

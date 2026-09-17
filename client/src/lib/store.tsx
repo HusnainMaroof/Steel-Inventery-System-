@@ -6,6 +6,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -27,9 +28,26 @@ import type {
   StockMovementView,
   Supplier,
   Variant,
+  StaffMember,
   Warehouse,
   WarehouseLocation,
 } from "./types";
+import type { StaffPage } from "./staff-access";
+import { createCoalescedRefresh } from "./refresh-coalesce";
+import { purchaseParentId, steelAmount as purchaseSteelAmount } from "./purchase-utils";
+import {
+  round2,
+  saleChargesTotal,
+  saleDiscountAmount,
+  saleGrandTotalAmount,
+  saleTaxAmount,
+  saleTaxableAmount,
+} from "./money";
+import {
+  mergeUiPreferences,
+  UI_PREFERENCES_DEFAULTS,
+  type UiPreferences,
+} from "./ui-preferences";
 import { attrsEqual, defaultShortName, identityKey, optionAppearsIn, scopedDefs, variantKey } from "./catalogue";
 import type { ProductTemplate } from "./templates";
 import { useAuth } from "./auth";
@@ -44,23 +62,27 @@ export const purchaseTotal = (p: Purchase) =>
   p.otherCost;
 
 // what we owe the MILL: steel amount only — transport & other costs are on us
-export const steelAmount = (p: Purchase) => p.qty * p.rate;
+export const steelAmount = purchaseSteelAmount;
 
 /* subtotal = goods total before discount & tax */
 export const saleTotal = (s: Sale) =>
   s.lines.reduce((sum, l) => sum + l.qty * l.rate, 0);
 
-/* invoice-wide money helpers — single source of truth for every surface */
+/* invoice-wide money helpers — round at same boundaries as the server */
 export const saleDiscount = (s: Sale) =>
-  saleTotal(s) * ((s.discountPct ?? 0) / 100);
-export const saleTaxable = (s: Sale) => saleTotal(s) - saleDiscount(s);
-export const saleTax = (s: Sale) => saleTaxable(s) * ((s.taxPct ?? 0) / 100);
-
-/* flat invoice-wide charges (loading / transport / labour) — not taxed */
+  saleDiscountAmount(s.lines, s.discountPct ?? 0);
+export const saleTaxable = (s: Sale) =>
+  saleTaxableAmount(s.lines, s.discountPct ?? 0);
+export const saleTax = (s: Sale) =>
+  saleTaxAmount(s.lines, s.discountPct ?? 0, s.taxPct ?? 0);
 export const saleCharges = (s: Sale) =>
-  (s.loadingCharges ?? 0) + (s.transportCharges ?? 0) + (s.labourCharges ?? 0);
-
-export const saleGrandTotal = (s: Sale) => saleTaxable(s) + saleTax(s) + saleCharges(s);
+  saleChargesTotal({
+    loading: s.loadingCharges,
+    transport: s.transportCharges,
+    labour: s.labourCharges,
+  });
+export const saleGrandTotal = (s: Sale) =>
+  s.invoiceTotal ?? saleGrandTotalAmount(s);
 export type InvoiceStatus = "paid" | "unpaid";
 
 export const invoiceStatus = (paid: number, total: number): InvoiceStatus =>
@@ -101,8 +123,11 @@ export interface VariantStockRow {
 
 interface Store {
   ready: boolean;
+  /** Bumps after each successful bootstrap — use to invalidate derived caches */
+  dataVersion: number;
   error: string | null;
   pending: string | null;
+  isPending: (key?: string) => boolean;
   retry: () => void;
   refresh: () => Promise<void>;
   suppliers: Supplier[];
@@ -134,6 +159,21 @@ interface Store {
   customerBalance: (id: string) => number; // + = owes us, - = advance
   supplierBalance: (id: string) => number; // + = we owe
   stats: DashboardStats;
+  uiPrefs: UiPreferences;
+  updateUiPrefs: (patch: Partial<UiPreferences>) => Promise<void>;
+  staff: StaffMember[];
+  addStaff: (input: {
+    name: string;
+    email: string;
+    password: string;
+    title: string;
+    access: StaffPage[];
+  }) => Promise<void>;
+  updateStaff: (
+    id: string,
+    input: { name?: string; title?: string; access?: StaffPage[]; password?: string },
+  ) => Promise<void>;
+  removeStaff: (id: string) => Promise<void>;
   addPurchase: (p: Omit<Purchase, "id">) => Promise<void>;
   updatePurchase: (id: string, patch: Partial<Purchase>) => Promise<void>;
   deletePurchase: (id: string) => Promise<void>;
@@ -220,6 +260,8 @@ interface LedgerState {
   variants: Variant[];
   warehouses: Warehouse[];
   locations: WarehouseLocation[];
+  staff: StaffMember[];
+  settings: UiPreferences;
   hiddenItems: string[];
   hiddenVariants: string[];
 }
@@ -242,6 +284,8 @@ const emptyLedger = (): LedgerState => ({
   variants: [],
   warehouses: [],
   locations: [],
+  staff: [],
+  settings: UI_PREFERENCES_DEFAULTS,
   hiddenItems: [],
   hiddenVariants: [],
 });
@@ -265,12 +309,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [variants, setVariants] = useState<Variant[]>(initial.variants);
   const [warehouses, setWarehouses] = useState<Warehouse[]>(initial.warehouses);
   const [locations, setLocations] = useState<WarehouseLocation[]>(initial.locations);
+  const [staff, setStaff] = useState<StaffMember[]>(initial.staff);
+  const [uiPrefs, setUiPrefs] = useState<UiPreferences>(initial.settings);
   const [hiddenItems, setHiddenItems] = useState<string[]>([]);
   const [hiddenVariants, setHiddenVariants] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
+  const [dataVersion, setDataVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const hasBootstrappedRef = useRef(false);
+  const lastTenantRef = useRef<string | null>(null);
+  const lastReloadKeyRef = useRef(0);
 
   const applyBootstrap = useCallback((raw: ApiBootstrap) => {
     const data = normalizeBootstrap(raw);
@@ -290,27 +340,82 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setVariants(data.variants);
     setWarehouses(data.warehouses);
     setLocations(data.locations);
+    setStaff(data.staff);
+    setUiPrefs(data.settings);
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refreshCore = useCallback(async () => {
     const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
     applyBootstrap(response.data);
+    setDataVersion((v) => v + 1);
   }, [applyBootstrap]);
 
+  const refresh = useMemo(
+    () => createCoalescedRefresh(refreshCore),
+    [refreshCore],
+  );
+
   useEffect(() => {
-    if (!authReady || !user || user.role === "SUPERADMIN") return;
+    if (!authReady) return;
+    if (!user || user.role === "SUPERADMIN") {
+      if (!user) {
+        hasBootstrappedRef.current = false;
+        lastTenantRef.current = null;
+        lastReloadKeyRef.current = 0;
+        setReady(false);
+        setDataVersion(0);
+      }
+      return;
+    }
+
+    const tenantKey = `${user.id}:${user.businessId}`;
+    const tenantChanged = lastTenantRef.current !== tenantKey;
+    const retryRequested = lastReloadKeyRef.current !== reloadKey;
+
+    if (tenantChanged) {
+      lastTenantRef.current = tenantKey;
+      hasBootstrappedRef.current = false;
+    }
+
+    if (hasBootstrappedRef.current && !retryRequested) return;
+
+    lastReloadKeyRef.current = reloadKey;
     const task = window.setTimeout(() => {
-      setReady(false);
+      if (!hasBootstrappedRef.current) setReady(false);
       setError(null);
       void refresh()
-        .then(() => setReady(true))
-        .catch((reason: unknown) => {
-          setError(reason instanceof Error ? reason.message : "Could not load the ledger");
+        .then(() => {
+          hasBootstrappedRef.current = true;
           setReady(true);
+        })
+        .catch((reason: unknown) => {
+          const message =
+            reason instanceof Error ? reason.message : "Could not load the ledger";
+          setError(message);
+          setReady(false);
         });
     }, 0);
     return () => window.clearTimeout(task);
-  }, [authReady, user, reloadKey, refresh]);
+  }, [authReady, user?.id, user?.businessId, user?.role, reloadKey, refresh]);
+
+  const updateUiPrefs = useCallback(
+    async (patch: Partial<UiPreferences>) => {
+      if (!user || user.role === "SUPERADMIN") return;
+      const prev = uiPrefs;
+      const next = mergeUiPreferences({ ...prev, ...patch });
+      setUiPrefs(next);
+      try {
+        await apiFetch("/settings", {
+          method: "PUT",
+          ...jsonBody({ data: next }),
+        });
+      } catch (reason) {
+        setUiPrefs(prev);
+        throw reason;
+      }
+    },
+    [uiPrefs, user],
+  );
 
   const mutate = async <T,>(key: string, operation: () => Promise<T>): Promise<T> => {
     setPending(key);
@@ -437,16 +542,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       for (const [i, l] of s.lines.entries()) {
         let unit: number;
         if (l.purchaseId) {
-          const lot = lots.find((x) => x.p.id === l.purchaseId);
-          if (lot && lot.remaining >= l.qty) {
-            lot.remaining -= l.qty;
-            unit = lot.landed;
-          } else if (lot) {
-            const c = consume([lot], l.qty);
-            unit = c >= 0 ? c : fallback(l.item);
-          } else {
-            unit = fallback(l.item);
-          }
+          const elig = lots.filter((x) => purchaseParentId(x.p) === l.purchaseId);
+          const c = consume(elig, l.qty);
+          unit = c >= 0 ? c : fallback(l.item);
         } else {
           let elig = lots.filter((x) => x.p.item === l.item);
           if (l.supplierId) elig = elig.filter((x) => x.p.supplierId === l.supplierId);
@@ -540,7 +638,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const stockLots: StockLot[] = lots
       .filter((l) => l.remaining > 0.000001)
       .map((l) => ({
-        purchaseId: l.p.id,
+        purchaseId: purchaseParentId(l.p),
         item: l.p.item,
         product: l.p.product,
         spec: l.p.spec,
@@ -693,7 +791,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         attributeSnapshot: p.attributeSnapshot,
         unit: p.unit,
         qty: p.qty,
-        purchaseId: p.id,
+        purchaseId: purchaseParentId(p),
         supplierId: p.supplierId,
         warehouseId: p.warehouseId,
         locationId: p.locationId,
@@ -742,11 +840,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let qi = 0;
       for (const s of oldest) {
         let paid = map[s.id] ?? 0;
-        const due = Math.max(0, saleGrandTotal(s) - paid);
-        while (qi < queue.length && due - paid > 0.001) {
-          const take = Math.min(queue[qi], due - paid);
-          paid += take;
-          queue[qi] -= take;
+        let need = Math.max(0, saleGrandTotal(s) - paid);
+        while (qi < queue.length && need > 0.001) {
+          const take = Math.min(queue[qi], need);
+          paid = round2(paid + take);
+          need = round2(need - take);
+          queue[qi] = round2(queue[qi] - take);
           if (queue[qi] <= 0.001) qi++;
         }
         map[s.id] = paid;
@@ -768,14 +867,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const supplierBalance = useMemo(() => {
     const map: Record<string, number> = {};
-    // Canonical rule: mill dues come ONLY from each purchase's paid amount
-    // (steel amount only — transport & other costs are ours, never owed).
-    // `payments[]` rows of type "supplier" are the readable journal copy of
-    // those same payments (recorded by the Pay-Supplier flow & seed) and must
-    // NOT be subtracted again, or dues would be double-counted.
-    for (const p of purchases)
-      map[p.supplierId] =
-        (map[p.supplierId] ?? 0) + Math.max(0, steelAmount(p) - (p.paid ?? 0));
+    const byPurchase = new Map<string, { supplierId: string; goods: number; paid: number }>();
+    for (const p of purchases) {
+      const pid = purchaseParentId(p);
+      const row = byPurchase.get(pid) ?? {
+        supplierId: p.supplierId,
+        goods: 0,
+        paid: p.paid ?? 0,
+      };
+      row.goods += steelAmount(p);
+      byPurchase.set(pid, row);
+    }
+    for (const row of byPurchase.values()) {
+      map[row.supplierId] =
+        (map[row.supplierId] ?? 0) + Math.max(0, row.goods - row.paid);
+    }
     return (id: string) => map[id] ?? 0;
   }, [purchases]);
 
@@ -814,10 +920,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const store: Store = {
     ready,
+    dataVersion,
     error,
     pending,
     retry: () => setReloadKey((value) => value + 1),
     refresh,
+    isPending: (key?: string) => (key ? pending === key : pending != null),
     suppliers,
     customers,
     purchases,
@@ -842,10 +950,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     inventoryBySource,
     stockLots,
     lineUnitCost,
-    salePaid: (saleId: string) => salePaidMap[saleId] ?? 0,
+    salePaid: (saleId: string) => {
+      const sale = sales.find((s) => s.id === saleId);
+      if (sale?.invoicePaid != null) return sale.invoicePaid;
+      return salePaidMap[saleId] ?? 0;
+    },
     customerBalance,
     supplierBalance,
     stats,
+    uiPrefs,
+    updateUiPrefs,
+    staff,
+    addStaff: async (input) => {
+      await mutate("staff:create", () =>
+        apiFetch("/users", {
+          method: "POST",
+          ...jsonBody({
+            name: input.name.trim(),
+            email: input.email.trim().toLowerCase(),
+            password: input.password,
+            title: input.title.trim(),
+            access: input.access,
+            role: "SUBADMIN",
+          }),
+        }),
+      );
+    },
+    updateStaff: async (id, input) => {
+      const body: Record<string, unknown> = {};
+      if (input.name !== undefined) body.name = input.name.trim();
+      if (input.title !== undefined) body.title = input.title.trim();
+      if (input.access !== undefined) body.access = input.access;
+      if (input.password) body.password = input.password;
+      await mutate(`staff:update:${id}`, () =>
+        apiFetch(`/users/${id}`, { method: "PATCH", ...jsonBody(body) }),
+      );
+    },
+    removeStaff: async (id) => {
+      await mutate(`staff:delete:${id}`, () =>
+        apiFetch(`/users/${id}`, { method: "DELETE" }),
+      );
+    },
     addPurchase: async (p) => {
       const variant = p.variantId ? variants.find((item) => item.id === p.variantId) : undefined;
       const product = products.find((item) => item.id === variant?.productId || item.name === p.product);
@@ -886,7 +1031,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const current = purchases.find((purchase) => purchase.id === id);
       if (!current) throw new Error("Purchase not found");
       const next = { ...current, ...patch };
-      await mutate(`purchase:update:${id}`, () => apiFetch(`/purchases/${id}`, {
+      const parentId = purchaseParentId(current);
+      await mutate(`purchase:update:${parentId}`, () => apiFetch(`/purchases/${parentId}`, {
         method: "PATCH",
         ...jsonBody({
           date: next.date,
@@ -900,7 +1046,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }));
     },
     deletePurchase: async (id) => {
-      await mutate(`purchase:delete:${id}`, () => apiFetch(`/purchases/${id}`, { method: "DELETE" }));
+      const current = purchases.find((purchase) => purchase.id === id);
+      const parentId = current ? purchaseParentId(current) : id;
+      await mutate(`purchase:delete:${parentId}`, () =>
+        apiFetch(`/purchases/${parentId}`, { method: "DELETE" }),
+      );
     },
     addSale: async (s) => {
       const result = await mutate<{ sale: { id: string } }>("sale:create", () =>
@@ -1338,25 +1488,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setHiddenVariants((prev) => (prev.includes(variantId) ? prev : [...prev, variantId])),
   };
 
-  if (authReady && user?.role === "ADMIN" && !ready) {
-    return (
-      <div className="min-h-screen grid place-items-center text-sm text-[#171717]/70">
-        Loading your business ledger…
-      </div>
-    );
-  }
-
   return (
     <StoreCtx.Provider value={store}>
       {children}
-      {pending && user?.role === "ADMIN" && (
-        <div className="fixed inset-0 z-[99] grid place-items-center bg-white/45 backdrop-blur-[1px]">
-          <div className="rounded-md border border-neutral-200 bg-white px-4 py-3 text-sm shadow-lg">
-            Saving…
-          </div>
+      {pending && user && user.role !== "SUPERADMIN" && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-0 left-0 right-0 z-[99] h-0.5 overflow-hidden bg-neutral-200"
+        >
+          <div className="h-full w-1/3 bg-[#171717] animate-[skeleton-shimmer_1s_ease-in-out_infinite]" />
         </div>
       )}
-      {error && user?.role === "ADMIN" && (
+      {error && user && user.role !== "SUPERADMIN" && (
         <div
           role="alert"
           className="fixed right-4 bottom-4 z-[100] max-w-sm rounded-md border border-[#f0e2de] bg-[#faf5f2] px-4 py-3 text-sm text-[#a12b1f] shadow-lg"

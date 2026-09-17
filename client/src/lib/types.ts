@@ -1,3 +1,5 @@
+import type { StaffPage } from "./staff-access";
+
 export type PaymentType = "customer" | "supplier";
 
 export interface Product {
@@ -43,7 +45,12 @@ export interface Customer {
 }
 
 export interface Purchase {
+  /** Unique row id — `${purchaseId}::${lineId}` when a purchase has multiple lines. */
   id: string;
+  /** Parent purchase document id (for API updates, deletes, and sale lot refs). */
+  purchaseId?: string;
+  /** Server purchase-line id when this row is one line of a multi-line purchase. */
+  lineId?: string;
   date: string; // ISO yyyy-mm-dd
   supplierId: string;
   product?: string; // product name (e.g. "Rebar")
@@ -102,6 +109,10 @@ export interface Sale {
   loadingCharges?: number; // invoice-wide loading charges (0 if absent)
   transportCharges?: number; // invoice-wide transport/freight charges (0 if absent)
   labourCharges?: number; // invoice-wide labour cost (0 if absent)
+  /** Authoritative paid amount from server Invoice.paid */
+  invoicePaid?: number;
+  /** Authoritative grand total from server Invoice.total */
+  invoiceTotal?: number;
 }
 
 export interface Payment {
@@ -113,6 +124,8 @@ export interface Payment {
   method: "Cash" | "Bank" | "Cheque";
   saleId?: string; // the specific invoice this payment settles (customer payments)
   note?: string;
+  /** FIFO invoice settlements recorded server-side */
+  allocations?: { saleId: string; amount: number }[];
 }
 
 export interface Expense {
@@ -259,6 +272,16 @@ export interface WarehouseLocation {
   warehouseId: string;
   name: string;
   active: boolean;
+}
+
+export interface StaffMember {
+  id: string;
+  email: string;
+  name: string;
+  role: "SUBADMIN";
+  title: string | null;
+  access: StaffPage[];
+  createdAt?: string;
 }
 
 /* every stock-affecting event type (transfers/returns/adjustments are

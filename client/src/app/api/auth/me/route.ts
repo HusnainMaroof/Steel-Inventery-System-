@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { PRIVATE_API_HEADERS } from "@/lib/bff-security";
 import { toPublicUser, tradexFetch, type TradexRole } from "@/lib/server/tradex";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +19,9 @@ export async function GET() {
   if (!result.ok) {
     return NextResponse.json(
       { message: result.message },
-      { status: result.status === 401 ? 401 : result.status },
+      { status: result.status === 401 ? 401 : result.status, headers: PRIVATE_API_HEADERS },
     );
   }
 
-  return NextResponse.json(toPublicUser(result.data));
+  return NextResponse.json(toPublicUser(result.data), { headers: PRIVATE_API_HEADERS });
 }

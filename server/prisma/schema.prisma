@@ -40,12 +40,32 @@ enum InventoryTxType {
   RETURN
 }
 
+enum SubscriptionPlan {
+  MONTHLY
+  YEARLY
+  LIFETIME
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
 model Business {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
   settings  Json?
   createdAt DateTime @default(now())
+
+  subscriptionPlan     SubscriptionPlan?
+  subscriptionStatus   SubscriptionStatus @default(ACTIVE)
+  subscriptionStartsAt DateTime?
+  subscriptionEndsAt   DateTime?
+  assignedTemplateIds  String[]           @default([])
+  templatesAppliedAt   DateTime?
 
   users              User[]
   products           Product[]
@@ -387,6 +407,8 @@ model Invoice {
 
   @@unique([businessId, number])
   @@index([saleId])
+  @@index([businessId])
+  @@index([businessId, createdAt])
 }
 
 model Payment {
@@ -408,8 +430,10 @@ model Payment {
   allocations PaymentAllocation[]
 
   @@index([businessId, date])
+  @@index([businessId, type, date])
   @@index([customerId])
   @@index([supplierId])
+  @@index([saleId])
 }
 
 model PaymentAllocation {

@@ -1,4 +1,14 @@
-import { IsEmail, IsString, MaxLength, MinLength } from "class-validator";
+import { SubscriptionPlan } from "@prisma/client";
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 
 export class CreateOwnerDto {
   @IsString()
@@ -18,4 +28,14 @@ export class CreateOwnerDto {
   @MinLength(2)
   @MaxLength(80)
   businessName: string;
+
+  @IsOptional()
+  @IsEnum(SubscriptionPlan)
+  subscriptionPlan?: SubscriptionPlan;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(10)
+  templateIds?: string[];
 }

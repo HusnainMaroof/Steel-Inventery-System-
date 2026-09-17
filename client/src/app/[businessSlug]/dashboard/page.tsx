@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { purchaseParentId } from "@/lib/purchase-utils";
 import { useStore, saleGrandTotal, steelAmount } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { Page, Stagger, StaggerItem, CountUp } from "@/components/ui";
@@ -431,14 +432,25 @@ export default function DashboardPage() {
       .sort((a, b) => b.bal - a.bal);
 
     const millMap: Record<string, number> = {};
+    const scopedPurchaseDue = new Map<string, { supplierId: string; goods: number; paid: number }>();
     for (const p of purchases) {
       const inScope =
         p.product === productName ||
         (p.categoryId ? catProduct.get(p.categoryId) === productName : false);
       if (!inScope) continue;
-      const bal = Math.max(0, steelAmount(p) - (p.paid ?? 0));
+      const pid = purchaseParentId(p);
+      const row = scopedPurchaseDue.get(pid) ?? {
+        supplierId: p.supplierId,
+        goods: 0,
+        paid: p.paid ?? 0,
+      };
+      row.goods += steelAmount(p);
+      scopedPurchaseDue.set(pid, row);
+    }
+    for (const row of scopedPurchaseDue.values()) {
+      const bal = Math.max(0, row.goods - row.paid);
       if (bal <= 0.001) continue;
-      millMap[p.supplierId] = (millMap[p.supplierId] ?? 0) + bal;
+      millMap[row.supplierId] = (millMap[row.supplierId] ?? 0) + bal;
     }
     const millDues = suppliers
       .map((s) => ({ name: s.name, bal: millMap[s.id] ?? 0 }))
@@ -591,7 +603,7 @@ export default function DashboardPage() {
       <p className="text-xs text-[#171717] mt-6">
         {isAll
           ? "Showing the whole depot — pick a product above to zoom its stock, sales and profit."
-          : `Stock, sales and profit are for ${product!.name}. Payment dues always cover the whole depot.`}
+          : `Stock, sales, profit, and payment dues are scoped to ${product!.name}.`}
       </p>
     </Page>
   );

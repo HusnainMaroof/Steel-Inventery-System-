@@ -4,6 +4,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { assertMoney, assertQty, LIMITS } from "../common/security/limits";
+import {
+  sanitizeAttributeSnapshot,
+  sanitizeOptionalText,
+} from "../common/security/sanitize-text";
 import { PrismaService } from "../prisma/prisma.service";
 import { saleGrandTotal } from "../domain/money";
 import { CreateSaleDto } from "./dto/create-sale.dto";
@@ -20,6 +25,22 @@ export class SalesService {
   async create(businessId: string, dto: CreateSaleDto) {
     if (dto.lines.length === 0) {
       throw new BadRequestException("A sale needs at least one line");
+    }
+    if (dto.lines.length > LIMITS.MAX_LINES_PER_DOC) {
+      throw new BadRequestException(
+        `A sale cannot have more than ${LIMITS.MAX_LINES_PER_DOC} lines`,
+      );
+    }
+    dto.notes = sanitizeOptionalText(dto.notes, 300);
+    assertMoney(dto.loadingCharges ?? 0, "Loading charges");
+    assertMoney(dto.transportCharges ?? 0, "Transport charges");
+    assertMoney(dto.labourCharges ?? 0, "Labour charges");
+    assertMoney(dto.paidNow ?? 0, "Paid now");
+    for (const line of dto.lines) {
+      assertQty(line.qty);
+      assertMoney(line.rate, "Rate");
+      line.item = line.item.trim().slice(0, 80);
+      line.attributeSnapshot = sanitizeAttributeSnapshot(line.attributeSnapshot);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -256,8 +277,9 @@ export class SalesService {
         skip,
         take,
         include: {
-          customer: { select: { id: true, name: true, shop: true } },
+          customer: { select: { id: true, name: true, shop: true, phone: true } },
           invoice: true,
+          lines: true,
         },
         orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       }),

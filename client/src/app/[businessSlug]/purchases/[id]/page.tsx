@@ -3,6 +3,7 @@
 import { use } from "react";
 import { motion } from "framer-motion";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
+import { purchaseTotals } from "@/lib/purchase-utils";
 import { Page, PageTitle } from "@/components/ui";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, perUnitLabel } from "@/lib/format";
 import { productUsesCategories, resolveDefs } from "@/lib/catalogue";
@@ -50,9 +51,10 @@ export default function PurchaseDetailPage({
   const perUnit = perUnitLabel(purchase.unit);
   const profitPerUnit = sellPerUnit > 0 ? sellPerUnit - costPerUnit : 0;
 
-  const payable = steelAmount(purchase);
-  const paid = purchase.paid ?? 0;
-  const remaining = Math.max(0, payable - paid);
+  const linePayable = steelAmount(purchase);
+  const doc = purchaseTotals(purchase, purchases);
+  const paid = doc.paid;
+  const remaining = doc.remaining;
 
   const rows: { label: string; value: string; strong?: boolean; muted?: boolean }[] = [
     { label: "Purchase Date", value: fmtDate(purchase.date) },
@@ -74,7 +76,7 @@ export default function PurchaseDetailPage({
     { label: "Transport Cost", value: fmtMoney(purchase.transport), muted: true },
     { label: "Other Expenses", value: fmtMoney(purchase.otherCost), muted: true },
     // ——— payment summary: what the mill gets ———
-    { label: "Total Payable to Mill", value: fmtMoney(payable), strong: true },
+    { label: "Total Payable to Mill", value: fmtMoney(doc.goods), strong: true },
     { label: "Already Paid", value: fmtMoney(paid), muted: true },
     { label: "Remaining Due", value: fmtMoney(remaining), strong: remaining > 0, muted: remaining === 0 },
     // ——— your costs & margins ———

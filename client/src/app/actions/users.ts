@@ -2,6 +2,20 @@
 
 import { tradexFetch, type TradexRole } from "@/lib/server/tradex";
 import { sanitizeAccess, type StaffPage } from "@/lib/staff-access";
+import type { SubscriptionPlan, SubscriptionStatus } from "./platform";
+
+export type OwnerBusiness = {
+  id: string;
+  name: string;
+  slug?: string;
+  createdAt?: string;
+  subscriptionPlan?: SubscriptionPlan | null;
+  subscriptionStatus?: SubscriptionStatus | null;
+  subscriptionStartsAt?: string | null;
+  subscriptionEndsAt?: string | null;
+  assignedTemplateIds?: string[];
+  templatesAppliedAt?: string | null;
+};
 
 export type OwnerAccount = {
   id: string;
@@ -11,7 +25,7 @@ export type OwnerAccount = {
   active: boolean;
   loginPassword: string | null;
   createdAt?: string;
-  business: { id: string; name: string; slug?: string; createdAt?: string };
+  business: OwnerBusiness;
 };
 
 export type StaffAccount = {
@@ -37,6 +51,8 @@ export async function createOwnerAction(input: {
   email: string;
   password: string;
   businessName: string;
+  subscriptionPlan?: SubscriptionPlan;
+  templateIds?: string[];
 }): Promise<{ ok: true; owner: OwnerAccount } | { ok: false; error: string }> {
   const name = input.name.trim();
   const email = input.email.trim().toLowerCase();
@@ -58,7 +74,40 @@ export async function createOwnerAction(input: {
       email,
       password: input.password,
       businessName,
+      subscriptionPlan: input.subscriptionPlan ?? "MONTHLY",
+      templateIds: input.templateIds ?? [],
     }),
+  });
+  if (!result.ok) return { ok: false, error: result.message };
+  return { ok: true, owner: result.data };
+}
+
+export async function applyOwnerTemplatesAction(
+  id: string,
+  templateIds: string[],
+): Promise<{ ok: true; owner: OwnerAccount } | { ok: false; error: string }> {
+  if (!templateIds.length) {
+    return { ok: false, error: "Select at least one product template." };
+  }
+  const result = await tradexFetch<OwnerAccount>(`/api/v1/owners/${id}/templates`, {
+    method: "POST",
+    body: JSON.stringify({ templateIds }),
+  });
+  if (!result.ok) return { ok: false, error: result.message };
+  return { ok: true, owner: result.data };
+}
+
+export async function updateOwnerSubscriptionAction(
+  id: string,
+  input: {
+    plan?: SubscriptionPlan;
+    status?: SubscriptionStatus;
+    endsAt?: string;
+  },
+): Promise<{ ok: true; owner: OwnerAccount } | { ok: false; error: string }> {
+  const result = await tradexFetch<OwnerAccount>(`/api/v1/owners/${id}/subscription`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
   if (!result.ok) return { ok: false, error: result.message };
   return { ok: true, owner: result.data };

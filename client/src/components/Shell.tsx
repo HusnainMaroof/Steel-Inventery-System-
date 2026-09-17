@@ -14,6 +14,7 @@ import {
 } from "@/lib/business-path";
 import { canOpenPath, pagesFor } from "@/lib/staff-access";
 import { useUiPreferences } from "@/lib/preferences";
+import { AuthBootstrapSkeleton, skeletonForPath } from "@/components/skeletons";
 
 const TRADEX_LOGO = "/images/logo.png";
 
@@ -30,10 +31,14 @@ const ICONS: Record<string, ReactNode> = {
   reports: <path d="M4 2.5h6l2.5 2.5v8.5H4ZM10 2.5V5h2.5M6 8h4M6 10.5h4" />,
   settings: <path d="M6.5 2.5h3l.6 1.6 1.5.6 1.4-.8 2.1 2.1-.8 1.4.6 1.5 1.6.6v3l-1.6.6-.6 1.5.8 1.4-2.1 2.1-1.4-.8-1.5.6-.6 1.6h-3l-.6-1.6-1.5-.6-1.4.8-2.1-2.1.8-1.4-.6-1.5L2 9.5v-3l1.6-.6.6-1.5-.8-1.4L5.5 1.9l1.4.8 1.5-.6ZM8 10.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z" />,
   staff: <path d="M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 13.5c.7-2.2 3-3.5 5.5-3.5s4.8 1.3 5.5 3.5M11.5 6.5h3M13 5v3" />,
-  admin: <path d="M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 13.5c.7-2.2 3-3.5 5.5-3.5s4.8 1.3 5.5 3.5M11.5 6.5h3M13 5v3" />,
+  overview: <path d="M2 8.5 8 3l6 5.5V14a.5.5 0 0 1-.5.5h-3v-4h-3v4h-3A.5.5 0 0 1 2 14Z" />,
+  businesses: <path d="M2.5 3.5h11v9h-11ZM5 6.5h6M5 9h4M8 12.5v2.5M6 15h4" />,
 };
 
-const OWNERS_NAV = { key: "admin" as const, href: "/admin", label: "Application admin" };
+const PLATFORM_ADMIN_NAV = [
+  { key: "overview" as const, href: "/admin/overview", label: "Overview" },
+  { key: "businesses" as const, href: "/admin/businesses", label: "Businesses" },
+];
 
 function UserBlock({
   user,
@@ -84,8 +89,8 @@ function UserBlock({
         {initials}
       </div>
       <div className="leading-tight min-w-0 flex-1">
-        <p className="text-[13px] font-semibold text-[#171717] truncate">{name}</p>
-        <p className="text-[10px] text-[#171717]/70 truncate">{subtitle}</p>
+        <p className="text-[12px] font-semibold text-[#171717] truncate">{name}</p>
+        <p className="text-[10px] text-[#171717]/65 truncate">{subtitle}</p>
       </div>
       <button
         onClick={onSignOut}
@@ -131,10 +136,10 @@ function BrandMark({
     return (
       <span
         className={`font-semibold tracking-tight text-[#171717] ${
-          collapsed ? "text-sm" : "text-lg"
+          collapsed ? "text-sm" : "text-xl"
         } ${className}`}
       >
-        {brand}
+        {collapsed ? brand.slice(0, 1) : brand}
       </span>
     );
   }
@@ -146,8 +151,8 @@ function BrandMark({
       className={
         className ||
         (collapsed
-          ? "h-8 w-auto max-w-full object-contain object-left"
-          : "h-9 w-auto max-w-[160px] object-contain object-left")
+          ? "h-11 w-11 object-contain object-center mx-auto"
+          : "h-20 w-20 object-contain object-left")
       }
     />
   );
@@ -201,7 +206,7 @@ function MobileNav({
           </svg>
         </button>
         <Link href={brandHref} title={brand} className="flex-1 min-w-0 flex justify-center px-2">
-          <BrandMark brand={brand} logoSrc={logoSrc} className="h-8 w-auto max-w-full object-contain" />
+          <BrandMark brand={brand} logoSrc={logoSrc} className="h-14 w-14 object-contain object-center" />
         </Link>
         <span className="w-9" aria-hidden />
       </header>
@@ -225,8 +230,8 @@ function MobileNav({
             >
               <div className="flex flex-col justify-between min-h-full py-6 px-4">
                 <div>
-                  <div className="flex items-center justify-between mb-8 min-h-8">
-                    <BrandMark brand={brand} logoSrc={logoSrc} className="h-9 w-auto max-w-[70%] object-contain object-left" />
+                  <div className="flex items-center justify-between mb-8 min-h-20">
+                    <BrandMark brand={brand} logoSrc={logoSrc} className="h-20 w-20 object-contain object-left" />
                     <button
                       onClick={() => setDrawerOpen(false)}
                       aria-label="Close menu"
@@ -265,8 +270,9 @@ export default function Shell({ children }: { children: ReactNode }) {
     if (!pathname || !ready || !user) return;
 
     if (user.role === "SUPERADMIN") {
-      if (pathname === "/" || pathname === "/login") router.replace("/admin");
-      else if (!isAdminRoute) router.replace("/admin");
+      if (pathname === "/" || pathname === "/login") router.replace("/admin/overview");
+      else if (pathname === "/admin") router.replace("/admin/overview");
+      else if (!isAdminRoute) router.replace("/admin/overview");
       return;
     }
 
@@ -300,18 +306,13 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   if (!ready) {
     if (isPublic) return <>{children}</>;
-    return null;
+    return <AuthBootstrapSkeleton />;
   }
 
   if (!user) {
     if (isPublic) return <>{children}</>;
     return null;
   }
-  if (pathname === "/" || pathname === "/login") return null;
-  if (user.role === "SUPERADMIN" && !isAdminRoute) return null;
-  if (user.role !== "SUPERADMIN" && isAdminRoute) return null;
-  if (!canOpenPath(user, pathname)) return null;
-  if (isPrintable) return <>{children}</>;
 
   const onSignOut = () => {
     void logout().then(() => router.replace("/"));
@@ -328,7 +329,7 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   const roleNav =
     user.role === "SUPERADMIN"
-      ? [OWNERS_NAV]
+      ? PLATFORM_ADMIN_NAV
       : pagesFor(user);
 
   const navLinks = (onNavigate?: () => void) => (
@@ -341,8 +342,8 @@ export default function Shell({ children }: { children: ReactNode }) {
             href={n.href}
             title={n.label}
             onClick={onNavigate}
-            className={`group relative flex items-center gap-3 px-3 py-2.5 text-[15px] rounded-sm transition-colors duration-150 hover:bg-neutral-100 ${
-              collapsed ? "md:justify-center" : ""
+            className={`group relative flex items-center gap-2.5 px-2.5 py-2 text-[13px] rounded-sm transition-colors duration-150 hover:bg-neutral-100 ${
+              collapsed ? "md:justify-center md:px-2" : ""
             }`}
           >
             {active && (
@@ -374,33 +375,64 @@ export default function Shell({ children }: { children: ReactNode }) {
     </nav>
   );
 
+  if (pathname === "/" || pathname === "/login") return null;
+  if (isPrintable) return <>{children}</>;
+
+  const pendingRedirect =
+    (user.role === "SUPERADMIN" && !isAdminRoute) ||
+    (user.role !== "SUPERADMIN" && isAdminRoute) ||
+    !canOpenPath(user, pathname);
+
+  const mainContent = pendingRedirect
+    ? skeletonForPath(user.role === "SUPERADMIN" ? pathname ?? "/admin/overview" : roleHome)
+    : children;
+
   return (
     <div className="min-h-screen">
       <div className="hidden md:flex">
         <motion.aside
-          animate={{ width: collapsed ? 68 : 248 }}
+          animate={{ width: collapsed ? 84 : 260 }}
           transition={{ type: "spring", stiffness: 260, damping: 30 }}
-          className="shrink-0 bg-white border-r border-neutral-200 flex flex-col justify-between py-6 px-4 sticky top-0 h-screen no-print overflow-hidden"
+          className={`shrink-0 bg-white border-r border-neutral-200 flex flex-col justify-between py-6 sticky top-0 h-screen no-print ${
+            collapsed ? "px-2" : "px-4"
+          }`}
         >
-          <div>
-            <div className="flex items-center justify-between mb-10 min-h-8">
-              <Link href={roleHome} className="block leading-tight min-w-0">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+            <div
+              className={`mb-8 ${
+                collapsed
+                  ? "flex flex-col items-center gap-2.5"
+                  : "flex items-start justify-between gap-2"
+              }`}
+            >
+              <Link
+                href={roleHome}
+                title={brand}
+                className={`leading-tight min-w-0 ${
+                  collapsed ? "flex w-full justify-center" : "block flex-1"
+                }`}
+              >
                 <BrandMark brand={brand} logoSrc={logoSrc} collapsed={collapsed} />
               </Link>
               <button
+                type="button"
                 onClick={() => setCollapsed((c) => !c)}
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                title={collapsed ? "Expand" : "Collapse"}
-                className="shrink-0 w-7 h-7 flex items-center justify-center rounded-sm text-neutral-400 hover:text-black hover:bg-neutral-100 transition-colors duration-150 active:scale-90"
+                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className={`shrink-0 flex items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-neutral-600 hover:text-black hover:bg-neutral-100 hover:border-neutral-300 transition-colors duration-150 active:scale-95 ${
+                  collapsed ? "w-9 h-9" : "w-8 h-8 mt-1"
+                }`}
               >
                 <Chevron collapsed={collapsed} />
               </button>
             </div>
             {navLinks()}
           </div>
-          <UserBlock user={user} onSignOut={onSignOut} collapsed={collapsed} />
+          <div className="shrink-0">
+            <UserBlock user={user} onSignOut={onSignOut} collapsed={collapsed} />
+          </div>
         </motion.aside>
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{mainContent}</main>
       </div>
 
       <MobileNav
@@ -412,7 +444,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         brandHref={roleHome}
         logoSrc={logoSrc}
       >
-        {children}
+        {mainContent}
       </MobileNav>
     </div>
   );

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useBusinessHref } from "@/components/BusinessLink";
+import RouteSkeleton from "@/components/RouteSkeleton";
 
 export default function InvoicesRedirect() {
   const router = useRouter();
@@ -10,5 +11,5 @@ export default function InvoicesRedirect() {
   useEffect(() => {
     router.replace(href("sales"));
   }, [router, href]);
-  return null;
+  return <RouteSkeleton />;
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { useStore } from "@/lib/store";
-import { ConfirmModal, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
+import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import type { Expense } from "@/lib/types";
 
@@ -30,7 +30,7 @@ function expenseName(e: Expense) {
 }
 
 export default function ExpensesPage() {
-  const { expenses, addExpense, deleteExpense } = useStore();
+  const { expenses, addExpense, deleteExpense, isPending } = useStore();
   const now = new Date();
   const [query, setQuery] = useState("");
   const [filterMonth, setFilterMonth] = useState("all");
@@ -103,6 +103,7 @@ export default function ExpensesPage() {
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
+    if (isPending("expense:create")) return;
     const ready = lines
       .map((line) => ({
         name: line.name.trim(),
@@ -395,9 +396,9 @@ export default function ExpensesPage() {
             <button type="button" className="btn-ghost" onClick={() => setAddOpen(false)}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
+            <BusyButton type="submit" loading={isPending("expense:create")}>
               Save
-            </button>
+            </BusyButton>
           </div>
         </form>
       </Modal>
@@ -435,6 +436,7 @@ export default function ExpensesPage() {
         }}
         title={deleteTarget ? `Delete ${expenseName(deleteTarget)}?` : "Delete expense?"}
         confirmLabel="Delete"
+        loading={deleteTarget ? isPending(`expense:delete:${deleteTarget.id}`) : false}
       >
         <p className="text-sm text-[#171717]">
           This cost will leave the list and the reports.

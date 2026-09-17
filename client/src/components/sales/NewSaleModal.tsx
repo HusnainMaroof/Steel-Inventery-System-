@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { Modal } from "@/components/ui";
+import { BusyButton, Modal } from "@/components/ui";
 import AddItemBar from "./AddItemBar";
 import LineItemsTable from "./LineItemsTable";
 import SaleSummaryPanel from "./SaleSummaryPanel";
@@ -21,6 +21,7 @@ export default function NewSaleModal({
   entSummary,
   itemsCount,
   showOptionalDetails = false,
+  submitting = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -57,6 +58,7 @@ export default function NewSaleModal({
   };
   itemsCount: number;
   showOptionalDetails?: boolean;
+  submitting?: boolean;
 }) {
   return (
     <Modal
@@ -70,7 +72,9 @@ export default function NewSaleModal({
           <span className="text-[12px] text-neutral-400 tabular-nums">{itemsCount} item{itemsCount === 1 ? "" : "s"} on invoice</span>
           <div className="flex gap-2.5">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" form="new-sale-form" className="btn-primary" disabled={!entSummary.canSave}>Save Sale</button>
+            <BusyButton type="submit" form="new-sale-form" loading={submitting} disabled={!entSummary.canSave}>
+              Save Sale
+            </BusyButton>
           </div>
         </div>
       }

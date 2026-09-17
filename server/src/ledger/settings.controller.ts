@@ -20,6 +20,9 @@ export class SettingsController {
     if (user.role === "SUPERADMIN") {
       return { data: {} };
     }
-    return this.ledger.savePreferences(user.businessId, dto.data);
+    return this.ledger.savePreferences(
+      user.businessId,
+      dto.data as Record<string, unknown>,
+    );
   }
 }

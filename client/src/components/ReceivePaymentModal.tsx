@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
-import { Modal } from "@/components/ui";
+import { BusyButton, Modal } from "@/components/ui";
 import { fmtMoney, fmtDate } from "@/lib/format";
 
 const numVal = (n: number) => (n === 0 ? "" : String(n));
@@ -16,7 +16,7 @@ export default function ReceivePaymentModal({
   saleId: string | null;
   onClose: () => void;
 }) {
-  const { sales, customers, salePaid } = useStore();
+  const { sales, customers, salePaid, isPending } = useStore();
   const sale = sales.find((s) => s.id === saleId) ?? null;
 
   // amount already paid on THIS invoice (explicit + FIFO allocation)
@@ -30,7 +30,7 @@ export default function ReceivePaymentModal({
   return (
     <Modal open={!!sale} onClose={onClose} title="Receive Payment" subtitle={sale ? `${sale.invoiceNo} · ${cust?.name ?? ""}` : undefined} size="lg">
       {/* key remounts the form per invoice so Amount starts at the due */}
-      <PaymentForm key={sale.id} saleId={sale.id} due={due} defaultAmount={due} custName={cust?.name ?? ""} onClose={onClose} />
+      <PaymentForm key={sale.id} saleId={sale.id} due={due} defaultAmount={due} custName={cust?.name ?? ""} onClose={onClose} submitting={isPending("payment:create")} />
     </Modal>
   );
 }
@@ -41,14 +41,17 @@ function PaymentForm({
   defaultAmount,
   custName,
   onClose,
+  submitting = false,
 }: {
   saleId: string;
   due: number;
   defaultAmount: number;
   custName: string;
   onClose: () => void;
+  submitting?: boolean;
 }) {
-  const { sales, addPayment } = useStore();
+  const { sales, addPayment, isPending } = useStore();
+  const busy = submitting || isPending("payment:create");
   const sale = sales.find((s) => s.id === saleId) ?? null;
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<"Cash" | "Bank" | "Cheque">("Cash");
@@ -59,6 +62,7 @@ function PaymentForm({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     const amt = Number(amount) || 0;
     if (amt <= 0) {
       setErr("Enter the amount you're receiving.");
@@ -135,9 +139,9 @@ function PaymentForm({
         </div>
         <div className="col-span-2 flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={!(Number(amount) > 0)}>
+          <BusyButton type="submit" loading={busy} disabled={!(Number(amount) > 0)}>
             Save Payment
-          </button>
+          </BusyButton>
         </div>
       </form>
     </>

@@ -1,4 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
+import { assertPositiveMoney, LIMITS } from "../common/security/limits";
+import { sanitizeOptionalText } from "../common/security/sanitize-text";
 import { PrismaService } from "../prisma/prisma.service";
 import { settleFifo } from "../domain/payment-settlement";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
@@ -16,8 +19,36 @@ export class PaymentsService {
    * Supplier payments are the readable journal of what the purchase `paid`
    * column already tracks (the mill is owed the goods amount only).
    */
+  private async assertDailyPaymentCap(
+    tx: Prisma.TransactionClient,
+    businessId: string,
+    date: string,
+    amount: number,
+  ) {
+    const day = new Date(date);
+    const start = new Date(day);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(day);
+    end.setHours(23, 59, 59, 999);
+    const agg = await tx.payment.aggregate({
+      where: { businessId, date: { gte: start, lte: end } },
+      _sum: { amount: true },
+    });
+    const today = Number(agg._sum.amount ?? 0);
+    if (today + amount > LIMITS.MAX_DAILY_PAYMENT_TOTAL + 0.005) {
+      throw new BadRequestException(
+        `Daily payment limit of ${LIMITS.MAX_DAILY_PAYMENT_TOTAL} exceeded for this business`,
+      );
+    }
+  }
+
   async create(businessId: string, dto: CreatePaymentDto) {
+    assertPositiveMoney(dto.amount, "Payment amount");
+    dto.note = sanitizeOptionalText(dto.note, 300);
+
     return this.prisma.$transaction(async (tx) => {
+      await this.assertDailyPaymentCap(tx, businessId, dto.date, dto.amount);
+
       if (dto.type === "CUSTOMER") {
         if (!dto.customerId) {
           throw new BadRequestException("Customer payments need customerId");

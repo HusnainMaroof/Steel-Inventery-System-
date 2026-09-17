@@ -1,3 +1,4 @@
+import { sanitizeUiSettings } from "../common/security/sanitize-settings";
 import { PrismaService } from "../prisma/prisma.service";
 import { LedgerService } from "./ledger.service";
 
@@ -29,12 +30,14 @@ describe("LedgerService", () => {
 
   it("returns a normalized empty bootstrap for a new business", async () => {
     prisma.$transaction.mockResolvedValue(Array.from({ length: 13 }, () => []));
+    prisma.business.findUniqueOrThrow.mockResolvedValue({ settings: { invoiceName: "Test" } });
     const result = await service.bootstrap("biz-a");
     expect(result).toMatchObject({
       version: 2,
       products: [],
       purchases: [],
       sales: [],
+      settings: { invoiceName: "Test" },
     });
     expect(prisma.supplier.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { businessId: "biz-a" } }),
@@ -52,11 +55,12 @@ describe("LedgerService", () => {
 
   it("stores preferences on the authenticated business", async () => {
     const settings = { invoiceName: "Husna Steel" };
-    prisma.business.update.mockResolvedValue({ settings });
+    const sanitized = sanitizeUiSettings(settings);
+    prisma.business.update.mockResolvedValue({ settings: sanitized });
     await service.savePreferences("biz-a", settings);
     expect(prisma.business.update).toHaveBeenCalledWith({
       where: { id: "biz-a" },
-      data: { settings },
+      data: { settings: sanitized },
       select: { settings: true },
     });
   });

@@ -5,7 +5,7 @@ import { useStore } from "@/lib/store";
 import type { AttributeDef, AttributeOption, Product, ProductCategory, Variant } from "@/lib/types";
 import { attrsValuesLine, scopedDefs } from "@/lib/catalogue";
 import { PRODUCT_TEMPLATES, type ProductTemplate } from "@/lib/templates";
-import { ConfirmModal, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
+import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
 
 const UNIT_OPTIONS: { value: string; label: string }[] = [
   { value: "kg", label: "KG" },
@@ -190,6 +190,7 @@ export default function ProductsPage() {
     setVariantShortName,
     setVariantActive,
     deleteVariant,
+    isPending,
   } = useStore();
 
   const [view, setView] = useState<View>({ level: "products" });
@@ -234,6 +235,16 @@ export default function ProductsPage() {
     );
   };
   const usedCategory = (id: string) => variantsOfCategory(id).some((v) => usedVariant(v.id));
+
+  const deletePendingKey = deleteTarget
+    ? deleteTarget.kind === "product"
+      ? `product:delete:${deleteTarget.p.id}`
+      : deleteTarget.kind === "category"
+        ? `category:delete:${deleteTarget.c.id}`
+        : deleteTarget.kind === "variant"
+          ? `variant:delete:${deleteTarget.v.id}`
+          : `attribute:delete:${deleteTarget.d.id}`
+    : null;
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -548,6 +559,7 @@ export default function ProductsPage() {
                   : ""
         }
         confirmLabel="Delete"
+        loading={deletePendingKey ? isPending(deletePendingKey) : false}
       >
         {deleteTarget?.kind === "product" && (
           <p className="text-sm text-neutral-700 leading-relaxed">
@@ -929,6 +941,7 @@ function AttrCard({
   onDeleteOption: (id: string) => void;
   onReorderOptions: (ids: string[]) => void;
 }) {
+  const { isPending } = useStore();
   const [open, setOpen] = useState(def.type === "select");
   const [editingOpt, setEditingOpt] = useState<string | null>(null);
   const [optDraft, setOptDraft] = useState("");
@@ -1020,7 +1033,7 @@ function AttrCard({
                     className="!py-1 text-[13px] flex-1"
                     autoFocus
                   />
-                  <button type="submit" className="btn-primary !py-1 !px-2.5 text-xs">Save</button>
+                  <BusyButton type="submit" className="!py-1 !px-2.5 text-xs" loading={isPending()}>Save</BusyButton>
                 </form>
               ) : (
                 <>
@@ -1070,7 +1083,7 @@ function AttrCard({
               placeholder="New option"
               className="!py-1.5 text-[13px] flex-1"
             />
-            <button type="submit" className="btn-primary !py-1.5 !px-3 text-xs shrink-0">Add Option</button>
+            <BusyButton type="submit" className="!py-1.5 !px-3 text-xs shrink-0" loading={isPending()}>Add Option</BusyButton>
           </form>
         </div>
       )}
@@ -1093,6 +1106,7 @@ function VariantRow({
   onToggle: () => void;
   onDelete: () => void;
 }) {
+  const { isPending } = useStore();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(v.shortName);
   return (
@@ -1104,7 +1118,7 @@ function VariantRow({
             onSubmit={(e) => { e.preventDefault(); onRename(draft); setEditing(false); }}
           >
             <input value={draft} onChange={(e) => setDraft(e.target.value)} className="!py-1.5 text-[13px] flex-1" />
-            <button type="submit" className="btn-primary !py-1.5 !px-3 text-xs">Save</button>
+            <BusyButton type="submit" className="!py-1.5 !px-3 text-xs" loading={isPending()}>Save</BusyButton>
           </form>
         ) : (
           <>
@@ -1138,6 +1152,7 @@ function AddProductModal({
   onScratch: (name: string, unit: string, description: string | undefined, usesCategories: boolean) => void;
   onTemplate: (t: ProductTemplate) => void;
 }) {
+  const { isPending } = useStore();
   const [mode, setMode] = useState<"scratch" | "template">("scratch");
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("kg");
@@ -1273,7 +1288,7 @@ function AddProductModal({
 
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-primary">{mode === "scratch" ? "Continue" : "Save Product"}</button>
+          <BusyButton type="submit" loading={isPending()}>{mode === "scratch" ? "Continue" : "Save Product"}</BusyButton>
         </div>
       </form>
     </Modal>
@@ -1289,6 +1304,7 @@ function AddCategoryModal({
   onClose: () => void;
   onAdd: (name: string, description: string | undefined, active: boolean) => void;
 }) {
+  const { isPending } = useStore();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState(true);
@@ -1323,7 +1339,7 @@ function AddCategoryModal({
         </label>
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-primary">Save</button>
+          <BusyButton type="submit" loading={isPending()}>Save</BusyButton>
         </div>
       </form>
     </Modal>
@@ -1339,6 +1355,7 @@ function AddAttributeModal({
   onClose: () => void;
   onAdd: (def: { name: string; type: AttributeDef["type"]; required: boolean; unit?: string; options?: string[] }) => void;
 }) {
+  const { isPending } = useStore();
   const [name, setName] = useState("");
   const [type, setType] = useState<AttributeDef["type"]>("select");
   const [required, setRequired] = useState(true);
@@ -1419,7 +1436,7 @@ function AddAttributeModal({
         </label>
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-primary">Save Attribute</button>
+          <BusyButton type="submit" loading={isPending()}>Save Attribute</BusyButton>
         </div>
       </form>
     </Modal>
@@ -1437,6 +1454,7 @@ function RenameModal({
   onClose: () => void;
   onSave: (n: string) => void;
 }) {
+  const { isPending } = useStore();
   const [name, setName] = useState(value);
   return (
     <Modal open onClose={onClose} title={title}>
@@ -1450,7 +1468,7 @@ function RenameModal({
         <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-primary">Save</button>
+          <BusyButton type="submit" loading={isPending()}>Save</BusyButton>
         </div>
       </form>
     </Modal>

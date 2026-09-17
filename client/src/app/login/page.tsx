@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { BusyButton } from "@/components/ui";
 import { homeFor, useAuth } from "@/lib/auth";
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -56,12 +57,15 @@ export default function LoginPage() {
     e.preventDefault();
     setPending(true);
     setError(null);
-    const err = await login(email, password);
-    setPending(false);
-    if (err) {
-      setError(err);
-      setPassword("");
-      setShowPassword(false);
+    try {
+      const err = await login(email, password);
+      if (err) {
+        setError(err);
+        setPassword("");
+        setShowPassword(false);
+      }
+    } finally {
+      setPending(false);
     }
   };
 
@@ -101,9 +105,9 @@ export default function LoginPage() {
               <motion.div
                 key="login-error"
                 role="alert"
-                initial={{ opacity: 0, y: -6, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: "auto" }}
-                exit={{ opacity: 0, y: -4, height: 0 }}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.25, ease }}
                 className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5 overflow-hidden"
               >
@@ -157,13 +161,9 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={pending}
-              className="btn-primary w-full !py-3 !text-[14px] mt-1 disabled:opacity-60"
-            >
-              {pending ? "Please wait…" : "Sign in"}
-            </button>
+            <BusyButton type="submit" loading={pending} className="w-full !py-3 !text-[14px] mt-1">
+              Sign in
+            </BusyButton>
           </form>
         </motion.div>
 

@@ -10,6 +10,7 @@ import {
   FastifyAdapter,
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
+import helmet from "@fastify/helmet";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
@@ -37,6 +38,12 @@ async function bootstrap() {
       },
     );
 
+    await app.register(helmet, {
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: "same-site" },
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    });
+
     app.setGlobalPrefix("api", {
       exclude: [{ path: "health", method: RequestMethod.GET }],
     });
@@ -47,6 +54,8 @@ async function bootstrap() {
         whitelist: true,
         transform: true,
         forbidNonWhitelisted: true,
+        forbidUnknownValues: true,
+        transformOptions: { enableImplicitConversion: true },
       }),
     );
     app.useGlobalFilters(new AllExceptionsFilter());

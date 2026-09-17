@@ -10,7 +10,7 @@ export class LedgerController {
 
   @Get("bootstrap")
   async bootstrap(@CurrentUser() user: AuthUser) {
-    return { data: await this.ledgerService.bootstrap(user.businessId) };
+    return { data: await this.ledgerService.bootstrap(user.businessId, user.role) };
   }
 
 }

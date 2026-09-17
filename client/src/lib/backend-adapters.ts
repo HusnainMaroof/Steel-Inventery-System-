@@ -11,13 +11,18 @@ import type {
   Quality,
   Sale,
   StockCheck,
+  StaffMember,
   Supplier,
   Variant,
   Warehouse,
   WarehouseLocation,
 } from "./types";
+import { hydratePurchasePaymentHistories } from "./purchase-utils";
+import { sanitizeAccess } from "./staff-access";
+import { mergeUiPreferences, type UiPreferences } from "./ui-preferences";
 
 type ApiLine = {
+  id?: string;
   productId: string;
   variantId?: string | null;
   categoryId?: string | null;
@@ -62,7 +67,7 @@ type ApiSale = {
   transportCharges: number;
   labourCharges: number;
   lines: ApiLine[];
-  invoice?: { number: string } | null;
+  invoice?: { number: string; total: number; paid: number } | null;
 };
 
 type ApiPayment = {
@@ -75,6 +80,7 @@ type ApiPayment = {
   method: "CASH" | "BANK" | "CHEQUE";
   saleId?: string | null;
   note?: string | null;
+  allocations?: { saleId: string; amount: number | string }[];
 };
 
 type ApiExpense = Omit<Expense, "category"> & {
@@ -98,17 +104,39 @@ export type ApiBootstrap = {
   variants: Variant[];
   warehouses: Warehouse[];
   locations: WarehouseLocation[];
+  staff?: StaffMember[];
+  settings?: Record<string, unknown>;
 };
 
 const dateOnly = (value: string) => value.slice(0, 10);
 const titleCase = <T extends string>(value: string) =>
   (value.charAt(0) + value.slice(1).toLowerCase()) as T;
 
-export function normalizeBootstrap(raw: ApiBootstrap) {
-  const purchaseById = new Map(raw.purchases.map((purchase) => [purchase.id, purchase]));
-  const purchases: Purchase[] = raw.purchases.flatMap((purchase) =>
-    purchase.lines.slice(0, 1).map((line) => ({
-      id: purchase.id,
+function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
+  const lines = purchase.lines;
+  if (lines.length === 0) return [];
+
+  const goodsTotal = lines.reduce(
+    (sum, line) => sum + Number(line.qty) * Number(line.rate),
+    0,
+  );
+  const chargeTotal =
+    Number(purchase.transport) +
+    Number(purchase.loading) +
+    Number(purchase.labour) +
+    Number(purchase.otherCost);
+  const paid = Number(purchase.paid);
+
+  return lines.map((line, index) => {
+    const lineGoods = Number(line.qty) * Number(line.rate);
+    const share = goodsTotal > 0 ? lineGoods / goodsTotal : 1 / lines.length;
+    const lineId = line.id ?? `${purchase.id}:${index}`;
+    const rowId = lines.length === 1 ? purchase.id : `${purchase.id}::${lineId}`;
+
+    return {
+      id: rowId,
+      purchaseId: purchase.id,
+      lineId,
       date: dateOnly(purchase.date),
       supplierId: purchase.supplierId,
       product: line.productName ?? undefined,
@@ -126,13 +154,20 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
       qty: Number(line.qty),
       unit: line.unit,
       rate: Number(line.rate),
-      transport: Number(purchase.transport),
-      loadingCharges: Number(purchase.loading),
-      labourCharges: Number(purchase.labour),
-      otherCost: Number(purchase.otherCost),
+      transport: Number(purchase.transport) * share,
+      loadingCharges: Number(purchase.loading) * share,
+      labourCharges: Number(purchase.labour) * share,
+      otherCost: Number(purchase.otherCost) * share,
       sellRate: line.sellRate == null ? undefined : Number(line.sellRate),
-      paid: Number(purchase.paid),
-    })),
+      paid,
+    };
+  });
+}
+
+export function normalizeBootstrap(raw: ApiBootstrap) {
+  const purchaseById = new Map(raw.purchases.map((purchase) => [purchase.id, purchase]));
+  let purchases: Purchase[] = raw.purchases.flatMap((purchase) =>
+    expandPurchaseLines(purchase),
   );
 
   const sales: Sale[] = raw.sales.map((sale) => ({
@@ -146,6 +181,8 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
     loadingCharges: Number(sale.loadingCharges),
     transportCharges: Number(sale.transportCharges),
     labourCharges: Number(sale.labourCharges),
+    invoicePaid: sale.invoice ? Number(sale.invoice.paid) : undefined,
+    invoiceTotal: sale.invoice ? Number(sale.invoice.total) : undefined,
     lines: sale.lines.map((line) => ({
       item: line.item,
       qty: Number(line.qty),
@@ -174,7 +211,13 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
     method: titleCase<Payment["method"]>(payment.method),
     saleId: payment.saleId ?? undefined,
     note: payment.note ?? undefined,
+    allocations: payment.allocations?.map((a) => ({
+      saleId: a.saleId,
+      amount: Number(a.amount),
+    })),
   }));
+
+  purchases = hydratePurchasePaymentHistories(purchases, payments);
 
   const expenses: Expense[] = raw.expenses.map((expense) => ({
     ...expense,
@@ -205,6 +248,12 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
     variants: raw.variants,
     warehouses: raw.warehouses,
     locations: raw.locations,
+    staff: (raw.staff ?? []).map((member) => ({
+      ...member,
+      role: "SUBADMIN" as const,
+      access: sanitizeAccess(member.access),
+    })),
+    settings: mergeUiPreferences(raw.settings as Partial<UiPreferences> | undefined),
     hiddenItems: [] as string[],
     hiddenVariants: [] as string[],
   };

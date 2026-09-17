@@ -1,5 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { assertMoney, assertQty, LIMITS } from "../common/security/limits";
+import {
+  sanitizeAttributeSnapshot,
+  sanitizeOptionalText,
+} from "../common/security/sanitize-text";
 import { purchaseGoodsTotal } from "../domain/money";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
@@ -28,6 +33,24 @@ export class PurchasesService {
   async create(businessId: string, dto: CreatePurchaseDto) {
     if (dto.lines.length === 0) {
       throw new BadRequestException("A purchase needs at least one line");
+    }
+    if (dto.lines.length > LIMITS.MAX_LINES_PER_DOC) {
+      throw new BadRequestException(
+        `A purchase cannot have more than ${LIMITS.MAX_LINES_PER_DOC} lines`,
+      );
+    }
+    dto.notes = sanitizeOptionalText(dto.notes, 300);
+    assertMoney(dto.transport ?? 0, "Transport");
+    assertMoney(dto.loading ?? 0, "Loading");
+    assertMoney(dto.labour ?? 0, "Labour");
+    assertMoney(dto.otherCost ?? 0, "Other cost");
+    assertMoney(dto.paid ?? 0, "Paid amount");
+    for (const line of dto.lines) {
+      assertQty(line.qty);
+      assertMoney(line.rate, "Rate");
+      if (line.sellRate != null) assertMoney(line.sellRate, "Sell rate");
+      line.item = line.item.trim().slice(0, 80);
+      line.attributeSnapshot = sanitizeAttributeSnapshot(line.attributeSnapshot);
     }
 
     return this.prisma.$transaction(async (tx) => {

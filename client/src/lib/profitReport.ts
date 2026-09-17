@@ -1,4 +1,5 @@
 import { monthLabel } from "./format";
+import { purchaseParentId } from "./purchase-utils";
 import {
   purchaseTotal,
   saleGrandTotal,
@@ -269,9 +270,8 @@ export function lotsAsOf(purchases: Purchase[], sales: Sale[], asOf: string): Lo
     if (s.date > asOf) continue;
     for (const l of s.lines) {
       if (l.purchaseId) {
-        const lot = lots.find((x) => x.p.id === l.purchaseId);
-        if (lot && lot.remaining >= l.qty) lot.remaining -= l.qty;
-        else if (lot) consume([lot], l.qty);
+        const elig = lots.filter((x) => purchaseParentId(x.p) === l.purchaseId);
+        consume(elig, l.qty);
       } else {
         let elig = lots.filter((x) => x.p.item === l.item);
         if (l.supplierId) elig = elig.filter((x) => x.p.supplierId === l.supplierId);
@@ -545,11 +545,22 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
 
   const suppliers: PartyDue[] = [];
   const bySup: Record<string, number> = {};
+  const purchaseDue = new Map<string, { supplierId: string; goods: number; paid: number }>();
   for (const p of input.purchases) {
     if (!inDateRange(p.date, from, to)) continue;
     if (!match(p)) continue;
-    bySup[p.supplierId] =
-      (bySup[p.supplierId] ?? 0) + Math.max(0, steelAmount(p) - (p.paid ?? 0));
+    const pid = purchaseParentId(p);
+    const row = purchaseDue.get(pid) ?? {
+      supplierId: p.supplierId,
+      goods: 0,
+      paid: p.paid ?? 0,
+    };
+    row.goods += steelAmount(p);
+    purchaseDue.set(pid, row);
+  }
+  for (const row of purchaseDue.values()) {
+    bySup[row.supplierId] =
+      (bySup[row.supplierId] ?? 0) + Math.max(0, row.goods - row.paid);
   }
   for (const [id, due] of Object.entries(bySup)) {
     if (due <= 0.001) continue;

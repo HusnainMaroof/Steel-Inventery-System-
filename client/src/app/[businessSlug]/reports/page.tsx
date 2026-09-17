@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BusinessLink } from "@/components/BusinessLink";
 import { useStore } from "@/lib/store";
-import { CustomSelect, EmptyState, Modal, Page } from "@/components/ui";
+import { BusyButton, CustomSelect, EmptyState, ErrorState, Modal, Page } from "@/components/ui";
+import { ReportsSkeleton } from "@/components/skeletons";
 import { fmtDate, qtyUnitLabel } from "@/lib/format";
 import {
   StockSummary,
@@ -21,6 +22,8 @@ import {
   yearOptions,
   type ReportMode,
 } from "@/lib/profitReport";
+import { readCache, writeCache } from "@/lib/query-cache";
+import { fetchServerProfitReport, mergeServerReport } from "@/lib/server-report";
 
 type ReportTab = "profit" | "stock" | "cash" | "dues";
 
@@ -49,6 +52,7 @@ export default function ReportsPage() {
     salePaid,
     stockChecks,
     recordStockCheck,
+    isPending,
   } = store;
 
   const now = useMemo(() => new Date(), []);
@@ -61,6 +65,11 @@ export default function ReportsPage() {
   const [checkQty, setCheckQty] = useState("");
   const [checkOpen, setCheckOpen] = useState(false);
   const [checkError, setCheckError] = useState("");
+  const [reportLoading, setReportLoading] = useState(true);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [serverReport, setServerReport] = useState<Awaited<
+    ReturnType<typeof fetchServerProfitReport>
+  > | null>(null);
 
   const mode: ReportMode = fromDate || toDate ? "range" : !year ? "all" : "year";
   const yearNum = year ? Number(year) : now.getFullYear();
@@ -75,30 +84,29 @@ export default function ReportsPage() {
     [products]
   );
 
-  const report = useMemo(
-    () =>
-      buildProfitReport({
-        mode,
-        year: yearNum,
-        rangeFrom: fromDate || undefined,
-        rangeTo: toDate || undefined,
-        productId,
-        now,
-        products,
-        categories,
-        variants,
-        productItems,
-        purchases,
-        sales,
-        payments,
-        expenses,
-        customers,
-        suppliers,
-        lineUnitCost,
-        byItem,
-        salePaid,
-        stockChecks,
-      }),
+  const reportInput = useMemo(
+    () => ({
+      mode,
+      year: yearNum,
+      rangeFrom: fromDate || undefined,
+      rangeTo: toDate || undefined,
+      productId,
+      now,
+      products,
+      categories,
+      variants,
+      productItems,
+      purchases,
+      sales,
+      payments,
+      expenses,
+      customers,
+      suppliers,
+      lineUnitCost,
+      byItem,
+      salePaid,
+      stockChecks,
+    }),
     [
       mode,
       yearNum,
@@ -120,8 +128,60 @@ export default function ReportsPage() {
       byItem,
       salePaid,
       stockChecks,
-    ]
+    ],
   );
+
+  useEffect(() => {
+    if (!store.ready) return;
+    const cacheKey = `report:${mode}:${yearNum}:${fromDate}:${toDate}:${productId}`;
+    const cached = readCache<Awaited<ReturnType<typeof fetchServerProfitReport>>>(
+      cacheKey,
+      store.dataVersion,
+    );
+    if (cached) {
+      setServerReport(cached);
+      setReportLoading(false);
+      setReportError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setReportLoading(true);
+    setReportError(null);
+    void fetchServerProfitReport({
+      mode,
+      year: yearNum,
+      from: fromDate || undefined,
+      to: toDate || undefined,
+      productId: productId || undefined,
+    })
+      .then((data) => {
+        if (!cancelled) {
+          writeCache(cacheKey, store.dataVersion, data);
+          setServerReport(data);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          setServerReport(null);
+          setReportError(
+            reason instanceof Error ? reason.message : "Could not load report from server",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReportLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [store.ready, store.dataVersion, mode, yearNum, fromDate, toDate, productId]);
+
+  const report = useMemo(() => {
+    const local = buildProfitReport(reportInput);
+    if (!serverReport) return local;
+    return mergeServerReport(serverReport, reportInput);
+  }, [reportInput, serverReport]);
 
   const checkProduct =
     products.find((p) => p.id === checkProductId) ??
@@ -136,6 +196,7 @@ export default function ReportsPage() {
   };
 
   const saveCheck = async () => {
+    if (isPending("stock-check:create")) return;
     const qty = Number(checkQty);
     if (!checkProduct) {
       setCheckError("Pick a product first.");
@@ -236,7 +297,41 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {!hasAny ? (
+      {reportError && !reportLoading && hasAny ? (
+        <p role="alert" className="text-sm text-[#a12b1f] mb-4">
+          {reportError} — showing local figures until the server responds.
+        </p>
+      ) : null}
+
+      {reportLoading ? <ReportsSkeleton /> : null}
+
+      {reportError && !reportLoading && !hasAny ? (
+        <ErrorState
+          title="Could not load report"
+          message={reportError}
+          onRetry={() => {
+            setReportLoading(true);
+            setReportError(null);
+            void fetchServerProfitReport({
+              mode,
+              year: yearNum,
+              from: fromDate || undefined,
+              to: toDate || undefined,
+              productId: productId || undefined,
+            })
+              .then(setServerReport)
+              .catch((reason: unknown) => {
+                setServerReport(null);
+                setReportError(
+                  reason instanceof Error ? reason.message : "Could not load report from server",
+                );
+              })
+              .finally(() => setReportLoading(false));
+          }}
+        />
+      ) : null}
+
+      {!reportLoading && !reportError && !hasAny ? (
         <EmptyState
           emoji=""
           title="Nothing to show yet"
@@ -247,7 +342,7 @@ export default function ReportsPage() {
             </BusinessLink>
           }
         />
-      ) : (
+      ) : !reportLoading && hasAny ? (
         <>
           <div
             role="tablist"
@@ -294,7 +389,7 @@ export default function ReportsPage() {
             <MoneySides report={report} />
           )}
         </>
-      )}
+      ) : null}
 
       <Modal
         open={checkOpen}
@@ -306,9 +401,9 @@ export default function ReportsPage() {
             <button type="button" className="btn-ghost min-h-[44px]" onClick={() => setCheckOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="btn-primary min-h-[44px]" onClick={saveCheck}>
+            <BusyButton type="button" className="min-h-[44px]" onClick={saveCheck} loading={isPending("stock-check:create")}>
               Save count
-            </button>
+            </BusyButton>
           </div>
         }
       >

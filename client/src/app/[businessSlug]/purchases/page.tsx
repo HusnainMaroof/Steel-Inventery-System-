@@ -1,12 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
-import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, OptionalSection } from "@/components/ui";
+import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, OptionalSection } from "@/components/ui";
 import { useUiPreferences } from "@/lib/preferences";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtDateTime, qtyUnitLabel, perUnitLabel } from "@/lib/format";
 import { AttributeFields, validateAttributes } from "@/components/catalogue/AttributeFields";
 import { productUsesCategories, resolveDefs, scopedDefs } from "@/lib/catalogue";
+import {
+  duePurchaseParentIds,
+  purchaseParentId,
+  purchaseTotals,
+} from "@/lib/purchase-utils";
 import type { AttributeDef, AttributeOption, Purchase } from "@/lib/types";
 
 /* structured identity of a purchase line — rendered from the stored
@@ -124,15 +129,17 @@ export default function PurchasesPage() {
     deletePurchase,
     addPayment,
     ensureVariant,
+    isPending,
   } = useStore();
   const activeSuppliers = suppliers.filter((supplier) => supplier.active !== false);
   const { open, onOpen, onClose } = useToggle();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"all" | "dues">(() =>
-    typeof window !== "undefined" && window.location.search.includes("tab=dues")
-      ? "dues"
-      : "all"
-  );
+  const [tab, setTab] = useState<"all" | "dues">("all");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "dues") {
+      setTab("dues");
+    }
+  }, []);
   const [payId, setPayId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState(0);
   const [payError, setPayError] = useState("");
@@ -220,9 +227,22 @@ export default function PurchasesPage() {
   const numVal = (v: number) => (v === 0 ? "" : v);
   const openPay = (id: string) => { setPayId(id); setPayAmount(0); setPayError(""); };
   const closePay = () => { setPayId(null); setPayError(""); };
-  const remainingOf = (p: Purchase) => Math.max(0, steelAmount(p) - (p.paid ?? 0));
-  const duePurchases = purchases.filter((p) => remainingOf(p) > 0);
-  const totalDue = duePurchases.reduce((a, p) => a + remainingOf(p), 0);
+  const totalsOf = (p: Purchase) => purchaseTotals(p, purchases);
+  const remainingOf = (p: Purchase) => totalsOf(p).remaining;
+  const dueParentIds = useMemo(() => duePurchaseParentIds(purchases), [purchases]);
+  const duePurchases = useMemo(
+    () =>
+      purchases.filter((p) => dueParentIds.includes(purchaseParentId(p))),
+    [purchases, dueParentIds],
+  );
+  const totalDue = useMemo(
+    () =>
+      dueParentIds.reduce((sum, pid) => {
+        const row = purchases.find((p) => purchaseParentId(p) === pid);
+        return row ? sum + purchaseTotals(row, purchases).remaining : sum;
+      }, 0),
+    [dueParentIds, purchases],
+  );
 
   const openAdd = () => {
     setFormError("");
@@ -411,7 +431,7 @@ export default function PurchasesPage() {
       <div className="flex gap-6 border-b border-neutral-200 mb-4">
         {([
           ["all", "All Purchases"],
-          ["dues", `Payment Dues${totalDue > 0 ? ` (${duePurchases.length})` : ""}`],
+          ["dues", `Payment Dues${totalDue > 0 ? ` (${dueParentIds.length})` : ""}`],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors ${tab === key ? "border-black text-black font-bold" : "border-transparent text-black font-normal hover:opacity-60"}`}>
             {label}
@@ -627,7 +647,9 @@ export default function PurchasesPage() {
         footer={
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={() => { onClose(); setFormError(""); }}>Cancel</button>
-            <button type="submit" form="purchase-form" className="btn-primary">Save Purchase</button>
+            <BusyButton type="submit" form="purchase-form" loading={isPending("purchase:create")}>
+              Save Purchase
+            </BusyButton>
           </div>
         }
       >
@@ -898,6 +920,7 @@ export default function PurchasesPage() {
         onConfirm={confirmDeletePurchase}
         title="Delete this purchase?"
         confirmLabel="Delete Purchase"
+        loading={deleteTarget ? isPending(`purchase:delete:${purchaseParentId(deleteTarget)}`) : false}
       >
         {deleteTarget && (() => {
           const p = deleteTarget;
@@ -906,7 +929,7 @@ export default function PurchasesPage() {
             (p.variantId ? false : purchases.some((x) => x.item === p.item && x.id !== p.id));
           const soldAny = sales.some((s) => s.lines.some((l) => (p.variantId ? l.variantId === p.variantId : l.item === p.item)));
           const soldFrom = sales.reduce(
-            (a, s) => a + s.lines.filter((l) => l.purchaseId === p.id).reduce((x, l) => x + l.qty, 0),
+            (a, s) => a + s.lines.filter((l) => l.purchaseId === purchaseParentId(p)).reduce((x, l) => x + l.qty, 0),
             0
           );
           const vanishes = !otherPurchases && !soldAny;
@@ -970,9 +993,7 @@ export default function PurchasesPage() {
         {(() => {
           const p = purchases.find((x) => x.id === payId);
           if (!p) return null;
-          const total = steelAmount(p);
-          const paid = p.paid ?? 0;
-          const rem = Math.max(0, total - paid);
+          const { goods: total, paid, remaining: rem } = totalsOf(p);
           const history = p.paymentHistory ?? (paid > 0 ? [{ date: p.date + "T00:00:00", amount: paid }] : []);
           return (
             <form noValidate onSubmit={async (e) => {
@@ -1022,7 +1043,9 @@ export default function PurchasesPage() {
               )}
               <div className="flex justify-end gap-3 mt-6">
                 <button type="button" className="btn-ghost" onClick={closePay}>Cancel</button>
-                <button type="submit" className="btn-primary">Record Payment</button>
+                <BusyButton type="submit" loading={isPending("payment:create")}>
+                  Record Payment
+                </BusyButton>
               </div>
             </form>
           );

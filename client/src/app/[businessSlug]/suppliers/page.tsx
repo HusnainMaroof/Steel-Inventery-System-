@@ -2,7 +2,12 @@
 
 import { useState, useMemo } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
-import { Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
+import {
+  groupPurchasesByParent,
+  purchaseDocumentTotals,
+  purchaseTotals,
+} from "@/lib/purchase-utils";
+import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
 import { attrsValuesLine } from "@/lib/catalogue";
 import type { Purchase, Supplier } from "@/lib/types";
@@ -15,7 +20,7 @@ type DateGroup = {
 };
 
 export default function SuppliersPage() {
-  const { suppliers, purchases, sales, products, attributeDefs, addSupplier, deleteSupplier } = useStore();
+  const { suppliers, purchases, sales, products, attributeDefs, addSupplier, deleteSupplier, isPending } = useStore();
   const activeSuppliers = suppliers.filter((supplier) => supplier.active !== false);
   const { open, onOpen, onClose } = useToggle();
   const [form, setForm] = useState({ name: "", mill: "", phone: "" });
@@ -35,6 +40,14 @@ export default function SuppliersPage() {
     if (viewSupplierId === deleteTarget.id) setViewSupplierId(null);
     setDeleteTarget(null);
   };
+
+  const parentFirstLineIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const lines of groupPurchasesByParent(purchases).values()) {
+      ids.add(lines[0]!.id);
+    }
+    return ids;
+  }, [purchases]);
 
   const supplierDateGroups: DateGroup[] = useMemo(() => {
     if (!viewSupplierId) return [];
@@ -82,7 +95,7 @@ export default function SuppliersPage() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || isPending("supplier:create")) return;
     await addSupplier({ name: form.name.trim(), mill: form.mill.trim(), phone: form.phone.trim() });
     setForm({ name: "", mill: "", phone: "" });
     onClose();
@@ -230,7 +243,9 @@ export default function SuppliersPage() {
           <div><label>Phone</label><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" /></div>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={!form.name.trim()}>Add Supplier</button>
+            <BusyButton type="submit" loading={isPending("supplier:create")} disabled={!form.name.trim()}>
+              Add Supplier
+            </BusyButton>
           </div>
         </form>
       </Modal>
@@ -269,9 +284,10 @@ export default function SuppliersPage() {
                     {/* Items — receipt style */}
                     <div className="space-y-3">
                       {g.purchases.map((p) => {
-                        const paid = p.paid ?? 0;
+                        const doc = purchaseTotals(p, purchases);
+                        const paid = doc.paid;
                         const payable = steelAmount(p);
-                        const due = Math.max(0, payable - paid);
+                        const due = doc.remaining;
                         return (
                           <div key={p.id} className="border border-neutral-200 bg-white px-4 py-3 space-y-1.5">
                             {/* Row: Item */}
@@ -307,17 +323,19 @@ export default function SuppliersPage() {
                               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Total</span>
                               <span className="text-[14px] font-bold text-neutral-800 tabular-nums">{fmtMoney(payable)}</span>
                             </div>
-                            {/* Row: Paid */}
-                            <div className="flex items-baseline justify-between gap-4">
-                              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Paid</span>
-                              <span className="text-[13px] font-medium text-emerald-600 tabular-nums">{fmtMoney(paid)}</span>
-                            </div>
-                            {/* Row: Due — only show if > 0 */}
-                            {due > 0 && (
-                              <div className="flex items-baseline justify-between gap-4">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Due</span>
-                                <span className="text-[13px] font-bold text-[#a12b1f] tabular-nums">{fmtMoney(due)}</span>
-                              </div>
+                            {parentFirstLineIds.has(p.id) && (
+                              <>
+                                <div className="flex items-baseline justify-between gap-4">
+                                  <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Paid</span>
+                                  <span className="text-[13px] font-medium text-emerald-600 tabular-nums">{fmtMoney(paid)}</span>
+                                </div>
+                                {due > 0 && (
+                                  <div className="flex items-baseline justify-between gap-4">
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Due</span>
+                                    <span className="text-[13px] font-bold text-[#a12b1f] tabular-nums">{fmtMoney(due)}</span>
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                         );
@@ -337,6 +355,7 @@ export default function SuppliersPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDeleteSupplier}
         title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete supplier?"}
+        loading={deleteTarget ? isPending(`supplier:delete:${deleteTarget.id}`) : false}
         confirmLabel="Delete Supplier"
       >
         {deleteTarget && (() => {
@@ -348,7 +367,10 @@ export default function SuppliersPage() {
               (l) => l.supplierId === t.id || (l.purchaseId && pIds.has(l.purchaseId))
             )
           );
-          const dues = pur.reduce((a, p) => a + Math.max(0, steelAmount(p) - (p.paid ?? 0)), 0);
+          const dues = [...groupPurchasesByParent(pur).values()].reduce(
+            (a, lines) => a + purchaseDocumentTotals(lines).remaining,
+            0,
+          );
           return (
             <>
               <div className="border border-neutral-200 mb-5">

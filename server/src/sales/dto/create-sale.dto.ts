@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsNumber,
@@ -13,6 +14,7 @@ import {
 } from "class-validator";
 import { Type } from "class-transformer";
 import { IsCuid } from "../../common/decorators/is-cuid.decorator";
+import { LIMITS } from "../../common/security/limits";
 
 export class CreateSaleLineDto {
   @IsCuid()
@@ -47,6 +49,7 @@ export class CreateSaleLineDto {
 
   @IsNumber()
   @Min(0.001)
+  @Max(LIMITS.MAX_QTY)
   qty: number;
 
   @IsString()
@@ -57,6 +60,7 @@ export class CreateSaleLineDto {
   /** Price is locked from the purchase record, not typed freely. */
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   rate: number;
 }
 
@@ -68,6 +72,7 @@ export class CreateSaleDto {
   customerId: string;
 
   @IsArray()
+  @ArrayMaxSize(LIMITS.MAX_LINES_PER_DOC)
   @ValidateNested({ each: true })
   @Type(() => CreateSaleLineDto)
   lines: CreateSaleLineDto[];
@@ -92,21 +97,25 @@ export class CreateSaleDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   loadingCharges?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   transportCharges?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   labourCharges?: number;
 
   /** Money received at sale time — cannot exceed the invoice total. */
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(LIMITS.MAX_MONEY)
   paidNow?: number;
 }

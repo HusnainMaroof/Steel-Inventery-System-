@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { Page, PageTitle, EmptyState } from "@/components/ui";
 import { fmtMoney, fmtDate } from "@/lib/format";
@@ -30,13 +30,12 @@ export default function PaymentsPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "customer" | "supplier">(() => {
-    if (typeof window === "undefined") return "all";
+  const [typeFilter, setTypeFilter] = useState<"all" | "customer" | "supplier">("all");
+  useEffect(() => {
     const type = new URLSearchParams(window.location.search).get("type");
-    if (type === "received" || type === "customer") return "customer";
-    if (type === "paid" || type === "supplier") return "supplier";
-    return "all";
-  });
+    if (type === "received" || type === "customer") setTypeFilter("customer");
+    else if (type === "paid" || type === "supplier") setTypeFilter("supplier");
+  }, []);
   const [period, setPeriod] = useState<PeriodKey>("all");
   const [customMonth, setCustomMonth] = useState(""); // yyyy-mm
 
@@ -91,9 +90,16 @@ export default function PaymentsPage() {
         partyName: p.type === "customer"
           ? customers.find((c) => c.id === p.partyId)?.name ?? ""
           : suppliers.find((s) => s.id === p.partyId)?.name ?? "",
-        invoiceNo: p.type === "customer" && p.saleId
-          ? sales.find((s) => s.id === p.saleId)?.invoiceNo ?? "—"
-          : "—",
+        invoiceNo: (() => {
+          if (p.type !== "customer") return "—";
+          if (p.saleId) {
+            return sales.find((s) => s.id === p.saleId)?.invoiceNo ?? "—";
+          }
+          const labels = (p.allocations ?? [])
+            .map((a) => sales.find((s) => s.id === a.saleId)?.invoiceNo)
+            .filter(Boolean);
+          return labels.length ? labels.join(", ") : "FIFO settlement";
+        })(),
         method: p.method,
         note: p.note,
         amount: p.amount,

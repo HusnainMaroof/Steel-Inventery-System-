@@ -13,6 +13,7 @@ describe("UsersService owner revocation", () => {
   const service = new UsersService(
     prisma as unknown as PrismaService,
     {} as AuthService,
+    { applyTemplates: jest.fn() } as never,
   );
 
   beforeEach(() => jest.clearAllMocks());

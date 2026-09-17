@@ -1,4 +1,5 @@
 import "server-only";
+import { fetchWithTimeout, isTimeoutError } from "../fetch-with-timeout";
 import { getSessionToken } from "./session";
 import type { TradexRole, TradexUser } from "../auth-types";
 import { sanitizeAccess, type StaffPage } from "../staff-access";
@@ -39,14 +40,27 @@ export async function tradexFetch<T>(
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
+  const timeoutMs = path.includes("/reports/")
+    ? 60_000
+    : path.includes("/ledger/bootstrap")
+      ? 45_000
+      : 30_000;
+
   let res: Response;
   try {
-    res = await fetch(`${apiBase()}${path}`, {
-      ...init,
-      headers,
-      cache: "no-store",
-    });
-  } catch {
+    res = await fetchWithTimeout(
+      `${apiBase()}${path}`,
+      { ...init, headers, cache: "no-store" },
+      timeoutMs,
+    );
+  } catch (err) {
+    if (isTimeoutError(err)) {
+      return {
+        ok: false,
+        status: 504,
+        message: err instanceof Error ? err.message : "Request timed out",
+      };
+    }
     return {
       ok: false,
       status: 503,

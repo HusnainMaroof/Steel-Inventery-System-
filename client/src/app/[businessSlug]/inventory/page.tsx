@@ -5,6 +5,7 @@ import { useStore, type VariantStockRow } from "@/lib/store";
 import { Page, PageTitle, EmptyState, Modal } from "@/components/ui";
 import { fmtQtyWithUnit, fmtRateWithUnit, fmtMoney, fmtDate } from "@/lib/format";
 import { productUsesCategories, resolveDefs, attrsValuesLine } from "@/lib/catalogue";
+import { purchaseParentId } from "@/lib/purchase-utils";
 
 type Group = {
   product: string;
@@ -696,7 +697,9 @@ export default function InventoryPage() {
                   <p className="px-4 py-3 text-xs text-black">No stock left — all lots of this variant are sold.</p>
                 ) : (
                   lots.map((l) => {
-                    const purchased = purchases.find((p) => p.id === l.purchaseId)?.qty;
+                    const purchased = purchases
+                      .filter((p) => purchaseParentId(p) === l.purchaseId)
+                      .reduce((sum, p) => sum + p.qty, 0);
                     return (
                       <div key={l.purchaseId} className="px-4 py-3 border-b border-neutral-100 last:border-b-0">
                         <div className="flex justify-between items-center gap-3">

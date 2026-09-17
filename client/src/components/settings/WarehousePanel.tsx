@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { BusyButton } from "@/components/ui";
 import { useStore } from "@/lib/store";
 
 const offIcon = (
@@ -50,6 +51,7 @@ export function WarehousePanel() {
     addLocation,
     renameLocation,
     setLocationActive,
+    isPending,
   } = useStore();
   const [openLoc, setOpenLoc] = useState<string | null>(null);
   const [openWhAdd, setOpenWhAdd] = useState(false);
@@ -86,9 +88,9 @@ export function WarehousePanel() {
             }}
           >
             <input name="wh" placeholder="e.g. Main Yard" className="flex-1" aria-label="Warehouse name" />
-            <button type="submit" className="btn-primary !py-2 !px-3 text-xs min-h-[44px]">
+            <BusyButton type="submit" className="!py-2 !px-3 text-xs min-h-[44px]" loading={isPending("warehouse:create")}>
               Add warehouse
-            </button>
+            </BusyButton>
           </form>
         </div>
       ) : (
@@ -104,9 +106,9 @@ export function WarehousePanel() {
               }}
             >
               <input name="wh" placeholder="New warehouse name" className="flex-1" autoFocus aria-label="New warehouse name" />
-              <button type="submit" className="btn-primary !py-2 !px-3 text-xs min-h-[44px]">
+              <BusyButton type="submit" className="!py-2 !px-3 text-xs min-h-[44px]" loading={isPending("warehouse:create")}>
                 Add
-              </button>
+              </BusyButton>
               <button type="button" className="btn-ghost !py-2 !px-3 text-xs min-h-[44px]" onClick={() => setOpenWhAdd(false)}>
                 Cancel
               </button>
@@ -198,9 +200,9 @@ export function WarehousePanel() {
                         }}
                       >
                         <input name="loc" placeholder="e.g. Yard A" className="flex-1 !py-1 text-[12px]" autoFocus aria-label="Location name" />
-                        <button type="submit" className="btn-primary !py-1 !px-2 text-xs">
+                        <BusyButton type="submit" className="!py-1 !px-2 text-xs" loading={isPending("location:create")}>
                           Add
-                        </button>
+                        </BusyButton>
                       </form>
                     ) : null}
                   </div>

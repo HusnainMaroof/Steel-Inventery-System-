@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { isSubscriptionActive } from "../../subscription/subscription.util";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { ConfigService } from "../../config/config.service";
@@ -29,11 +34,34 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         role: payload.role,
         active: true,
       },
-      select: { id: true, business: { select: { slug: true } } },
+      select: {
+        id: true,
+        business: {
+          select: {
+            slug: true,
+            subscriptionPlan: true,
+            subscriptionStatus: true,
+            subscriptionEndsAt: true,
+          },
+        },
+      },
     });
     if (!user) throw new UnauthorizedException();
     if (payload.role !== "SUPERADMIN" && user.business?.slug !== payload.businessSlug) {
       throw new UnauthorizedException();
+    }
+    if (
+      payload.role !== "SUPERADMIN" &&
+      user.business &&
+      !isSubscriptionActive({
+        subscriptionPlan: user.business.subscriptionPlan,
+        subscriptionStatus: user.business.subscriptionStatus,
+        subscriptionEndsAt: user.business.subscriptionEndsAt,
+      })
+    ) {
+      throw new ForbiddenException(
+        "This business subscription has expired. Contact the platform administrator.",
+      );
     }
     return payload;
   }

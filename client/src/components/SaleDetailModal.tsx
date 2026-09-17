@@ -73,24 +73,29 @@ export default function SaleDetailModal({
   const paidPct = grand > 0 ? Math.min(100, (paid / grand) * 100) : 0;
   const status = invoiceStatus(paid, grand);
   const st = statusStyles[status];
-  const explicitPayments = payments.filter(
-    (p) => p.type === "customer" && p.saleId === sale.id
-  );
-  const explicitTotal = explicitPayments.reduce((a, p) => a + p.amount, 0);
-  const fifoExtra = paid - explicitTotal;
-  const fifoPayments: { id: string; date: string; amount: number; method: string; note?: string }[] = [];
-  if (fifoExtra > 0.01) {
-    const custPayments = payments
-      .filter((p) => p.type === "customer" && p.partyId === sale.customerId && !p.saleId)
-      .sort((a, b) => a.date.localeCompare(b.date));
-    let left = fifoExtra;
-    for (const p of custPayments) {
-      if (left <= 0.01) break;
-      const take = Math.min(p.amount, left);
-      fifoPayments.push({ id: p.id, date: p.date, amount: take, method: p.method, note: p.note });
-      left -= take;
-    }
-  }
+  const paymentEntries = payments
+    .filter((p) => p.type === "customer")
+    .flatMap((p) => {
+      if (p.saleId === sale.id) {
+        return [{
+          id: p.id,
+          date: p.date,
+          amount: p.amount,
+          method: p.method,
+          note: p.note,
+        }];
+      }
+      const alloc = p.allocations?.find((a) => a.saleId === sale.id);
+      if (!alloc) return [];
+      return [{
+        id: `${p.id}:${sale.id}`,
+        date: p.date,
+        amount: alloc.amount,
+        method: p.method,
+        note: p.note,
+      }];
+    })
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 
   return (
     <Modal
@@ -178,26 +183,17 @@ export default function SaleDetailModal({
           </div>
 
           {/* payment timeline */}
-          {(explicitPayments.length > 0 || fifoPayments.length > 0) && (
+          {paymentEntries.length > 0 && (
             <div>
               <h3 className="text-[12px] font-medium text-black uppercase tracking-wider mb-2">
                 Payments on this invoice
               </h3>
               <div className="border border-neutral-200 rounded-lg divide-y divide-neutral-100 max-h-48 overflow-y-auto">
-                {explicitPayments.map((p) => (
+                {paymentEntries.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <div className="min-w-0">
                       <p className="text-[13px] text-black">{fmtDate(p.date)} · {p.method}</p>
                       {p.note ? <p className="text-[12px] text-black/60 truncate">{p.note}</p> : null}
-                    </div>
-                    <span className="shrink-0 text-[13px] font-medium tabular-nums text-black">{fmtMoney(p.amount)}</span>
-                  </div>
-                ))}
-                {fifoPayments.map((p) => (
-                  <div key={`fifo-${p.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 bg-neutral-50">
-                    <div className="min-w-0">
-                      <p className="text-[13px] text-black">{fmtDate(p.date)} · {p.method}</p>
-                      <p className="text-[11px] text-black/60">Applied from unallocated payment</p>
                     </div>
                     <span className="shrink-0 text-[13px] font-medium tabular-nums text-black">{fmtMoney(p.amount)}</span>
                   </div>
