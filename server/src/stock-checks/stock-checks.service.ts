@@ -31,6 +31,7 @@ export class StockChecksService {
           productId: dto.productId,
           physicalQty: dto.physicalQty,
           systemQty,
+          note: dto.note,
         },
       });
     });

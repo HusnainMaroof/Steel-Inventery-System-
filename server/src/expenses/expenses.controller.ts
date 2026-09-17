@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -45,5 +46,10 @@ export class ExpensesController {
   @Get(":id")
   byId(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
     return this.expensesService.byId(user.businessId, id);
+  }
+
+  @Delete(":id")
+  remove(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
+    return this.expensesService.remove(user.businessId, id);
   }
 }

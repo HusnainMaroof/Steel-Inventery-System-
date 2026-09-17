@@ -18,14 +18,16 @@ PostgreSQL (Neon) · REST `/api/v1`
    # DATABASE_URL=postgresql://...   (Neon pooled connection)
    # DIRECT_URL=postgresql://...     (Neon direct connection, for migrations)
    # JWT_SECRET=<long random string>
+   # ADMIN_EMAIL=admin@tradex.app
+   # ADMIN_PASSWORD=<at least 8 characters>
    ```
 
 2. Install dependencies and prepare the database:
 
    ```bash
    npm install
-   npx prisma generate
-   npx prisma migrate dev --name init
+   npm run prisma:generate
+   npm run prisma:deploy
    ```
 
 3. Run:
@@ -37,10 +39,11 @@ PostgreSQL (Neon) · REST `/api/v1`
 
 ## API
 
-Every route is versioned under `/api/v1` and (except `POST /api/v1/auth/login`)
-requires a JWT `Authorization: Bearer <token>` header.
+Every route is versioned under `/api/v1` and (except `POST /api/v1/auth/login`
+and `GET /api/v1/auth/status`) requires a JWT `Authorization: Bearer <token>`
+header. `POST /api/v1/auth/register` is closed (403).
 
-Modules: auth · users · products (categories, attributes, variants) ·
+Modules: auth · owners · ledger/preferences · products (categories, attributes, variants) ·
 inventory (derived stock + movements + adjustments) · purchases · sales ·
 customers · suppliers · payments · invoices · expenses · stock-checks ·
 reports.
@@ -58,6 +61,8 @@ Errors always return `{ statusCode, message, error }`. List endpoints accept
 - Customer/supplier balances are derived from transactions, never stored.
 - Money columns are Prisma `Decimal` — never floats.
 - Schema changes only via Prisma migrations.
+- Normalized Prisma tables are the only source of truth. The client hydrates
+  through `/ledger/bootstrap` and writes through tenant-scoped domain routes.
 
 ## Tests
 

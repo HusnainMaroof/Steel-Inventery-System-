@@ -68,9 +68,18 @@ export class ReportsService {
       },
     });
 
+    // Source purchases may predate the report period. COGS must still use
+    // their landed cost instead of silently becoming zero.
+    const costPurchases = await this.prisma.purchase.findMany({
+      where: { businessId, date: { lte: period.to } },
+      include: { lines: true },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+    });
+
     // ---- landed cost per unit keyed by source purchase + product ----
     const unitCostByPurchaseProduct = new Map<string, number>();
-    for (const p of purchases) {
+    const weightedByProduct = new Map<string, { qty: number; cost: number }>();
+    for (const p of costPurchases) {
       const goods = p.lines.reduce((sum, l) => sum + Number(l.qty) * Number(l.rate), 0);
       if (goods <= 0) continue;
       const charges =
@@ -79,14 +88,28 @@ export class ReportsService {
         const lineGoods = Number(line.qty) * Number(line.rate);
         const lineCharges = charges * (lineGoods / goods);
         const key = `${p.id}:${line.productId}`;
-        unitCostByPurchaseProduct.set(
-          key,
-          landedCostPerUnit({
+        const unitCost = landedCostPerUnit({
             qty: Number(line.qty),
             rate: Number(line.rate),
             purchaseCharges: lineCharges,
-          }),
-        );
+          });
+        const existing = unitCostByPurchaseProduct.get(key);
+        if (existing == null) {
+          unitCostByPurchaseProduct.set(key, unitCost);
+        } else {
+          const sameProduct = p.lines.filter((candidate) => candidate.productId === line.productId);
+          const totalQty = sameProduct.reduce((sum, candidate) => sum + Number(candidate.qty), 0);
+          const totalCost = sameProduct.reduce((sum, candidate) => {
+            const candidateGoods = Number(candidate.qty) * Number(candidate.rate);
+            const candidateCharges = charges * (candidateGoods / goods);
+            return sum + candidateGoods + candidateCharges;
+          }, 0);
+          unitCostByPurchaseProduct.set(key, totalQty > 0 ? totalCost / totalQty : existing);
+        }
+        const weighted = weightedByProduct.get(line.productId) ?? { qty: 0, cost: 0 };
+        weighted.qty += Number(line.qty);
+        weighted.cost += Number(line.qty) * unitCost;
+        weightedByProduct.set(line.productId, weighted);
       }
     }
 
@@ -100,7 +123,10 @@ export class ReportsService {
         unitCost:
           l.purchaseId
             ? unitCostByPurchaseProduct.get(`${l.purchaseId}:${l.productId}`) ?? 0
-            : 0,
+            : (() => {
+                const weighted = weightedByProduct.get(l.productId);
+                return weighted && weighted.qty > 0 ? weighted.cost / weighted.qty : 0;
+              })(),
       })),
       discountPct: Number(s.discountPct),
       taxPct: Number(s.taxPct),
@@ -117,7 +143,7 @@ export class ReportsService {
 
     // ---- stock flow (per product, own unit) from the inventory ledger ----
     const products = await this.prisma.product.findMany({
-      where: { businessId, active: true, ...(productId ? { id: productId } : {}) },
+      where: { businessId, ...(productId ? { id: productId } : {}) },
       select: { id: true, name: true, unit: true },
     });
     const allTx = await this.prisma.inventoryTransaction.findMany({

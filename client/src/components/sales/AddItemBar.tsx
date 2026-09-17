@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { fmtQtyWithUnit, fmtRateWithUnit, qtyUnitLabel } from "@/lib/format";
 import { OptionalSection } from "@/components/ui";
 import { AttributeFields } from "@/components/catalogue/AttributeFields";
@@ -18,16 +18,13 @@ export default function AddItemBar({
   showOptionalDetails?: boolean;
 }) {
   const { pick, setPick } = api;
-  const [showLot, setShowLot] = useState(showOptionalDetails);
+  const [lotExpanded, setLotExpanded] = useState(false);
+  const showLot = showOptionalDetails || lotExpanded;
   const items = api.categoriesOfProduct(pick.productId);
   const lots = api.pickVariant ? api.lotsOf(api.pickVariant.id) : [];
   const v = api.pickVariant;
   const productName = api.prodById.get(pick.productId)?.name;
   const itemName = api.pickUsesCats ? api.catById.get(pick.categoryId)?.name : undefined;
-
-  useEffect(() => {
-    setShowLot(showOptionalDetails);
-  }, [showOptionalDetails]);
 
   return (
     <div className="border border-neutral-200 rounded-xl overflow-hidden">
@@ -82,7 +79,7 @@ export default function AddItemBar({
               title="Source / lot"
               hint="Optional — pick a specific lot or use FIFO (oldest first)"
               open={showLot}
-              onToggle={() => setShowLot((s) => !s)}
+              onToggle={() => setLotExpanded((expanded) => !expanded)}
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                 <div>

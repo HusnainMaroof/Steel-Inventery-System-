@@ -1,353 +1,80 @@
-# Tradex — Project Architecture
+# Tradex architecture
 
-How the Tradex business-ledger app is built, and how inventory (and everything
-else) is managed under the hood.
+Tradex is a multi-tenant depot ledger built with Next.js 16, NestJS 11,
+Prisma, and PostgreSQL. Purchases add stock, sales remove stock, and the
+dashboard, invoices, dues, and reports are derived from the same persisted
+records.
 
-## 1. What the system is
+## Runtime
 
-Tradex is a single-page-style web app (built on Next.js App Router) that runs a
-whole trading business in one ledger:
-
-- **Buy** stock from suppliers (recorded as purchases).
-- **Stock** is kept automatically — no manual stock counts.
-- **Sell** to customers with printed invoices.
-- **Track payments** on both sides — what customers owe you and what you owe suppliers/mills.
-- **See profit** — on the dashboard, profit is counted when money is actually
-  collected. Profit & Reports shows the period's sales minus the cost of the
-  stock that was sold, then shop expenses.
-
-One entry (a purchase or a sale) drives every other screen. There is no second
-copy of the numbers anywhere: dashboard, inventory, sales, customers,
-suppliers, payments and reports are all *derived* from the same raw records.
-
-The catalogue is **configuration-driven, not product-specific**: each product
-chooses whether it needs a Category layer. The same engine then serves
-`Product → Attributes → Variant` (Steel) or
-`Product → Categories → Attributes → Variant` (Cement) — no hard-coded
-Grade/Brand/Gauge fields and no `if product === "steel"` UI logic.
-
-## 2. Big picture
-
-### Repository layout
-
-The repo is split for the future backend:
-
-- `client/` — the complete Next.js app (all `src/`, `public/`, and its own
-  `package.json` / configs). Run it from there: `cd client && npm run dev`.
-- `server/` — empty scaffold, reserved for the backend (not built yet).
-
-```
-┌────────────────────────────────────────────────────────────┐
-│  Browser (React 19, client-side rendering)                 │
-│                                                            │
-│  client/src/app — pages by route                           │
-│    public:  / (homepage), /login                           │
-│    owner:   /dashboard /purchases /products /inventory     │
-│             /sales /customers /suppliers /payments /reports│
-│    admin:   /admin (Owners panel, super admin only)        │
-│    prints:  /sales/[id], /invoices/[id] (no sidebar)       │
-│                                                            │
-│  client/src/components — Shell (sidebar/gate), shared UI,  │
-│                  catalogue/ (AttributeFields, VariantBadge)│
-│                  sales/ (New Sale flow)                    │
-│  client/src/lib/store.tsx — THE single source of truth +   │
-│                      derived inventory, lots, costs, dues  │
-│  client/src/lib/seed.ts — starter catalogue & demo data    │
-│  client/src/lib/catalogue.ts — variant keys, helpers       │
-│  client/src/lib/auth.tsx — roles (super admin / owners)    │
-│  client/src/lib/types.ts — record shapes                   │
-└────────────────────────────────────────────────────────────┘
+```text
+Browser
+  -> Next.js pages and StoreProvider
+  -> Next.js /api BFF (httpOnly session cookie)
+  -> Nest /api/v1 (Bearer JWT)
+  -> Prisma / PostgreSQL
 ```
 
-### Where the state lives
+The browser never receives the Nest access token. Login stores it in the
+Next.js `session` cookie. Browser data requests go through route handlers,
+which attach the token server-side.
 
-- The whole ledger lives in one React context (`StoreProvider` in
-  `client/src/lib/store.tsx`), seeded from `client/src/lib/seed.ts`.
-- Data is **in-memory only**: no database, no localStorage. A page refresh
-  re-seeds the demo state. This is intentional for the current demo stage —
-  there is no backend yet.
-- All money and stock math happens in pure helper functions (`purchaseTotal`,
-  `saleGrandTotal`, FIFO lot costing, …) that any screen can call, so two
-  screens can never disagree.
+## Accounts and administration
 
-## 3. The records (data model)
+- One `SUPERADMIN` is bootstrapped from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+- The Super Admin's only application page is `/admin`.
+- `/admin` shows active business/owner counts and can create or revoke
+  business-owner logins.
+- Each `ADMIN` is one business owner and operates that business's depot.
+- Staff logins and the owner-facing Staff panel are no longer part of the
+  product. The administration migration removes old `SUBADMIN` login rows.
+- Revoking an owner sets the login inactive. It never deletes the business or
+  its ledger.
 
-Everything is typed in `src/lib/types.ts`. New records carry a `businessId`
-so a future backend can isolate businesses; today everything belongs to one
-demo business.
+## Persisted tenant data
 
-### Dynamic catalogue (the identity of "what something is")
+Each catalogue and trading record is stored in its normalized Prisma table.
+`GET /api/v1/ledger/bootstrap` returns the authenticated business's records for
+initial screen hydration. Every create, update, delete, payment, and stock
+check then uses its dedicated domain endpoint and refreshes from PostgreSQL
+after success. There is no JSON ledger snapshot or runtime demo seed.
 
-```
-Product (optional Category)
-  ├─ Steel  →  AttributeDefs (Size, Grade, Manufacturer)  →  Variant
-  └─ Cement
-       ├─ Grey Cement  →  AttributeDefs (Grade, Company)   →  Variant
-       └─ White Cement →  AttributeDefs (Grade, Company, Color) →  Variant
-```
+All controllers derive `businessId` from the JWT, so callers cannot select
+another tenant. Business invoice/profile preferences are stored on
+`Business.settings` through `/api/v1/settings`; localStorage is only a browser
+cache for immediate rendering.
 
-| Record | What it holds |
-|---|---|
-| `Product` | Broad stock type (`name`, base `unit`, optional `description`, `active`, `usesCategories`). |
-| `ProductCategory` | Optional grouping under a product (Grey Cement under Cement). Omitted entirely when `usesCategories` is false. Internal field names stay `categoryId` so history and FIFO are untouched. |
-| `AttributeDef` | One property the product (or a category) is described by: `productId`, optional `categoryId`, `name`, stable `key`, `type`, `required`, optional `unit`, `sortOrder`, `active`. Each category can have a different set of attributes. |
-| `AttributeOption` | Choices for a `select` attribute (each with `active`; never hard-deleted when history uses it). |
-| `Variant` | One stockable/sellable combination, deduped by an id-based `identityKey` (scope + sorted defId=optionId); the friendly `shortName` is display-only. |
-| `Warehouse` / `WarehouseLocation` | Physical places stock can sit (Main Yard → Yard A, Rack 01) — optional, chosen per purchase lot. |
+## Ledger rules
 
-### Transactions (the business events)
+- Stock is purchases minus sales and is also projected as a movement journal.
+- Variants are the stockable unit; purchase lots preserve supplier and
+  traceability metadata.
+- FIFO lot consumption determines remaining lots and cost of goods sold.
+- Mill payable is goods value only; transport/loading/labour/other costs are
+  landed cost paid by the business.
+- Customer payments settle a selected invoice or the oldest unpaid invoices.
+- Invoice snapshots do not change when catalogue display names later change.
 
-| Record | What it holds |
-|---|---|
-| `Supplier` | A mill/company you buy from. |
-| `Customer` | Someone who buys from you. |
-| `Purchase` | One bought lot: supplier, variant identity, qty/unit, buying `rate`, `transport`, `otherCost`, planned `sellRate`, optional lot traceability (lot/heat/batch number, warehouse/location), and `paid`/payment history toward the mill. |
-| `Sale` | One invoice: customer, lines, discount %, tax %. Carries `invoiceNo` and `createdAt` (exact recording time). |
-| `SaleLine` | One sold item: qty, rate, unit, source (supplier and/or exact purchase lot). |
-| `Payment` | Money in (customer) or out (supplier), with method (Cash/Bank/Cheque) and optionally the invoice it settles. |
-| `Expense` | Shop running costs (Transport, Labor, Rent, Utilities, Other). |
+The normalized Prisma models and transaction-safe domain APIs are the source
+of truth for every current screen and report.
 
-**Snapshots keep history frozen.** Every purchase and sale line stores
-`variantId` + `categoryId` + an `attributeSnapshot` (attribute key → value) at
-entry time, *and* keeps legacy `product`/`item`/`spec`/`quality` mirror strings
-so old math and displays keep working. Renaming or deactivating an attribute
-later never rewrites an old invoice or purchase.
+## Routes
 
-Key rules:
-- **Every quantity is in its product's own natural unit** (kg stays kg, bag
-  stays bag). There is no unit conversion and no kg↔ton math anywhere.
-- **Supplier is not a product attribute** — it belongs to the lot/purchase.
-  The same variant can be bought from different mills.
-- Seed transactions (2 purchases / 2 sales / payments) carry both the legacy
-  strings and the new variant identity, so existing numbers are untouched by
-  the migration.
+- Public: `/`, `/login`
+- Super Admin: `/admin`
+- Business owner: `/dashboard`, `/products`, `/purchases`, `/inventory`,
+  `/sales`, `/customers`, `/suppliers`, `/payments`, `/expenses`, `/reports`,
+  `/settings`
+- Printable: `/sales/[id]`, `/invoices/[id]`
+- Reconciliation: `/audit`
 
-## 4. How inventory works
+Next.js `proxy.ts` provides the cookie-level route gate. `Shell` applies role
+navigation: Super Admin is confined to `/admin`, and owners cannot open it.
 
-Inventory is **not stored as rows you edit** — it is recomputed from the
-purchase and sale ledger every time the store changes (`useMemo` in
-`store.tsx`). That is the heart of the design:
+## Verification
 
-```
-purchases (buy qty)  −  sales (sell qty)   =   current stock
-```
-
-### 4.1 Variant-level stock (`inventoryByVariant`)
-
-The unit a business actually stocks and sells is the **variant**. The store
-groups every purchase and sale by `variantId` and derives per-variant
-purchased / sold / remaining qty, landed cost, stock value and sell rate.
-Pre-dynamic records (no variant) roll up under an `item:` key so nothing is
-lost.
-
-### 4.2 Lot-level stock and FIFO costing (`stockLots`, `lineUnitCost`)
-
-Each purchase is a **lot** that can only shrink (oldest-first FIFO):
-
-- Sale lines that pick a specific lot consume only that lot.
-- Lines without a chosen lot consume FIFO across the variant's lots (legacy
-  lines fall back to item + supplier matching).
-- The **true cost of goods sold** per sale line is the weighted landed cost of
-  the lots it actually consumed (`lineUnitCost(saleId, lineIndex)`) — profit is
-  computed from that, not a blended average.
-
-### 4.3 Where it sits (`warehouses/locations`, optional)
-
-A lot can record a warehouse and location. Purchases offer "Lot details
-(optional)": lot/heat/batch numbers + warehouse/location. The Inventory page
-expands each variant to list its remaining lots with supplier, heat/batch,
-location and landed cost.
-
-### 4.4 Stock movements (a derived journal)
-
-`stockMovements` is a **projection**, not a second truth: every purchase
-produces one `PURCHASE_RECEIPT` (+qty) and every sale line one `SALE` (−qty),
-each carrying variant/snapshot/lot/supplier context. The movement types
-(returns, transfers, adjustments, damage…) are reserved for future real
-operations. The Inventory page shows this journal under its "Movements" tab.
-
-### 4.5 Selling price
-
-Inventory shows the purchase-recorded `sellRate` (weighted across lots) — the
-planned invoice price. Sales auto-fill it from the chosen stock lot, falling
-back to landed cost + ~15%. Prices are never part of variant identity.
-
-### 4.6 Deleting / hiding
-
-- Deleting a variant with stock cascades: its purchases and its sales (plus
-  their payments) are removed together — no orphans, no negative stock.
-- A sold-out variant is removed from the list **cosmetically only** (numbers
-  untouched); legacy item rows behave the same.
-- Catalogue entities (product/category/attribute/option/variant) referenced by
-  history are **deactivated, never hard-deleted**.
-
-## 5. How the money flows
-
-### Buying
-
-```
-Purchase total (what it costs you) = qty × rate + transport + otherCost
-Mill dues        (what you owe)     = qty × rate  (transport & other are yours)
-```
-
-`paid` on the purchase tracks money paid to the mill; the mill's balance is
-`Σ (steel amount − paid)`. Supplier payments are also journaled as
-`Payment` rows for the record, but never double-counted.
-
-### Selling
-
-One invoice per sale:
-
-```
-Subtotal   = Σ line qty × rate
-Discount   = Subtotal × discount%
-Taxable    = Subtotal − Discount
-Tax        = Taxable × tax%
-Grand total= Taxable + Tax
-```
-
-Every money figure in the app comes from these helpers
-(`saleTotal`, `saleDiscount`, `saleTax`, `saleGrandTotal`).
-
-### Dues and allocation
-
-- **Customer balance** = all their invoices − all their payments
-  (accrual basis; a credit shows negative).
-- Payments can target a specific invoice (`saleId`). Unallocated customer
-  payments settle that customer's **oldest unpaid invoice first (FIFO)** — two
-  bills never merge.
-- **Supplier balance** = what we still owe the mill from purchases
-  (steel amount only).
-- Overpayments are blocked with a visible error wherever money is entered.
-
-### Profit
-
-The **dashboard** shows **realized, cash-basis** profit:
-
-- An invoice's profit is recognized when the customer actually pays toward it,
-  matched per invoice (`profit × received ÷ grand total`).
-- Unallocated receipts are spread using the depot's blended margin.
-- Whole-depot net profit subtracts shop expenses for the period.
-
-**Profit & Reports** (`/reports`) is a different view of the same ledger — a
-period + product report, not a second copy of Sales/Purchases/Payments:
-
-```
-Opening stock (lots as of the day before the period)
-+ Purchases in the period
-= Total stock
-− Sold in the period
-= Remaining stock (FIFO lot value at period end)
-
-Sales revenue          (invoices in the period, charges split across lines)
-− Stock cost of sold   (landed cost of the lots those sales consumed)
-= Profit on sales
-− Shop expenses        (whole business only; not hung on one product)
-= Net profit
-
-Business value = Remaining stock value + Customer due + Cash in hand
-```
-
-Cash in hand uses money actually received and paid, not billed sales.
-Credit sales stay in Customer Due. There is no recent-activity table on this
-page. `/profit` still redirects here.
-
-## 6. Roles and sign-in
-
-`src/lib/auth.tsx` holds the login logic (demo-only, client-side):
-
-- **Super admin** (`SUPER_ADMIN` const, demo `admin`/`admin123`) — sees only
-  `/admin`, the Owners panel, where they create owner logins (name, business
-  name, username, password) for each new business.
-- **Owners** (seeded `kashif`/`demo123` + any added in the panel) — sign in and
-  use the whole depot app. The logged-in owner's **business/factory name is
-  displayed in the brand spot** (sidebar top, mobile top bar) where the public
-  Tradex name otherwise sits.
-- `Shell` (`src/components/Shell.tsx`) is the gatekeeper: public routes
-  (`/`, `/login`) render bare; everything else is role-checked and redirected
-  (logged out → `/login`, owner → `/dashboard`, super admin → `/admin`).
-- All in-memory: accounts and sessions reset on refresh, consistent with the
-  demo data. Edit the `SUPER_ADMIN` / `SEED_OWNERS` consts to change the demo
-  logins.
-
-## 7. Pages and what each one does
-
-| Route | For | Purpose |
-|---|---|---|
-| `/` | Public | Tradex product homepage (Business Ledger) |
-| `/login` | Public | Sign in (owner or super admin) |
-| `/dashboard` | Owner | Stats-only KPIs: stock, stock worth, sales, net profit, dues (customer vs mills), scoped per product |
-| `/products` | Owner | **Catalogue control center** — create a product and choose its structure (Attributes only, or Categories then Attributes). Each category can have different attributes. Templates are optional shortcuts. Warehouses live on the products list. |
-| `/purchases` | Owner | Dynamic purchase form: Product, then Category only if that product uses categories, then that scope's attributes. Optional lot details. Supplier payable + payment history unchanged |
-| `/sales` | Owner | Sales & Invoices — pick Product, Category only when configured, then attributes; the matching stocked variant is sold, snapshot saved per line, printable invoice |
-| `/inventory` | Owner | Stock at **variant level**: each row expands to its remaining lots (supplier, heat/batch, location); search across variant/attributes/lot numbers/supplier; a Movements tab with the derived +/− journal |
-| `/customers` | Owner | Customers, their bills, balances and transaction history (renders variant attributes) |
-| `/suppliers` | Owner | Mills/suppliers, what each is owed, and purchase history receipts (renders variant attributes) |
-| `/payments` | Owner | Payments journal |
-| `/reports` | Owner | Profit & Reports — one period + product engine: stock, P&L, cash, business value, dues, expenses, stock check |
-| `/profit`, `/invoices`, `/audit` | Owner | Legacy/redirect + reconciliation self-checks |
-| `/sales/[id]`, `/invoices/[id]` | Owner | Printable invoice/bill (no sidebar for clean print) |
-| `/admin` | Super admin | Owners panel — add/delete owner accounts |
-
-## 8. The dynamic forms engine
-
-`src/components/catalogue/AttributeFields.tsx` renders the configured
-`AttributeDefs` generically — `select → dropdown`, `number → number input`,
-`measurement → number + unit picker`, `text → text`, `boolean → Yes/No`,
-`date → date`. Required attributes block saving (visible red message). The
-same component drives Purchase and Sale entry; no component anywhere knows that
-"Grade" belongs to steel. The Category field appears only when that product
-has `usesCategories`.
-
-Helpers in `src/lib/catalogue.ts`: deterministic `variantKey` (legacy labels),
-id-based `identityKey` (attribute IDs + option IDs, order-independent),
-`defaultShortName`, ordered attribute rows and display text. Identity never
-depends on the display name or the configured presentation order.
-
-## 9. Design and UX conventions
-
-- Monochrome, professional look: white/gray/black (`#F8F8F7` canvas, `#171717`
-  text, `#E5E5E5` borders), 8px radius cards, 1px borders, no gradients.
-  Color only for status: muted red = due/warning, muted green = paid.
-- Typography: Inter; small labels uppercase, tracked; numbers bold tabular.
-- Screens favour a **guided flow over stacked panels**: the Products page leads
-  product → category → attributes/variants on one focused stage; heavy or rare
-  configuration (warehouses) collapses into self-explaining sections.
-- Row actions are quiet icon buttons with tooltips (▲▼ reorder, ⏻ deactivate,
-  ✎ rename, ✕ delete) rather than repeated labelled buttons.
-- Lists are fully responsive: desktop tables become stacked mobile cards that
-  never drop a column.
-- Every destructive delete asks through a styled confirm dialog that spells
-  out exactly what will change (a "this cannot be undone" frame).
-- Entry forms are modals with clear section order (date → party → items →
-  money → totals) and no nested popups.
-- Reduced-motion is respected globally.
-
-## 10. Reconciliation and trust in the numbers
-
-- Because every screen derives from the same ledger, "buying raises stock,
-  selling lowers it, and all reports reconcile" is a property of the design,
-  not an afterthought.
-- `src/app/audit/page.tsx` re-computes figures from the raw records and
-  checks the surfaces agree: item-level stock, per-source rows, and now
-  **variant-level conservation** (`Σ purchases − Σ sales per variant == stock ==
-  Σ its remaining lots`) plus **movement journal** checks (each purchase has one
-  +qty movement, each sale line one −qty movement). `NUMBER_AUDIT.md` documents
-  the end-to-end number check.
-
-## 11. Current limits / next steps
-
-- **No backend**: in-memory demo data resets on refresh; login is a cosmetic
-  gate. Real persistence + real auth is the obvious next layer.
-- **One shared dataset**: all owners currently run the same demo ledger;
-  per-owner/business isolation is deliberately deferred (records already carry
-  `businessId` for when a backend lands).
-- **Returns, transfers, adjustments** are reserved movement types without UI
-  yet; movements are currently derived from purchases and sales.
-- **Unit conversions** (ton↔kg, bag↔kg) are not implemented — qty + unit are
-  stored as entered, per product.
-- **Planned price lists** are not implemented — the current lot-level
-  `sellRate` behavior is kept.
-- Running it: `npm run dev` (develop), `npm run build` + `npm start`
-  (production). Lint: `npx eslint .` (`next lint` is not available in
-  Next 16).
+- Client: `npm run build`
+- Server: `npm run prisma:generate`, `npm run build`, `npm test`
+- Database: `npm run prisma:deploy`
+- Runtime: create an owner, enter a purchase/sale/payment, refresh, and confirm
+  inventory, invoice, dashboard, report, and `/audit` still reconcile.

@@ -1,10 +1,11 @@
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
+import type { UserRole } from "../types/jwt-payload";
 
 export interface AuthUser {
   sub: string;
   email: string;
   name: string;
-  role: "ADMIN" | "SUBADMIN";
+  role: UserRole;
   businessId: string;
 }
 

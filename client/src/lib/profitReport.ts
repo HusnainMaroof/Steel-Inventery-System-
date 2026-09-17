@@ -21,14 +21,6 @@ import type {
 
 export type ReportMode = "month" | "year" | "all" | "range";
 
-export const EXPENSE_ROWS = [
-  { key: "Labor" as const, label: "Labour" },
-  { key: "Transport" as const, label: "Truck Fare" },
-  { key: "Utilities" as const, label: "Electricity" },
-  { key: "Rent" as const, label: "Rent" },
-  { key: "Other" as const, label: "Other" },
-];
-
 export interface QtyBlock {
   productId: string;
   productName: string;
@@ -591,14 +583,15 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
 
   const expenseRows: ExpenseLine[] = Object.entries(
     periodExpenses.reduce<Record<string, number>>((acc, e) => {
-      acc[e.category] = (acc[e.category] ?? 0) + e.amount;
+      const key = e.label.trim() || e.category;
+      acc[key] = (acc[key] ?? 0) + e.amount;
       return acc;
     }, {})
   )
     .filter(([, amount]) => amount > 0.000001)
     .map(([key, amount]) => ({
       key,
-      label: EXPENSE_ROWS.find((r) => r.key === key)?.label ?? key,
+      label: key,
       amount,
     }))
     .sort((a, b) => b.amount - a.amount);

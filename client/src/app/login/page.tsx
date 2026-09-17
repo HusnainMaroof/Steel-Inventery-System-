@@ -10,7 +10,7 @@ const ease = [0.22, 1, 0.36, 1] as const;
 
 function EyeIcon({ open }: { open: boolean }) {
   return (
-    <motion.svg
+    <svg
       width="18"
       height="18"
       viewBox="0 0 24 24"
@@ -19,9 +19,7 @@ function EyeIcon({ open }: { open: boolean }) {
       strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
-      initial={false}
-      animate={{ scale: open ? 1 : 0.92, opacity: 1 }}
-      transition={{ duration: 0.2, ease }}
+      aria-hidden="true"
     >
       {open ? (
         <>
@@ -36,35 +34,32 @@ function EyeIcon({ open }: { open: boolean }) {
           <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
         </>
       )}
-    </motion.svg>
+    </svg>
   );
 }
 
 export default function LoginPage() {
-  const { user, login, owners } = useAuth();
+  const { user, ready, login } = useAuth();
   const router = useRouter();
-  const demoOwner = owners[0];
 
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   useEffect(() => {
-    if (user) router.replace(homeFor(user));
-  }, [user, router]);
+    if (ready && user) router.replace(homeFor(user));
+  }, [ready, user, router]);
 
-  const fillDemo = () => {
-    if (!demoOwner) return;
-    setUsername(demoOwner.username);
-    setPassword(demoOwner.password);
-    setError(null);
-  };
-
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!login(username, password)) {
-      setError("Incorrect username or password. Try again.");
+    setPending(true);
+    setError(null);
+    const err = await login(email, password);
+    setPending(false);
+    if (err) {
+      setError(err);
       setPassword("");
       setShowPassword(false);
     }
@@ -85,7 +80,7 @@ export default function LoginPage() {
           transition={{ duration: 0.45, delay: 0.05, ease }}
         >
           <div className="text-xl font-semibold tracking-tight">Tradex</div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 mt-1.5">
+          <div className="text-[11px] uppercase tracking-[0.2em] text-[#171717]/70 mt-1.5">
             Business Ledger
           </div>
         </motion.div>
@@ -97,8 +92,8 @@ export default function LoginPage() {
           transition={{ duration: 0.5, delay: 0.1, ease }}
         >
           <h1 className="text-[17px] font-semibold tracking-tight">Sign in</h1>
-          <p className="text-xs text-neutral-500 mt-1.5 mb-7">
-            Sign in to your business ledger
+          <p className="text-xs text-[#171717]/70 mt-1.5 mb-7">
+            Use the email and password you were given.
           </p>
 
           <AnimatePresence mode="wait">
@@ -119,19 +114,18 @@ export default function LoginPage() {
 
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <div>
-              <label htmlFor="username">Username</label>
+              <label htmlFor="email">Email</label>
               <input
-                id="username"
-                name="username"
-                type="text"
+                id="email"
+                name="email"
+                type="email"
                 autoComplete="username"
-                autoFocus
-                value={username}
+                value={email}
                 onChange={(e) => {
-                  setUsername(e.target.value);
+                  setEmail(e.target.value);
                   setError(null);
                 }}
-                placeholder="your username"
+                placeholder="you@business.com"
                 className="!py-2.5"
               />
             </div>
@@ -157,51 +151,21 @@ export default function LoginPage() {
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   aria-pressed={showPassword}
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-md text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-md text-[#171717]/60 hover:text-[#171717] hover:bg-neutral-100 transition-colors"
                 >
                   <EyeIcon open={showPassword} />
                 </button>
               </div>
             </div>
-            <motion.button
+            <button
               type="submit"
-              className="btn-primary w-full !py-3 !text-[14px] mt-1"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              transition={{ duration: 0.15 }}
+              disabled={pending}
+              className="btn-primary w-full !py-3 !text-[14px] mt-1 disabled:opacity-60"
             >
-              Sign in
-            </motion.button>
+              {pending ? "Please wait…" : "Sign in"}
+            </button>
           </form>
         </motion.div>
-
-        {demoOwner && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.25, ease }}
-            className="mt-6"
-          >
-            <button
-              type="button"
-              onClick={fillDemo}
-              className="w-full text-center text-xs text-neutral-400 hover:text-neutral-600 transition-colors group"
-            >
-              <span className="block text-[10px] uppercase tracking-widest text-neutral-400 mb-1.5 group-hover:text-neutral-500">
-                Business owner demo
-              </span>
-              <span className="text-neutral-600 font-medium">{demoOwner.businessName}</span>
-              <span className="block mt-1 tabular-nums">
-                <span className="text-neutral-500">{demoOwner.username}</span>
-                <span className="mx-1.5 text-neutral-300">/</span>
-                <span className="text-neutral-500">{demoOwner.password}</span>
-              </span>
-              <span className="block mt-1.5 text-[10px] text-neutral-400 group-hover:text-neutral-500">
-                Tap to fill credentials
-              </span>
-            </button>
-          </motion.div>
-        )}
 
         <motion.div
           className="text-center mt-6"
@@ -211,7 +175,7 @@ export default function LoginPage() {
         >
           <Link
             href="/"
-            className="text-xs font-medium text-neutral-500 hover:text-black transition-colors"
+            className="text-xs font-medium text-[#171717]/70 hover:text-black transition-colors"
           >
             &larr; Back to homepage
           </Link>

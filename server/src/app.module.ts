@@ -14,11 +14,15 @@ import { InvoicesModule } from "./invoices/invoices.module";
 import { ExpensesModule } from "./expenses/expenses.module";
 import { StockChecksModule } from "./stock-checks/stock-checks.module";
 import { ReportsModule } from "./reports/reports.module";
+import { HealthModule } from "./health/health.module";
+import { LedgerModule } from "./ledger/ledger.module";
+import { WarehousesModule } from "./warehouses/warehouses.module";
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
+    HealthModule,
     AuthModule,
     UsersModule,
     ProductsModule,
@@ -32,6 +36,8 @@ import { ReportsModule } from "./reports/reports.module";
     ExpensesModule,
     StockChecksModule,
     ReportsModule,
+    LedgerModule,
+    WarehousesModule,
   ],
 })
 export class AppModule {}

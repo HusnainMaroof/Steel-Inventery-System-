@@ -8,4 +8,9 @@ export class CreateVariantDto {
   /** attribute key → display value; identity is derived from these pairs. */
   @IsObject()
   attributes: Record<string, string>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  shortName?: string;
 }

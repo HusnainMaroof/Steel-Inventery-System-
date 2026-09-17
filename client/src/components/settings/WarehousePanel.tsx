@@ -78,10 +78,10 @@ export function WarehousePanel() {
           <p className="text-[13px] text-[#171717]">No warehouses yet</p>
           <form
             className="w-full max-w-sm flex gap-2"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               const v = (e.currentTarget.elements.namedItem("wh") as HTMLInputElement).value.trim();
-              if (v) addWarehouse(v);
+              if (v) await addWarehouse(v);
               e.currentTarget.reset();
             }}
           >
@@ -96,10 +96,10 @@ export function WarehousePanel() {
           {openWhAdd ? (
             <form
               className="px-4 py-3 border-b border-[#e5e5e5] flex gap-2"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 const v = (e.currentTarget.elements.namedItem("wh") as HTMLInputElement).value.trim();
-                if (v) addWarehouse(v);
+                if (v) await addWarehouse(v);
                 setOpenWhAdd(false);
               }}
             >
@@ -121,9 +121,11 @@ export function WarehousePanel() {
                     <input
                       defaultValue={w.name}
                       aria-label={`Rename ${w.name}`}
-                      onBlur={(e) =>
-                        e.target.value.trim() && e.target.value !== w.name && renameWarehouse(w.id, e.target.value.trim())
-                      }
+                      onBlur={async (e) => {
+                        if (e.target.value.trim() && e.target.value !== w.name) {
+                          await renameWarehouse(w.id, e.target.value.trim());
+                        }
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                       }}
@@ -156,11 +158,11 @@ export function WarehousePanel() {
                           <input
                             defaultValue={l.name}
                             aria-label={`Rename ${l.name}`}
-                            onBlur={(e) =>
-                              e.target.value.trim() &&
-                              e.target.value !== l.name &&
-                              renameLocation(l.id, e.target.value.trim())
-                            }
+                            onBlur={async (e) => {
+                              if (e.target.value.trim() && e.target.value !== l.name) {
+                                await renameLocation(l.id, e.target.value.trim());
+                              }
+                            }}
                             className="!p-0 !border-none !bg-transparent !shadow-none !text-[12px] !w-24"
                           />
                           <button
@@ -188,10 +190,10 @@ export function WarehousePanel() {
                     {openLoc === w.id ? (
                       <form
                         className="flex gap-2 w-56"
-                        onSubmit={(e) => {
+                        onSubmit={async (e) => {
                           e.preventDefault();
                           const v = (e.currentTarget.elements.namedItem("loc") as HTMLInputElement).value.trim();
-                          if (v) addLocation(w.id, v);
+                          if (v) await addLocation(w.id, v);
                           setOpenLoc(null);
                         }}
                       >

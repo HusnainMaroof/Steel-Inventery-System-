@@ -84,4 +84,10 @@ export class ExpensesService {
     if (!expense) throw new NotFoundException("Expense not found");
     return expense;
   }
+
+  async remove(businessId: string, id: string) {
+    await this.byId(businessId, id);
+    await this.prisma.expense.delete({ where: { id } });
+    return { deleted: true, expenseId: id };
+  }
 }

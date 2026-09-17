@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -16,6 +17,15 @@ import { UpdateProductDto } from "./dto/update-product.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { CreateVariantDto } from "./dto/create-variant.dto";
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
+import {
+  CreateAttributeDto,
+  CreateOptionDto,
+  ReorderDto,
+  UpdateAttributeDto,
+  UpdateCategoryDto,
+  UpdateOptionDto,
+  UpdateVariantDto,
+} from "./dto/catalogue.dto";
 
 @Controller("products")
 @UseGuards(JwtAuthGuard)
@@ -46,13 +56,12 @@ export class ProductsController {
     return this.productsService.update(user.businessId, id, dto);
   }
 
-  /** Deactivate, never hard-delete (catalogue history is immutable). */
   @Delete(":id")
-  deactivate(
+  remove(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseIdPipe) id: string,
   ) {
-    return this.productsService.deactivate(user.businessId, id);
+    return this.productsService.remove(user.businessId, id);
   }
 
   @Post(":id/categories")
@@ -71,5 +80,97 @@ export class ProductsController {
     @Body() dto: CreateVariantDto,
   ) {
     return this.productsService.createVariant(user.businessId, id, dto);
+  }
+
+  @Patch("categories/:id")
+  updateCategory(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
+    return this.productsService.updateCategory(user.businessId, id, dto);
+  }
+
+  @Delete("categories/:id")
+  removeCategory(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
+    return this.productsService.removeCategory(user.businessId, id);
+  }
+
+  @Post(":id/attributes")
+  createAttribute(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: CreateAttributeDto,
+  ) {
+    return this.productsService.createAttribute(user.businessId, id, dto);
+  }
+
+  @Put(":id/attributes/order")
+  reorderAttributes(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: ReorderDto,
+  ) {
+    return this.productsService.reorderAttributes(user.businessId, id, dto);
+  }
+
+  @Patch("attributes/:id")
+  updateAttribute(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: UpdateAttributeDto,
+  ) {
+    return this.productsService.updateAttribute(user.businessId, id, dto);
+  }
+
+  @Delete("attributes/:id")
+  removeAttribute(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
+    return this.productsService.removeAttribute(user.businessId, id);
+  }
+
+  @Post("attributes/:id/options")
+  createOption(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: CreateOptionDto,
+  ) {
+    return this.productsService.createOption(user.businessId, id, dto);
+  }
+
+  @Put("attributes/:id/options/order")
+  reorderOptions(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: ReorderDto,
+  ) {
+    return this.productsService.reorderOptions(user.businessId, id, dto);
+  }
+
+  @Patch("options/:id")
+  updateOption(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: UpdateOptionDto,
+  ) {
+    return this.productsService.updateOption(user.businessId, id, dto);
+  }
+
+  @Delete("options/:id")
+  removeOption(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
+    return this.productsService.removeOption(user.businessId, id);
+  }
+
+  @Patch("variants/:id")
+  updateVariant(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseIdPipe) id: string,
+    @Body() dto: UpdateVariantDto,
+  ) {
+    return this.productsService.updateVariant(user.businessId, id, dto);
+  }
+
+  @Delete("variants/:id")
+  removeVariant(@CurrentUser() user: AuthUser, @Param("id", ParseIdPipe) id: string) {
+    return this.productsService.removeVariant(user.businessId, id);
   }
 }

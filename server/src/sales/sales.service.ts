@@ -5,7 +5,6 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { findShortages, stockLevelsFromLedger } from "../domain/sale-availability";
 import { saleGrandTotal } from "../domain/money";
 import { CreateSaleDto } from "./dto/create-sale.dto";
 
@@ -38,25 +37,106 @@ export class SalesService {
       if (products.length !== productIds.length) {
         throw new BadRequestException("One or more products were not found");
       }
+      for (const line of dto.lines) {
+        if (line.categoryId) {
+          const category = await tx.productCategory.findFirst({
+            where: { id: line.categoryId, businessId, productId: line.productId },
+          });
+          if (!category) throw new BadRequestException("Category not found for product");
+        }
+        if (line.variantId) {
+          const variant = await tx.variant.findFirst({
+            where: {
+              id: line.variantId,
+              businessId,
+              productId: line.productId,
+              ...(line.categoryId ? { categoryId: line.categoryId } : {}),
+            },
+          });
+          if (!variant) throw new BadRequestException("Variant not found for product");
+        }
+        if (line.purchaseId) {
+          const purchase = await tx.purchase.findFirst({
+            where: {
+              id: line.purchaseId,
+              businessId,
+              lines: {
+                some: {
+                  productId: line.productId,
+                  ...(line.variantId ? { variantId: line.variantId } : {}),
+                },
+              },
+            },
+            include: { lines: true },
+          });
+          if (!purchase) throw new BadRequestException("Source purchase lot not found");
+          const bought = purchase.lines
+            .filter(
+              (purchaseLine) =>
+                purchaseLine.productId === line.productId &&
+                (!line.variantId || purchaseLine.variantId === line.variantId),
+            )
+            .reduce((sum, purchaseLine) => sum + Number(purchaseLine.qty), 0);
+          const alreadySold = await tx.saleLine.aggregate({
+            where: {
+              purchaseId: line.purchaseId,
+              productId: line.productId,
+              ...(line.variantId ? { variantId: line.variantId } : {}),
+              sale: { businessId },
+            },
+            _sum: { qty: true },
+          });
+          const requestedFromLot = dto.lines
+            .filter(
+              (candidate) =>
+                candidate.purchaseId === line.purchaseId &&
+                candidate.productId === line.productId &&
+                candidate.variantId === line.variantId,
+            )
+            .reduce((sum, candidate) => sum + candidate.qty, 0);
+          if (requestedFromLot > bought - Number(alreadySold._sum.qty ?? 0) + 0.0005) {
+            throw new BadRequestException("Insufficient inventory in source purchase lot");
+          }
+        }
+      }
 
       // §22 edge case — sell more than available ⇒ reject, nothing written.
       const ledger = await tx.inventoryTransaction.groupBy({
-        by: ["productId"],
+        by: ["productId", "variantId"],
         where: { businessId },
         _sum: { qty: true },
       });
-      const levels = stockLevelsFromLedger(
-        ledger.map((g) => ({ productId: g.productId, qty: Number(g._sum.qty ?? 0) })),
-      );
-      const shortages = findShortages(
-        levels,
-        dto.lines.map((l) => ({ productId: l.productId, qty: l.qty })),
-      );
+      const productLevels = new Map<string, number>();
+      const variantLevels = new Map<string, number>();
+      for (const row of ledger) {
+        const qty = Number(row._sum.qty ?? 0);
+        productLevels.set(row.productId, (productLevels.get(row.productId) ?? 0) + qty);
+        if (row.variantId) variantLevels.set(`${row.productId}:${row.variantId}`, qty);
+      }
+      const requested = new Map<string, { productId: string; variantId?: string; qty: number }>();
+      for (const line of dto.lines) {
+        const key = line.variantId ? `${line.productId}:${line.variantId}` : line.productId;
+        const current = requested.get(key);
+        requested.set(key, {
+          productId: line.productId,
+          variantId: line.variantId,
+          qty: (current?.qty ?? 0) + line.qty,
+        });
+      }
+      const shortages = [...requested.values()].filter((line) => {
+        const available = line.variantId
+          ? variantLevels.get(`${line.productId}:${line.variantId}`) ?? 0
+          : productLevels.get(line.productId) ?? 0;
+        return line.qty > available + 0.0005;
+      });
       if (shortages.length > 0) {
         const first = shortages[0];
+        const available = first.variantId
+          ? variantLevels.get(`${first.productId}:${first.variantId}`) ?? 0
+          : productLevels.get(first.productId) ?? 0;
         throw new BadRequestException(
           `Insufficient inventory for ${shortages.length} product(s) — ` +
-            `first shortage: requested ${first.requested}, available ${first.available}`,
+            `first shortage: requested ${first.qty}, available ${available}`,
         );
       }
 
@@ -105,6 +185,11 @@ export class SalesService {
         data: sale.lines.map((line) => ({
           businessId,
           productId: line.productId,
+          categoryId: line.categoryId,
+          variantId: line.variantId,
+          saleLineId: line.id,
+          attributeSnapshot: line.attributeSnapshot ?? undefined,
+          unit: line.unit,
           type: "SALE" as const,
           qty: -line.qty,
           referenceType: "SALE",
@@ -207,6 +292,11 @@ export class SalesService {
         data: sale.lines.map((line) => ({
           businessId,
           productId: line.productId,
+          categoryId: line.categoryId,
+          variantId: line.variantId,
+          saleLineId: line.id,
+          attributeSnapshot: line.attributeSnapshot ?? undefined,
+          unit: line.unit,
           type: "RETURN" as const,
           qty: line.qty, // goods come back
           referenceType: "SALE_DELETE",

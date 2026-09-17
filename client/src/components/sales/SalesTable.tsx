@@ -112,7 +112,7 @@ export default function SalesTable({
   salePaid: (saleId: string) => number;
   onView: (id: string) => void;
   onReceive: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
   onNewSale: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -390,8 +390,8 @@ export default function SalesTable({
       <ConfirmModal
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        onConfirm={() => {
-          if (deleteId) onDelete(deleteId);
+        onConfirm={async () => {
+          if (deleteId) await onDelete(deleteId);
           setDeleteId(null);
         }}
         title="Delete this invoice?"

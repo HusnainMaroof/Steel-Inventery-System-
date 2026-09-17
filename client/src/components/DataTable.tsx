@@ -23,7 +23,7 @@ export interface DataTableColumnMeta {
 }
 
 declare module "@tanstack/react-table" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-object-type
   interface ColumnMeta<TData, TValue> extends DataTableColumnMeta {}
 }
 
@@ -72,7 +72,10 @@ export function DataTable<TData>({
   }
 
   return (
-    <div className={`border border-neutral-200 overflow-x-auto ${className}`}>
+    <div
+      data-compact={compact || undefined}
+      className={`border border-neutral-200 overflow-x-auto ${className}`}
+    >
       {/* ===== Desktop table (hidden on mobile via CSS) ===== */}
       <table className="dt-desktop">
         <thead>

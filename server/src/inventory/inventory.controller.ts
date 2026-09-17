@@ -15,6 +15,16 @@ export class InventoryController {
     return this.inventoryService.stock(user.businessId);
   }
 
+  @Get("variants")
+  variants(@CurrentUser() user: AuthUser) {
+    return this.inventoryService.stockByVariant(user.businessId);
+  }
+
+  @Get("lots")
+  lots(@CurrentUser() user: AuthUser) {
+    return this.inventoryService.lots(user.businessId);
+  }
+
   /** Movement history — answers "why is stock this quantity?" (§27). */
   @Get("movements")
   movements(

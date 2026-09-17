@@ -1,9 +1,5 @@
 export type PaymentType = "customer" | "supplier";
 
-/* single demo business today — every new record carries it so a real
-   backend can isolate businesses later */
-export const BUSINESS_ID = "biz-demo";
-
 export interface Product {
   id: string;
   businessId?: string;
@@ -35,6 +31,7 @@ export interface Supplier {
   name: string;
   mill: string;
   phone: string;
+  active?: boolean;
 }
 
 export interface Customer {
@@ -42,6 +39,7 @@ export interface Customer {
   name: string;
   shop: string;
   phone: string;
+  active?: boolean;
 }
 
 export interface Purchase {

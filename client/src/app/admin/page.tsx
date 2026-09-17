@@ -1,293 +1,303 @@
 "use client";
 
-import { useState } from "react";
-import { useAuth, type OwnerAccount } from "@/lib/auth";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ConfirmModal,
-  EmptyState,
-  Modal,
-  Page,
-} from "@/components/ui";
+  createOwnerAction,
+  listOwnersAction,
+  removeOwnerAction,
+  updateOwnerAction,
+  type OwnerAccount,
+} from "@/app/actions/users";
+import { useAuth } from "@/lib/auth";
+import { EmptyState, Modal, Page } from "@/components/ui";
+
+function fmtDate(value?: string) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function StatusBadge({ active }: { active: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+        active ? "bg-emerald-50 text-emerald-800" : "bg-neutral-100 text-neutral-600"
+      }`}
+    >
+      {active ? "Active" : "Revoked"}
+    </span>
+  );
+}
 
 export default function AdminPage() {
-  const { owners, addOwner, deleteOwner } = useAuth();
-
+  const { user } = useAuth();
+  const [owners, setOwners] = useState<OwnerAccount[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<OwnerAccount | null>(null);
-  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
+  const [resetOwner, setResetOwner] = useState<OwnerAccount | null>(null);
 
-  const toggleReveal = (id: string) =>
-    setRevealed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const refresh = async () => {
+    const result = await listOwnersAction();
+    if (!result.ok) return setLoadError(result.error);
+    setOwners(result.owners);
+    setLoadError(null);
+  };
+
+  useEffect(() => {
+    if (user?.role !== "SUPERADMIN") return;
+    void refresh();
+  }, [user?.role]);
+
+  const stats = useMemo(() => {
+    const active = owners.filter((owner) => owner.active).length;
+    return { total: owners.length, active, revoked: owners.length - active };
+  }, [owners]);
+
+  if (user?.role !== "SUPERADMIN") return null;
+
+  const revoke = async (id: string) => {
+    setRemovingId(id);
+    const result = await removeOwnerAction(id);
+    setRemovingId(null);
+    if (!result.ok) return setLoadError(result.error);
+    await refresh();
+  };
+
+  const reactivate = async (id: string) => {
+    setReactivatingId(id);
+    const result = await updateOwnerAction(id, { active: true });
+    setReactivatingId(null);
+    if (!result.ok) return setLoadError(result.error);
+    await refresh();
+  };
 
   return (
     <Page>
-      {/* ===== header ===== */}
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-6">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl tracking-tight">Owners</h1>
-          <p className="text-neutral-500 text-xs mt-1">
-            Business owners who can sign in — each runs the ledger with their
-            own business name on top.
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-xl sm:text-2xl tracking-tight">Application overview</h1>
+          <p className="text-[#171717]/70 text-xs mt-1">
+            Manage every business-owner login from the single Super Admin panel.
           </p>
         </div>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="btn-primary !py-2.5 !px-4"
-        >
-          + Add owner
+        <button className="btn-primary" onClick={() => setAddOpen(true)}>
+          + Add business owner
         </button>
       </div>
 
-      {owners.length === 0 ? (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <div className="panel p-4">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-[#171717]/70">Total businesses</p>
+          <p className="text-3xl font-semibold mt-2">{stats.total}</p>
+        </div>
+        <div className="panel p-4">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-[#171717]/70">Active owners</p>
+          <p className="text-3xl font-semibold mt-2">{stats.active}</p>
+        </div>
+        <div className="panel p-4">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-[#171717]/70">Revoked logins</p>
+          <p className="text-3xl font-semibold mt-2">{stats.revoked}</p>
+        </div>
+      </div>
+
+      {loadError && <p role="alert" className="text-sm text-[#a12b1f] mb-4">{loadError}</p>}
+      {owners.length === 0 && !loadError ? (
         <div className="panel">
           <EmptyState
-            emoji="🧾"
-            title="No owners yet"
-            hint="Add the first business owner — you give them their login, and their business name shows on their dashboard."
-            action={
-              <button
-                onClick={() => setAddOpen(true)}
-                className="btn-primary"
-              >
-                + Add owner
-              </button>
-            }
+            emoji="🏪"
+            title="No businesses yet"
+            hint="Create the first business and its owner login."
+            action={<button className="btn-primary" onClick={() => setAddOpen(true)}>+ Add business owner</button>}
           />
         </div>
       ) : (
-        <>
-          {/* ===== desktop list ===== */}
-          <div className="panel overflow-hidden dt-desktop">
-            <table>
-              <thead>
-                <tr>
-                  <th>Business name</th>
-                  <th>Owner</th>
-                  <th>Username</th>
-                  <th>Password</th>
-                  <th className="text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {owners.map((o) => (
-                  <tr key={o.id}>
-                    <td className="font-semibold text-[#171717]">
-                      {o.businessName}
-                    </td>
-                    <td className="text-neutral-700">{o.name}</td>
-                    <td className="font-mono text-[13px] text-neutral-700">
-                      {o.username}
-                    </td>
-                    <td className="font-mono text-[13px] text-neutral-700">
-                      <span className="flex items-center gap-2">
-                        {revealed.has(o.id) ? o.password : "••••••••"}
-                        <button
-                          onClick={() => toggleReveal(o.id)}
-                          className="text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-400 hover:text-black"
-                        >
-                          {revealed.has(o.id) ? "Hide" : "Show"}
-                        </button>
-                      </span>
-                    </td>
-                    <td className="text-right">
+        <div className="panel overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Owner</th>
+                <th>Email</th>
+                <th>Password</th>
+                <th>Business</th>
+                <th>URL slug</th>
+                <th>Created</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {owners.map((owner) => (
+                <tr key={owner.id} className={owner.active ? undefined : "opacity-70"}>
+                  <td><StatusBadge active={owner.active} /></td>
+                  <td className="font-semibold">{owner.name}</td>
+                  <td className="font-mono text-[13px]">{owner.email}</td>
+                  <td className="font-mono text-[13px]">
+                    {owner.loginPassword ?? (
+                      <span className="text-neutral-400">Not stored — reset to set</span>
+                    )}
+                  </td>
+                  <td>{owner.business.name}</td>
+                  <td className="font-mono text-[13px]">/{owner.business.slug ?? "—"}</td>
+                  <td className="text-[13px] text-neutral-600">{fmtDate(owner.createdAt)}</td>
+                  <td className="text-right whitespace-nowrap">
+                    <div className="inline-flex flex-wrap justify-end gap-2">
                       <button
-                        onClick={() => setDeleteTarget(o)}
-                        className="text-[11px] uppercase tracking-[0.1em] font-medium text-neutral-400 hover:text-[#a12b1f] transition-colors px-2 py-1.5 rounded-sm hover:bg-[#faf5f2]"
+                        className="btn-ghost !py-1.5 !px-3 text-xs"
+                        onClick={() => setResetOwner(owner)}
                       >
-                        Delete
+                        Reset password
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* ===== mobile cards ===== */}
-          <div className="dt-mobile panel divide-y divide-[#e5e5e5]">
-            {owners.map((o) => (
-              <div key={o.id} className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[15px] font-semibold text-[#171717] truncate">
-                      {o.businessName}
-                    </p>
-                    <p className="text-xs text-neutral-500 mt-0.5">{o.name}</p>
-                  </div>
-                  <button
-                    onClick={() => setDeleteTarget(o)}
-                    className="shrink-0 text-[11px] uppercase tracking-[0.1em] font-medium text-neutral-400 hover:text-[#a12b1f] px-2 py-1.5"
-                  >
-                    Delete
-                  </button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-xs">
-                  <p className="text-neutral-500">
-                    Username:{" "}
-                    <span className="font-mono text-neutral-800">{o.username}</span>
-                  </p>
-                  <p className="text-neutral-500">
-                    Password:{" "}
-                    <span className="font-mono text-neutral-800">
-                      {revealed.has(o.id) ? o.password : "••••••••"}
-                    </span>
-                    <button
-                      onClick={() => toggleReveal(o.id)}
-                      className="ml-2 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-400 hover:text-black"
-                    >
-                      {revealed.has(o.id) ? "Hide" : "Show"}
-                    </button>
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
+                      {owner.active ? (
+                        <button
+                          className="btn-ghost !py-1.5 !px-3 text-xs"
+                          disabled={removingId === owner.id}
+                          onClick={() => void revoke(owner.id)}
+                        >
+                          {removingId === owner.id ? "Revoking…" : "Revoke login"}
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-ghost !py-1.5 !px-3 text-xs"
+                          disabled={reactivatingId === owner.id}
+                          onClick={() => void reactivate(owner.id)}
+                        >
+                          {reactivatingId === owner.id ? "Reactivating…" : "Reactivate"}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-
-      <AddOwnerModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onAdd={(o) => {
-          const err = addOwner(o);
-          return err;
-        }}
+      <AddOwnerModal open={addOpen} onClose={() => setAddOpen(false)} onCreated={refresh} />
+      <ResetPasswordModal
+        owner={resetOwner}
+        onClose={() => setResetOwner(null)}
+        onUpdated={refresh}
       />
-
-      <ConfirmModal
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) deleteOwner(deleteTarget.id);
-          setDeleteTarget(null);
-        }}
-        title="Delete this owner?"
-      >
-        {deleteTarget && (
-          <>
-            <p className="text-sm text-neutral-700 leading-relaxed">
-              <span className="font-semibold text-[#171717]">
-                {deleteTarget.businessName}
-              </span>{" "}
-              ({deleteTarget.name}, {deleteTarget.username}) will lose access
-              to the ledger.
-            </p>
-            <p className="text-xs text-neutral-500 mt-3 leading-relaxed">
-              Their login stops working and they can no longer sign in. Their
-              records and numbers are not touched — only the account. This
-              cannot be undone.
-            </p>
-          </>
-        )}
-      </ConfirmModal>
     </Page>
   );
 }
 
-/* ---------- add-owner popup ---------- */
 function AddOwnerModal({
   open,
   onClose,
-  onAdd,
+  onCreated,
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: (o: Omit<OwnerAccount, "id">) => string | null;
+  onCreated: () => Promise<void>;
 }) {
-  const [name, setName] = useState("");
-  const [businessName, setBusinessName] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [form, setForm] = useState({ businessName: "", name: "", email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   const close = () => {
+    setForm({ businessName: "", name: "", email: "", password: "" });
     setError(null);
-    setName("");
-    setBusinessName("");
-    setUsername("");
-    setPassword("");
     onClose();
   };
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const err = onAdd({ name, businessName, username, password });
-    if (err) {
-      setError(err);
-      return;
-    }
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPending(true);
+    const result = await createOwnerAction(form);
+    setPending(false);
+    if (!result.ok) return setError(result.error);
+    await onCreated();
     close();
   };
 
   return (
-    <Modal open={open} onClose={close} title="Add owner">
-      {error && (
-        <div
-          role="alert"
-          className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5"
-        >
-          {error}
-        </div>
-      )}
-      <form onSubmit={submit} className="flex flex-col gap-4">
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="owner-name">Owner name</label>
+    <Modal open={open} onClose={close} title="Add business owner">
+      {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        {([
+          ["businessName", "Business name", "Their shop or factory"],
+          ["name", "Owner name", "Owner name"],
+          ["email", "Email", "owner@example.com"],
+          ["password", "Password", "At least 8 characters"],
+        ] as const).map(([key, label, placeholder]) => (
+          <div key={key}>
+            <label htmlFor={`owner-${key}`}>{label}</label>
             <input
-              id="owner-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. M. Shazib"
-              autoFocus
+              id={`owner-${key}`}
+              type={key === "password" ? "password" : key === "email" ? "email" : "text"}
+              value={form[key]}
+              placeholder={placeholder}
+              onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
             />
           </div>
-          <div>
-            <label htmlFor="owner-business">Business / factory name</label>
-            <input
-              id="owner-business"
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              placeholder="Shown on their dashboard"
-            />
-          </div>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="owner-username">Username</label>
-            <input
-              id="owner-username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Their sign-in name"
-              autoCapitalize="none"
-            />
-          </div>
-          <div>
-            <label htmlFor="owner-password">Password</label>
-            <input
-              id="owner-password"
-              type="text"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Give them a password"
-            />
-          </div>
-        </div>
-        <p className="text-xs text-neutral-500 leading-relaxed">
-          The owner signs in with this username and password. After login, their
-          business name appears at the top of their dashboard.
-        </p>
-        <div className="flex justify-end gap-3 mt-2">
-          <button type="button" className="btn-ghost" onClick={close}>
-            Cancel
+        ))}
+        <div className="flex justify-end gap-3">
+          <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={pending}>
+            {pending ? "Creating…" : "Create owner"}
           </button>
-          <button type="submit" className="btn-primary">
-            Add owner
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ResetPasswordModal({
+  owner,
+  onClose,
+  onUpdated,
+}: {
+  owner: OwnerAccount | null;
+  onClose: () => void;
+  onUpdated: () => Promise<void>;
+}) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const close = () => {
+    setPassword("");
+    setError(null);
+    onClose();
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!owner) return;
+    setPending(true);
+    const result = await updateOwnerAction(owner.id, { password });
+    setPending(false);
+    if (!result.ok) return setError(result.error);
+    await onUpdated();
+    close();
+  };
+
+  return (
+    <Modal open={Boolean(owner)} onClose={close} title={`Reset password — ${owner?.name ?? ""}`}>
+      {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        <div>
+          <label htmlFor="reset-password">New password</label>
+          <input
+            id="reset-password"
+            type="text"
+            value={password}
+            placeholder="At least 8 characters"
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <p className="text-xs text-neutral-500 mt-2">
+            The new password will appear in the owners table for your records.
+          </p>
+        </div>
+        <div className="flex justify-end gap-3">
+          <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={pending || !owner}>
+            {pending ? "Saving…" : "Save password"}
           </button>
         </div>
       </form>

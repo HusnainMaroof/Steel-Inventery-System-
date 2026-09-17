@@ -11,6 +11,7 @@ datasource db {
 enum Role {
   ADMIN
   SUBADMIN
+  SUPERADMIN
 }
 
 enum PaymentType {
@@ -42,6 +43,8 @@ enum InventoryTxType {
 model Business {
   id        String   @id @default(cuid())
   name      String
+  slug      String   @unique
+  settings  Json?
   createdAt DateTime @default(now())
 
   users              User[]
@@ -61,14 +64,22 @@ model Business {
   stockChecks        StockCheck[]
   inventoryTx        InventoryTransaction[]
   paymentAllocations PaymentAllocation[]
+  locations          Location[]
 }
 
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
+  /// Plain login password — visible only to Super Admin in the owners panel.
+  loginPassword String?
   name         String
-  role         Role     @default(SUBADMIN)
+  role         Role     @default(ADMIN)
+  active       Boolean  @default(true)
+  /// Job title for staff (Sales manager, Store keeper, …). Unused for owners.
+  title        String?
+  /// Pages a staff login may open. Empty for owners = full access.
+  access       String[] @default([])
   businessId   String
   business     Business @relation(fields: [businessId], references: [id])
   createdAt    DateTime @default(now())
@@ -112,6 +123,8 @@ model ProductCategory {
 
   business Business @relation(fields: [businessId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
+  attributeDefs AttributeDef[]
+  variants Variant[]
 
   @@index([businessId])
   @@index([productId])
@@ -138,23 +151,32 @@ model AttributeDef {
   name       String
   type       String  @default("select")
   required   Boolean @default(false)
+  unit       String?
+  sortOrder  Int     @default(0)
+  active     Boolean @default(true)
 
   business Business          @relation(fields: [businessId], references: [id])
   product  Product           @relation(fields: [productId], references: [id])
+  category ProductCategory?  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   options  AttributeOption[]
 
-  @@unique([productId, key])
+  @@unique([productId, categoryId, key])
   @@index([productId])
+  @@index([categoryId])
 }
 
 model AttributeOption {
-  id    String @id @default(cuid())
-  defId String
-  value String
+  id             String  @id @default(cuid())
+  attributeDefId String
+  label          String
+  value          String?
+  sortOrder      Int     @default(0)
+  active         Boolean @default(true)
 
-  def AttributeDef @relation(fields: [defId], references: [id], onDelete: Cascade)
+  def AttributeDef @relation(fields: [attributeDefId], references: [id], onDelete: Cascade)
 
-  @@index([defId])
+  @@unique([attributeDefId, label])
+  @@index([attributeDefId])
 }
 
 model Variant {
@@ -171,6 +193,10 @@ model Variant {
 
   business Business @relation(fields: [businessId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
+  category ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  purchaseLines PurchaseLine[]
+  saleLines SaleLine[]
+  inventoryTx InventoryTransaction[]
 
   @@unique([businessId, identityKey])
   @@index([productId])
@@ -184,6 +210,8 @@ model Warehouse {
 
   business  Business   @relation(fields: [businessId], references: [id])
   locations Location[]
+  purchaseLines PurchaseLine[]
+  inventoryTx InventoryTransaction[]
 
   @@index([businessId])
 }
@@ -195,8 +223,13 @@ model Location {
   name        String
   active      Boolean @default(true)
 
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  business  Business  @relation(fields: [businessId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  purchaseLines PurchaseLine[]
+  inventoryTx InventoryTransaction[]
 
+  @@unique([warehouseId, name])
+  @@index([businessId])
   @@index([warehouseId])
 }
 
@@ -250,6 +283,7 @@ model Purchase {
   business Business        @relation(fields: [businessId], references: [id])
   supplier Supplier        @relation(fields: [supplierId], references: [id])
   lines    PurchaseLine[]
+  sourcedSaleLines SaleLine[] @relation("SourcePurchase")
 
   @@index([businessId, date])
   @@index([supplierId])
@@ -267,12 +301,27 @@ model PurchaseLine {
   unit              String
   rate              Decimal @db.Decimal(14, 2)
   sellRate          Decimal? @db.Decimal(14, 2)
+  productName       String?
+  spec              String?
+  quality           String?
+  lotNumber         String?
+  heatNumber        String?
+  batchNumber       String?
+  warehouseId       String?
+  locationId        String?
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id])
+  variant  Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  inventoryTx InventoryTransaction[]
 
   @@index([purchaseId])
   @@index([productId])
+  @@index([variantId])
+  @@index([warehouseId])
+  @@index([locationId])
 }
 
 model Sale {
@@ -314,9 +363,14 @@ model SaleLine {
 
   sale     Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product  Product   @relation(fields: [productId], references: [id])
+  variant  Variant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  sourcePurchase Purchase? @relation("SourcePurchase", fields: [purchaseId], references: [id], onDelete: SetNull)
+  inventoryTx InventoryTransaction[]
 
   @@index([saleId])
   @@index([productId])
+  @@index([variantId])
+  @@index([purchaseId])
 }
 
 model Invoice {
@@ -397,6 +451,7 @@ model StockCheck {
   productId   String
   physicalQty Decimal  @db.Decimal(14, 3)
   systemQty   Decimal  @db.Decimal(14, 3)
+  note        String?
   createdAt   DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id])
@@ -409,6 +464,15 @@ model InventoryTransaction {
   id            String          @id @default(cuid())
   businessId    String
   productId     String
+  categoryId    String?
+  variantId     String?
+  purchaseLineId String?
+  saleLineId    String?
+  warehouseId   String?
+  locationId    String?
+  attributeSnapshot Json?
+  unit          String
+  refLabel      String?
   type          InventoryTxType
   qty           Decimal         @db.Decimal(14, 3) // signed: + in, − out
   referenceType String // PURCHASE | SALE | ADJUSTMENT | RETURN
@@ -418,8 +482,16 @@ model InventoryTransaction {
 
   business Business @relation(fields: [businessId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
+  variant Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  purchaseLine PurchaseLine? @relation(fields: [purchaseLineId], references: [id], onDelete: SetNull)
+  saleLine SaleLine? @relation(fields: [saleLineId], references: [id], onDelete: SetNull)
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   @@index([productId, date])
   @@index([referenceType, referenceId])
   @@index([businessId, date])
+  @@index([businessId, variantId, date])
+  @@index([purchaseLineId])
+  @@index([saleLineId])
 }

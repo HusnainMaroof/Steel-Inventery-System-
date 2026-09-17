@@ -57,7 +57,7 @@ function PaymentForm({
   const [err, setErr] = useState("");
   if (!sale) return null;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = Number(amount) || 0;
     if (amt <= 0) {
@@ -70,7 +70,7 @@ function PaymentForm({
       return;
     }
     setErr("");
-    addPayment({
+    await addPayment({
       date,
       type: "customer",
       partyId: sale.customerId,

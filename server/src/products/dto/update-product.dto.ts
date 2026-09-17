@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 export class UpdateProductDto {
   @IsOptional()
@@ -22,4 +22,12 @@ export class UpdateProductDto {
   @IsString()
   @MaxLength(40)
   specLabel?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  usesCategories?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }

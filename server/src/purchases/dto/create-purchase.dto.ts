@@ -53,6 +53,15 @@ export class CreatePurchaseLineDto {
   @IsNumber()
   @Min(0)
   sellRate?: number;
+
+  @IsOptional() @IsString() @MaxLength(80) productName?: string;
+  @IsOptional() @IsString() @MaxLength(80) spec?: string;
+  @IsOptional() @IsString() @MaxLength(80) quality?: string;
+  @IsOptional() @IsString() @MaxLength(80) lotNumber?: string;
+  @IsOptional() @IsString() @MaxLength(80) heatNumber?: string;
+  @IsOptional() @IsString() @MaxLength(80) batchNumber?: string;
+  @IsOptional() @IsString() warehouseId?: string;
+  @IsOptional() @IsString() locationId?: string;
 }
 
 export class CreatePurchaseDto {

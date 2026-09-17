@@ -1,0 +1,2 @@
+-- The legacy snapshot table is intentionally retained as an unused archive.
+-- Normalized Prisma tables are the application's source of truth.

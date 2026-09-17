@@ -7,13 +7,15 @@ import { Test } from "@nestjs/testing";
 import { AppModule } from "../src/app.module";
 
 /**
- * E2E suite — requires a reachable DATABASE_URL (Neon). Skipped when the
- * environment has no database configured, so CI can run the unit suite
- * without secrets.
+ * E2E suite — requires a reachable database plus login credentials.
+ * Skipped when those are missing so the unit suite can run without secrets.
  */
-const describeIfDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeIfE2e =
+  process.env.DATABASE_URL && process.env.TEST_EMAIL && process.env.TEST_PASSWORD
+    ? describe
+    : describe.skip;
 
-describeIfDb("Tradex API (e2e)", () => {
+describeIfE2e("Tradex API (e2e)", () => {
   let app: NestFastifyApplication;
   let token: string;
 

@@ -1,8 +1,10 @@
 "use client";
 
 import React, {
+  useCallback,
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -28,10 +30,11 @@ import type {
   Warehouse,
   WarehouseLocation,
 } from "./types";
-import { BUSINESS_ID } from "./types";
 import { attrsEqual, defaultShortName, identityKey, optionAppearsIn, scopedDefs, variantKey } from "./catalogue";
-import { seedInitialState } from "./seed";
 import type { ProductTemplate } from "./templates";
+import { useAuth } from "./auth";
+import { apiFetch, jsonBody } from "./api";
+import { normalizeBootstrap, type ApiBootstrap } from "./backend-adapters";
 
 export const purchaseTotal = (p: Purchase) =>
   p.qty * p.rate +
@@ -97,6 +100,11 @@ export interface VariantStockRow {
 }
 
 interface Store {
+  ready: boolean;
+  error: string | null;
+  pending: string | null;
+  retry: () => void;
+  refresh: () => Promise<void>;
   suppliers: Supplier[];
   customers: Customer[];
   purchases: Purchase[];
@@ -126,65 +134,66 @@ interface Store {
   customerBalance: (id: string) => number; // + = owes us, - = advance
   supplierBalance: (id: string) => number; // + = we owe
   stats: DashboardStats;
-  addPurchase: (p: Omit<Purchase, "id">) => void;
-  updatePurchase: (id: string, patch: Partial<Purchase>) => void;
-  deletePurchase: (id: string) => void;
-  addSale: (s: Omit<Sale, "id" | "invoiceNo" | "createdAt">) => string;
-  deleteSale: (id: string) => void;
-  addPayment: (p: Omit<Payment, "id">) => void;
-  addCustomer: (c: Omit<Customer, "id">) => string;
-  addSupplier: (s: Omit<Supplier, "id">) => void;
-  addExpense: (e: Omit<Expense, "id">) => void;
-  recordStockCheck: (c: Omit<StockCheck, "id">) => void;
-  addProduct: (name: string, unit: string, description?: string, usesCategories?: boolean) => string;
-  updateProduct: (id: string, patch: Partial<Product>) => void;
-  addProductItem: (productId: string, name: string) => void;
-  addQuality: (productId: string, name: string, specOnly?: boolean) => void;
-  deleteProduct: (id: string) => void;
-  deleteProductItem: (id: string) => void;
-  deleteQuality: (id: string) => void;
+  addPurchase: (p: Omit<Purchase, "id">) => Promise<void>;
+  updatePurchase: (id: string, patch: Partial<Purchase>) => Promise<void>;
+  deletePurchase: (id: string) => Promise<void>;
+  addSale: (s: Omit<Sale, "id" | "invoiceNo" | "createdAt"> & { paidNow?: number }) => Promise<string>;
+  deleteSale: (id: string) => Promise<void>;
+  addPayment: (p: Omit<Payment, "id">) => Promise<void>;
+  addCustomer: (c: Omit<Customer, "id">) => Promise<string>;
+  addSupplier: (s: Omit<Supplier, "id">) => Promise<void>;
+  addExpense: (e: Omit<Expense, "id">) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
+  recordStockCheck: (c: Omit<StockCheck, "id">) => Promise<void>;
+  addProduct: (name: string, unit: string, description?: string, usesCategories?: boolean) => Promise<string>;
+  updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
+  addProductItem: (productId: string, name: string) => Promise<void>;
+  addQuality: (productId: string, name: string, specOnly?: boolean) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  deleteProductItem: (id: string) => Promise<void>;
+  deleteQuality: (id: string) => Promise<void>;
   // --- dynamic catalogue configuration ---
-  addCategory: (productId: string, name: string, description?: string) => string;
-  updateCategory: (id: string, patch: Partial<ProductCategory>) => void;
-  renameCategory: (id: string, name: string) => void;
+  addCategory: (productId: string, name: string, description?: string) => Promise<string>;
+  updateCategory: (id: string, patch: Partial<ProductCategory>) => Promise<void>;
+  renameCategory: (id: string, name: string) => Promise<void>;
   /** delete a Category — refused (no-op) while any transaction references its variants */
-  deleteCategory: (id: string) => void;
-  setCategoryActive: (id: string, active: boolean) => void;
+  deleteCategory: (id: string) => Promise<void>;
+  setCategoryActive: (id: string, active: boolean) => Promise<void>;
   /** aliases kept so older call sites compile; owner-facing name is Category */
-  addItem: (productId: string, name: string, description?: string) => string;
-  updateItem: (id: string, patch: Partial<ProductCategory>) => void;
-  renameItem: (id: string, name: string) => void;
-  deleteItem: (id: string) => void;
-  setItemActive: (id: string, active: boolean) => void;
+  addItem: (productId: string, name: string, description?: string) => Promise<string>;
+  updateItem: (id: string, patch: Partial<ProductCategory>) => Promise<void>;
+  renameItem: (id: string, name: string) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
+  setItemActive: (id: string, active: boolean) => Promise<void>;
   /** create a product, its items, attributes and options from a template in one shot */
-  addProductFromTemplate: (t: ProductTemplate) => string;
+  addProductFromTemplate: (t: ProductTemplate) => Promise<string>;
   addAttribute: (
     productId: string,
     categoryId: string | undefined,
     def: { name: string; type: AttributeDef["type"]; required: boolean; unit?: string; options?: string[] }
-  ) => string;
-  patchAttribute: (id: string, patch: Partial<AttributeDef>) => void;
-  deleteAttribute: (id: string) => void; // hard-delete only when unused; otherwise deactivates
-  reorderAttributes: (productId: string, categoryId: string | undefined, orderedIds: string[]) => void;
-  addOption: (attributeDefId: string, label: string) => string;
-  patchOption: (id: string, patch: Partial<AttributeOption>) => void;
-  deleteOption: (id: string) => boolean; // false when history uses it — deactivate instead
-  reorderOptions: (attributeDefId: string, orderedIds: string[]) => void;
+  ) => Promise<string>;
+  patchAttribute: (id: string, patch: Partial<AttributeDef>) => Promise<void>;
+  deleteAttribute: (id: string) => Promise<void>;
+  reorderAttributes: (productId: string, categoryId: string | undefined, orderedIds: string[]) => Promise<void>;
+  addOption: (attributeDefId: string, label: string) => Promise<string>;
+  patchOption: (id: string, patch: Partial<AttributeOption>) => Promise<void>;
+  deleteOption: (id: string) => Promise<boolean>;
+  reorderOptions: (attributeDefId: string, orderedIds: string[]) => Promise<void>;
   isOptionUsed: (id: string) => boolean;
   isAttributeUsed: (id: string) => boolean;
-  addWarehouse: (name: string) => void;
-  renameWarehouse: (id: string, name: string) => void;
-  setWarehouseActive: (id: string, active: boolean) => void;
-  addLocation: (warehouseId: string, name: string) => void;
-  renameLocation: (id: string, name: string) => void;
-  setLocationActive: (id: string, active: boolean) => void;
+  addWarehouse: (name: string) => Promise<void>;
+  renameWarehouse: (id: string, name: string) => Promise<void>;
+  setWarehouseActive: (id: string, active: boolean) => Promise<void>;
+  addLocation: (warehouseId: string, name: string) => Promise<void>;
+  renameLocation: (id: string, name: string) => Promise<void>;
+  setLocationActive: (id: string, active: boolean) => Promise<void>;
   /** find-or-create the variant for an attribute combination (deduped by key) */
-  ensureVariant: (productId: string, categoryId: string | undefined, attributes: Record<string, string>, shortName?: string) => Variant;
-  setVariantShortName: (id: string, shortName: string) => void;
-  setVariantActive: (id: string, active: boolean) => void;
-  deleteVariant: (id: string) => void; // only safe when no transaction references it
-  deleteCustomer: (id: string) => void;
-  deleteSupplier: (id: string) => void;
+  ensureVariant: (productId: string, categoryId: string | undefined, attributes: Record<string, string>, shortName?: string) => Promise<Variant>;
+  setVariantShortName: (id: string, shortName: string) => Promise<void>;
+  setVariantActive: (id: string, active: boolean) => Promise<void>;
+  deleteVariant: (id: string) => Promise<void>;
+  deleteCustomer: (id: string) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
   deleteInventoryItem: (item: string) => void;
   hideInventoryItem: (item: string) => void; // removes a sold-out row from the inventory list only — records & numbers stay
   deleteInventoryVariant: (variantId: string) => void; // cascade: that variant's purchases + sales + their payments
@@ -193,31 +202,131 @@ interface Store {
 
 const StoreCtx = createContext<Store | null>(null);
 
-let seq = 1000;
-const nextId = () => `x${seq++}`;
+interface LedgerState {
+  version: number;
+  suppliers: Supplier[];
+  customers: Customer[];
+  purchases: Purchase[];
+  sales: Sale[];
+  payments: Payment[];
+  expenses: Expense[];
+  stockChecks: StockCheck[];
+  products: Product[];
+  productItems: ProductItem[];
+  qualities: Quality[];
+  categories: ProductCategory[];
+  attributeDefs: AttributeDef[];
+  attributeOptions: AttributeOption[];
+  variants: Variant[];
+  warehouses: Warehouse[];
+  locations: WarehouseLocation[];
+  hiddenItems: string[];
+  hiddenVariants: string[];
+}
 
-// seed ids are `prod-*`, `item-*`, `qual-*`; records created in-app get x1000, x1001, …
-const INITIAL = seedInitialState;
+const emptyLedger = (): LedgerState => ({
+  version: 1,
+  suppliers: [],
+  customers: [],
+  purchases: [],
+  sales: [],
+  payments: [],
+  expenses: [],
+  stockChecks: [],
+  products: [],
+  productItems: [],
+  qualities: [],
+  categories: [],
+  attributeDefs: [],
+  attributeOptions: [],
+  variants: [],
+  warehouses: [],
+  locations: [],
+  hiddenItems: [],
+  hiddenVariants: [],
+});
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [suppliers, setSuppliers] = useState<Supplier[]>(INITIAL.suppliers);
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL.customers);
-  const [purchases, setPurchases] = useState<Purchase[]>(INITIAL.purchases);
-  const [sales, setSales] = useState<Sale[]>(INITIAL.sales);
-  const [payments, setPayments] = useState<Payment[]>(INITIAL.payments ?? []);
-  const [expenses, setExpenses] = useState<Expense[]>(INITIAL.expenses ?? []);
-  const [stockChecks, setStockChecks] = useState<StockCheck[]>([]);
-  const [products, setProducts] = useState<Product[]>(INITIAL.products);
-  const [productItems, setProductItems] = useState<ProductItem[]>(INITIAL.productItems);
-  const [qualities, setQualities] = useState<Quality[]>(INITIAL.qualities);
-  const [categories, setCategories] = useState<ProductCategory[]>(INITIAL.categories);
-  const [attributeDefs, setAttributeDefs] = useState<AttributeDef[]>(INITIAL.attributeDefs);
-  const [attributeOptions, setAttributeOptions] = useState<AttributeOption[]>(INITIAL.attributeOptions);
-  const [variants, setVariants] = useState<Variant[]>(INITIAL.variants);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>(INITIAL.warehouses);
-  const [locations, setLocations] = useState<WarehouseLocation[]>(INITIAL.locations);
+  const { user, ready: authReady } = useAuth();
+  const initial = emptyLedger();
+  const [suppliers, setSuppliers] = useState<Supplier[]>(initial.suppliers);
+  const [customers, setCustomers] = useState<Customer[]>(initial.customers);
+  const [purchases, setPurchases] = useState<Purchase[]>(initial.purchases);
+  const [sales, setSales] = useState<Sale[]>(initial.sales);
+  const [payments, setPayments] = useState<Payment[]>(initial.payments);
+  const [expenses, setExpenses] = useState<Expense[]>(initial.expenses);
+  const [stockChecks, setStockChecks] = useState<StockCheck[]>(initial.stockChecks);
+  const [products, setProducts] = useState<Product[]>(initial.products);
+  const [productItems, setProductItems] = useState<ProductItem[]>(initial.productItems);
+  const [qualities, setQualities] = useState<Quality[]>(initial.qualities);
+  const [categories, setCategories] = useState<ProductCategory[]>(initial.categories);
+  const [attributeDefs, setAttributeDefs] = useState<AttributeDef[]>(initial.attributeDefs);
+  const [attributeOptions, setAttributeOptions] = useState<AttributeOption[]>(initial.attributeOptions);
+  const [variants, setVariants] = useState<Variant[]>(initial.variants);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(initial.warehouses);
+  const [locations, setLocations] = useState<WarehouseLocation[]>(initial.locations);
   const [hiddenItems, setHiddenItems] = useState<string[]>([]);
   const [hiddenVariants, setHiddenVariants] = useState<string[]>([]);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const applyBootstrap = useCallback((raw: ApiBootstrap) => {
+    const data = normalizeBootstrap(raw);
+    setSuppliers(data.suppliers);
+    setCustomers(data.customers);
+    setPurchases(data.purchases);
+    setSales(data.sales);
+    setPayments(data.payments);
+    setExpenses(data.expenses);
+    setStockChecks(data.stockChecks);
+    setProducts(data.products);
+    setProductItems(data.productItems);
+    setQualities(data.qualities);
+    setCategories(data.categories);
+    setAttributeDefs(data.attributeDefs);
+    setAttributeOptions(data.attributeOptions);
+    setVariants(data.variants);
+    setWarehouses(data.warehouses);
+    setLocations(data.locations);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
+    applyBootstrap(response.data);
+  }, [applyBootstrap]);
+
+  useEffect(() => {
+    if (!authReady || !user || user.role === "SUPERADMIN") return;
+    const task = window.setTimeout(() => {
+      setReady(false);
+      setError(null);
+      void refresh()
+        .then(() => setReady(true))
+        .catch((reason: unknown) => {
+          setError(reason instanceof Error ? reason.message : "Could not load the ledger");
+          setReady(true);
+        });
+    }, 0);
+    return () => window.clearTimeout(task);
+  }, [authReady, user, reloadKey, refresh]);
+
+  const mutate = async <T,>(key: string, operation: () => Promise<T>): Promise<T> => {
+    setPending(key);
+    setError(null);
+    try {
+      const result = await operation();
+      await refresh();
+      return result;
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Request failed";
+      setError(message);
+      throw reason;
+    } finally {
+      setPending(null);
+    }
+  };
 
   const {
     inventory,
@@ -704,6 +813,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [sales, lineUnitCost, byItem, expenses, customers, customerBalance, suppliers, supplierBalance, inventory]);
 
   const store: Store = {
+    ready,
+    error,
+    pending,
+    retry: () => setReloadKey((value) => value + 1),
+    refresh,
     suppliers,
     customers,
     purchases,
@@ -732,297 +846,327 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     customerBalance,
     supplierBalance,
     stats,
-    addPurchase: (p) => setPurchases((prev) => [{ ...p, id: nextId() }, ...prev]),
-    updatePurchase: (id, patch) =>
-      setPurchases((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
-      ),
-    deletePurchase: (id) =>
-      setPurchases((prev) => prev.filter((p) => p.id !== id)),
-    addSale: (s) => {
-      const id = nextId();
-      // invoice numbers must never repeat — pick one past the largest so far,
-      // even if earlier invoices were deleted
-      let max = 0;
-      for (const x of sales) {
-        const m = /^INV-(\d+)$/.exec(x.invoiceNo);
-        if (m) max = Math.max(max, Number(m[1]));
-      }
-      const invoiceNo = `INV-${String(max + 1).padStart(3, "0")}`;
-      // record the exact time the sale was made — shown on lists and the printed bill
-      setSales((prev) => [{ ...s, id, invoiceNo, createdAt: new Date().toISOString() }, ...prev]);
-      return id;
+    addPurchase: async (p) => {
+      const variant = p.variantId ? variants.find((item) => item.id === p.variantId) : undefined;
+      const product = products.find((item) => item.id === variant?.productId || item.name === p.product);
+      if (!product) throw new Error("Choose a valid product");
+      await mutate("purchase:create", () => apiFetch("/purchases", {
+        method: "POST",
+        ...jsonBody({
+          date: p.date,
+          supplierId: p.supplierId,
+          transport: p.transport,
+          loading: p.loadingCharges ?? 0,
+          labour: p.labourCharges ?? 0,
+          otherCost: p.otherCost,
+          paid: p.paid ?? 0,
+          lines: [{
+            productId: product.id,
+            variantId: p.variantId,
+            categoryId: p.categoryId,
+            item: p.item,
+            attributeSnapshot: p.attributeSnapshot,
+            qty: p.qty,
+            unit: p.unit,
+            rate: p.rate,
+            sellRate: p.sellRate,
+            productName: p.product,
+            spec: p.spec,
+            quality: p.quality,
+            lotNumber: p.lotNumber,
+            heatNumber: p.heatNumber,
+            batchNumber: p.batchNumber,
+            warehouseId: p.warehouseId,
+            locationId: p.locationId,
+          }],
+        }),
+      }));
     },
-    addPayment: (p) => setPayments((prev) => [{ ...p, id: nextId() }, ...prev]),
-    deleteSale: (id) => {
-      setSales((prev) => prev.filter((s) => s.id !== id));
-      // the invoice's customer payments leave with it, so dues stay honest
-      setPayments((prev) => prev.filter((p) => !(p.type === "customer" && p.saleId === id)));
+    updatePurchase: async (id, patch) => {
+      const current = purchases.find((purchase) => purchase.id === id);
+      if (!current) throw new Error("Purchase not found");
+      const next = { ...current, ...patch };
+      await mutate(`purchase:update:${id}`, () => apiFetch(`/purchases/${id}`, {
+        method: "PATCH",
+        ...jsonBody({
+          date: next.date,
+          supplierId: next.supplierId,
+          transport: next.transport,
+          loading: next.loadingCharges ?? 0,
+          labour: next.labourCharges ?? 0,
+          otherCost: next.otherCost,
+          paid: next.paid ?? 0,
+        }),
+      }));
     },
-    addCustomer: (c) => {
-      const id = nextId();
-      setCustomers((prev) => [...prev, { ...c, id }]);
-      return id;
+    deletePurchase: async (id) => {
+      await mutate(`purchase:delete:${id}`, () => apiFetch(`/purchases/${id}`, { method: "DELETE" }));
     },
-    addSupplier: (s) => setSuppliers((prev) => [...prev, { ...s, id: nextId() }]),
-    addExpense: (e) => setExpenses((prev) => [{ ...e, id: nextId() }, ...prev]),
-    recordStockCheck: (c) => setStockChecks((prev) => [{ ...c, id: nextId() }, ...prev]),
-    addProduct: (name, unit, description, usesCategories) => {
+    addSale: async (s) => {
+      const result = await mutate<{ sale: { id: string } }>("sale:create", () =>
+        apiFetch("/sales", {
+          method: "POST",
+          ...jsonBody({
+            date: s.date,
+            customerId: s.customerId,
+            discountPct: s.discountPct ?? 0,
+            taxPct: s.taxPct ?? 0,
+            loadingCharges: s.loadingCharges ?? 0,
+            transportCharges: s.transportCharges ?? 0,
+            labourCharges: s.labourCharges ?? 0,
+            paidNow: s.paidNow ?? 0,
+            lines: s.lines.map((line) => {
+              const variant = line.variantId ? variants.find((item) => item.id === line.variantId) : undefined;
+              const product = products.find((item) => item.id === variant?.productId);
+              if (!product) throw new Error(`Product not found for ${line.item}`);
+              return {
+                productId: product.id,
+                variantId: line.variantId,
+                categoryId: line.categoryId,
+                purchaseId: line.purchaseId,
+                item: line.item,
+                attributeSnapshot: line.attributeSnapshot,
+                qualityName: line.qualityName,
+                qty: line.qty,
+                unit: line.unit,
+                rate: line.rate,
+              };
+            }),
+          }),
+        }),
+      );
+      return result.sale.id;
+    },
+    addPayment: async (p) => {
+      await mutate("payment:create", () => apiFetch("/payments", {
+        method: "POST",
+        ...jsonBody({
+          date: p.date,
+          type: p.type.toUpperCase(),
+          customerId: p.type === "customer" ? p.partyId : undefined,
+          supplierId: p.type === "supplier" ? p.partyId : undefined,
+          amount: p.amount,
+          method: p.method.toUpperCase(),
+          saleId: p.saleId,
+          note: p.note,
+        }),
+      }));
+    },
+    deleteSale: async (id) => {
+      await mutate(`sale:delete:${id}`, () => apiFetch(`/sales/${id}`, { method: "DELETE" }));
+    },
+    addCustomer: async (c) => {
+      const created = await mutate<{ id: string }>("customer:create", () =>
+        apiFetch("/customers", { method: "POST", ...jsonBody(c) }),
+      );
+      return created.id;
+    },
+    addSupplier: async (s) => {
+      await mutate("supplier:create", () => apiFetch("/suppliers", { method: "POST", ...jsonBody(s) }));
+    },
+    addExpense: async (e) => {
+      await mutate("expense:create", () => apiFetch("/expenses", {
+        method: "POST",
+        ...jsonBody({ ...e, category: e.category.toUpperCase() }),
+      }));
+    },
+    deleteExpense: async (id) => {
+      await mutate(`expense:delete:${id}`, () => apiFetch(`/expenses/${id}`, { method: "DELETE" }));
+    },
+    recordStockCheck: async (c) => {
+      await mutate("stock-check:create", () =>
+        apiFetch("/stock-checks", { method: "POST", ...jsonBody(c) }),
+      );
+    },
+    addProduct: async (name, unit, description, usesCategories) => {
       const clean = name.trim();
       if (!clean) return "";
       const existing = products.find((p) => p.name.toLowerCase() === clean.toLowerCase());
       if (existing) return existing.id;
-      const id = nextId();
-      setProducts((prev) => [...prev, { id, businessId: BUSINESS_ID, name: clean, unit, description: description?.trim() || undefined, active: true, usesCategories: !!usesCategories }]);
-      return id;
+      const created = await mutate<{ id: string }>("product:create", () =>
+        apiFetch("/products", {
+          method: "POST",
+          ...jsonBody({ name: clean, unit, description: description?.trim() || undefined, usesCategories: !!usesCategories }),
+        }),
+      );
+      return created.id;
     },
-    updateProduct: (id, patch) =>
-      setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p))),
-    addProductItem: (productId, name) =>
-      setProductItems((prev) =>
-        prev.some((i) => i.productId === productId && i.name.toLowerCase() === name.toLowerCase())
-          ? prev
-          : [...prev, { id: nextId(), productId, name }]
-      ),
-    addQuality: (productId, name, specOnly) =>
-      setQualities((prev) =>
-        prev.some((q) => q.productId === productId && q.name.toLowerCase() === name.toLowerCase())
-          ? prev
-          : [
-              ...prev,
-              specOnly
-                ? { id: nextId(), productId, specOnly: true, name }
-                : { id: nextId(), productId, name },
-            ]
-      ),
-    // deleting a product also removes all of its categories, attributes,
-    // options, variants and (legacy) items/qualities — callers guard history
-    deleteProduct: (id) => {
-      const catIds = categories.filter((c) => c.productId === id).map((c) => c.id);
-      setCategories((prev) => prev.filter((c) => c.productId !== id));
-      const defIds = attributeDefs.filter((d) => d.productId === id || catIds.includes(d.categoryId ?? "")).map((d) => d.id);
-      setAttributeDefs((prev) => prev.filter((d) => d.productId !== id && !catIds.includes(d.categoryId ?? "")));
-      setAttributeOptions((prev) => prev.filter((o) => !defIds.includes(o.attributeDefId)));
-      setVariants((prev) => prev.filter((v) => v.productId !== id && !catIds.includes(v.categoryId ?? "")));
-      setProductItems((prev) => prev.filter((i) => i.productId !== id));
-      setQualities((prev) => prev.filter((q) => q.productId !== id));
-      setProducts((prev) => prev.filter((p) => p.id !== id));
+    updateProduct: async (id, patch) => {
+      await mutate(`product:update:${id}`, () => apiFetch(`/products/${id}`, { method: "PATCH", ...jsonBody(patch) }));
     },
-    deleteProductItem: (id) =>
-      setProductItems((prev) => prev.filter((i) => i.id !== id)),
-    deleteQuality: (id) =>
-      setQualities((prev) => prev.filter((q) => q.id !== id)),
+    addProductItem: async () => undefined,
+    addQuality: async () => undefined,
+    deleteProduct: async (id) => {
+      await mutate(`product:delete:${id}`, () => apiFetch(`/products/${id}`, { method: "DELETE" }));
+    },
+    deleteProductItem: async () => undefined,
+    deleteQuality: async () => undefined,
 
     // --- dynamic catalogue configuration ---
-    addCategory: (productId, name, description) => {
+    addCategory: async (productId, name, description) => {
       const clean = name.trim();
       if (!clean) return "";
       const existing = categories.find(
         (c) => c.productId === productId && c.name.toLowerCase() === clean.toLowerCase()
       );
       if (existing) return existing.id;
-      const id = nextId();
-      setCategories((prev) => [...prev, { id, businessId: BUSINESS_ID, productId, name: clean, description: description?.trim() || undefined, active: true }]);
-      return id;
-    },
-    updateCategory: (id, patch) =>
-      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c))),
-    renameCategory: (id, name) =>
-      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, name: name.trim() || c.name } : c))),
-    deleteCategory: (id) => {
-      const varIds = variants.filter((v) => v.categoryId === id).map((v) => v.id);
-      const used =
-        purchases.some((p) => (p.variantId && varIds.includes(p.variantId)) || false) ||
-        sales.some((s) => s.lines.some((l) => l.variantId && varIds.includes(l.variantId)));
-      if (used) return; // history references this Item — deletion refused
-      setVariants((prev) => prev.filter((v) => v.categoryId !== id));
-      const defIds = attributeDefs.filter((d) => d.categoryId === id).map((d) => d.id);
-      setAttributeDefs((prev) => prev.filter((d) => d.categoryId !== id));
-      setAttributeOptions((prev) => prev.filter((o) => !defIds.includes(o.attributeDefId)));
-      setCategories((prev) => prev.filter((c) => c.id !== id));
-    },
-    setCategoryActive: (id, active) =>
-      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, active } : c))),
-    addItem: (productId, name, description) => {
-      const clean = name.trim();
-      if (!clean) return "";
-      const existing = categories.find(
-        (c) => c.productId === productId && c.name.toLowerCase() === clean.toLowerCase()
+      const created = await mutate<{ id: string }>("category:create", () =>
+        apiFetch(`/products/${productId}/categories`, {
+          method: "POST",
+          ...jsonBody({ name: clean, description: description?.trim() || undefined }),
+        }),
       );
-      if (existing) return existing.id;
-      const id = nextId();
-      setCategories((prev) => [...prev, { id, businessId: BUSINESS_ID, productId, name: clean, description: description?.trim() || undefined, active: true }]);
-      return id;
+      return created.id;
     },
-    updateItem: (id, patch) =>
-      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c))),
-    renameItem: (id, name) =>
-      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, name: name.trim() || c.name } : c))),
-    deleteItem: (id) => {
-      const varIds = variants.filter((v) => v.categoryId === id).map((v) => v.id);
-      const used =
-        purchases.some((p) => (p.variantId && varIds.includes(p.variantId)) || false) ||
-        sales.some((s) => s.lines.some((l) => l.variantId && varIds.includes(l.variantId)));
-      if (used) return;
-      setVariants((prev) => prev.filter((v) => v.categoryId !== id));
-      const defIds = attributeDefs.filter((d) => d.categoryId === id).map((d) => d.id);
-      setAttributeDefs((prev) => prev.filter((d) => d.categoryId !== id));
-      setAttributeOptions((prev) => prev.filter((o) => !defIds.includes(o.attributeDefId)));
-      setCategories((prev) => prev.filter((c) => c.id !== id));
+    updateCategory: async (id, patch) => {
+      await mutate(`category:update:${id}`, () =>
+        apiFetch(`/products/categories/${id}`, { method: "PATCH", ...jsonBody(patch) }),
+      );
     },
-    setItemActive: (id, active) =>
-      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, active } : c))),
+    renameCategory: async (id, name) => {
+      await mutate(`category:rename:${id}`, () =>
+        apiFetch(`/products/categories/${id}`, { method: "PATCH", ...jsonBody({ name }) }),
+      );
+    },
+    deleteCategory: async (id) => {
+      await mutate(`category:delete:${id}`, () => apiFetch(`/products/categories/${id}`, { method: "DELETE" }));
+    },
+    setCategoryActive: async (id, active) => {
+      await mutate(`category:active:${id}`, () =>
+        apiFetch(`/products/categories/${id}`, { method: "PATCH", ...jsonBody({ active }) }),
+      );
+    },
+    addItem: async (productId, name, description) =>
+      store.addCategory(productId, name, description),
+    updateItem: async (id, patch) => store.updateCategory(id, patch),
+    renameItem: async (id, name) => store.renameCategory(id, name),
+    deleteItem: async (id) => store.deleteCategory(id),
+    setItemActive: async (id, active) => store.setCategoryActive(id, active),
     /** one-shot: product + items + attributes + options from a template */
-    addProductFromTemplate: (t) => {
+    addProductFromTemplate: async (t) => {
       const clean = t.product.name.trim();
       if (!clean) return "";
       const existing = products.find((p) => p.name.toLowerCase() === clean.toLowerCase());
       if (existing) return existing.id;
-      const pid = nextId();
-      setProducts((prev) => [
-        ...prev,
-        {
-          id: pid,
-          businessId: BUSINESS_ID,
-          name: clean,
-          unit: t.product.unit,
-          description: t.product.description?.trim() || undefined,
-          active: true,
-          usesCategories: t.usesCategories,
-        },
-      ]);
-      const addDefs = (
-        attrs: { name: string; type: AttributeDef["type"]; required: boolean; unit?: string; options?: string[] }[],
-        categoryId?: string
-      ) => {
-        attrs.forEach((a, ai) => {
-          const name = a.name.trim();
-          if (!name) return;
-          let key = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-          if (!key) key = `attr-${pid}-${ai}`;
-          const defId = nextId();
-          setAttributeDefs((prev) => [
-            ...prev,
-            {
-              id: defId,
-              businessId: BUSINESS_ID,
-              productId: pid,
-              categoryId,
-              name,
-              key,
-              type: a.type,
-              required: a.required,
-              unit: a.unit?.trim() || undefined,
-              sortOrder: ai + 1,
-              active: true,
-            },
-          ]);
-          if (a.type === "select" && a.options?.length) {
-            const opts = a.options
-              .map((label) => label.trim())
-              .filter(Boolean)
-              .map((label, i) => ({ id: `${defId}-o${i}`, attributeDefId: defId, label, sortOrder: i, active: true }));
-            setAttributeOptions((prev) => [...prev, ...opts]);
-          }
+      return mutate("product:template", async () => {
+        const product = await apiFetch<{ id: string }>("/products", {
+          method: "POST",
+          ...jsonBody({
+            name: clean,
+            unit: t.product.unit,
+            description: t.product.description?.trim() || undefined,
+            usesCategories: t.usesCategories,
+          }),
         });
-      };
-      if (t.usesCategories) {
-        for (const cat of t.categories ?? []) {
-          const catName = cat.name.trim();
-          if (!catName) continue;
-          const cid = nextId();
-          setCategories((prev) => [
-            ...prev,
-            { id: cid, businessId: BUSINESS_ID, productId: pid, name: catName, description: cat.description?.trim() || undefined, active: true },
-          ]);
-          addDefs(cat.attributes, cid);
+        const addDefs = async (
+          attrs: { name: string; type: AttributeDef["type"]; required: boolean; unit?: string; options?: string[] }[],
+          categoryId?: string,
+        ) => {
+          for (const [index, attribute] of attrs.entries()) {
+            const name = attribute.name.trim();
+            if (!name) continue;
+            const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `attribute_${index}`;
+            const created = await apiFetch<{ id: string }>(`/products/${product.id}/attributes`, {
+              method: "POST",
+              ...jsonBody({
+                name,
+                key,
+                type: attribute.type,
+                required: attribute.required,
+                unit: attribute.unit,
+                categoryId,
+                sortOrder: index + 1,
+              }),
+            });
+            for (const [optionIndex, label] of (attribute.options ?? []).entries()) {
+              if (!label.trim()) continue;
+              await apiFetch(`/products/attributes/${created.id}/options`, {
+                method: "POST",
+                ...jsonBody({ label: label.trim(), sortOrder: optionIndex }),
+              });
+            }
+          }
+        };
+        if (t.usesCategories) {
+          for (const category of t.categories ?? []) {
+            if (!category.name.trim()) continue;
+            const created = await apiFetch<{ id: string }>(`/products/${product.id}/categories`, {
+              method: "POST",
+              ...jsonBody({ name: category.name.trim(), description: category.description }),
+            });
+            await addDefs(category.attributes, created.id);
+          }
+        } else {
+          await addDefs(t.attributes ?? []);
         }
-      } else {
-        addDefs(t.attributes ?? []);
-      }
-      return pid;
+        return product.id;
+      });
     },
-    addAttribute: (productId, categoryId, def) => {
+    addAttribute: async (productId, categoryId, def) => {
       const name = def.name.trim();
       if (!name) return "";
       const siblings = scopedDefs(attributeDefs, productId, categoryId);
       if (siblings.some((d) => d.name.toLowerCase() === name.toLowerCase())) return "";
-      const id = nextId();
       let key = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-      if (!key) key = `attr-${id}`;
+      if (!key) key = "attribute";
       const taken = new Set(siblings.map((d) => d.key));
       let k = key;
       let n = 2;
       while (taken.has(k)) k = `${key}_${n++}`;
       const sortOrder = siblings.reduce((mx, d) => Math.max(mx, d.sortOrder), 0) + 1;
-      setAttributeDefs((prev) => [
-        ...prev,
-        {
-          id,
-          businessId: BUSINESS_ID,
-          productId,
-          categoryId,
-          name,
-          key: k,
-          type: def.type,
-          required: def.required,
-          unit: def.unit?.trim() || undefined,
-          sortOrder,
-          active: true,
-        },
-      ]);
-      if (def.type === "select" && def.options?.length) {
-        const options = def.options
-          .map((label) => label.trim())
-          .filter(Boolean)
-          .map((label, i) => ({
-            id: `${id}-o${i}`,
-            attributeDefId: id,
-            label,
-            sortOrder: i,
+      return mutate("attribute:create", async () => {
+        const created = await apiFetch<{ id: string }>(`/products/${productId}/attributes`, {
+          method: "POST",
+          ...jsonBody({
+            name,
+            key: k,
+            type: def.type,
+            required: def.required,
+            unit: def.unit?.trim() || undefined,
+            sortOrder,
             active: true,
-          }));
-        setAttributeOptions((prev) => [...prev, ...options]);
-      }
-      return id;
+            categoryId,
+          }),
+        });
+        for (const [index, label] of (def.options ?? []).entries()) {
+          if (!label.trim()) continue;
+          await apiFetch(`/products/attributes/${created.id}/options`, {
+            method: "POST",
+            ...jsonBody({ label: label.trim(), sortOrder: index }),
+          });
+        }
+        return created.id;
+      });
     },
-    patchAttribute: (id, patch) =>
-      setAttributeDefs((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d))),
-    addOption: (attributeDefId, label) => {
+    patchAttribute: async (id, patch) => {
+      await mutate(`attribute:update:${id}`, () =>
+        apiFetch(`/products/attributes/${id}`, { method: "PATCH", ...jsonBody(patch) }),
+      );
+    },
+    addOption: async (attributeDefId, label) => {
       const clean = label.trim();
       if (!clean) return "";
       const existing = attributeOptions.find(
         (o) => o.attributeDefId === attributeDefId && o.label.toLowerCase() === clean.toLowerCase()
       );
       if (existing) return existing.id;
-      const id = nextId();
-      setAttributeOptions((prev) => [
-        ...prev,
-        {
-          id,
-          attributeDefId,
-          label: clean,
-          sortOrder:
-            prev.filter((o) => o.attributeDefId === attributeDefId).reduce((mx, o) => Math.max(mx, o.sortOrder), -1) + 1,
-          active: true,
-        },
-      ]);
-      return id;
+      const created = await mutate<{ id: string }>("option:create", () =>
+        apiFetch(`/products/attributes/${attributeDefId}/options`, {
+          method: "POST",
+          ...jsonBody({
+            label: clean,
+            sortOrder: attributeOptions
+              .filter((option) => option.attributeDefId === attributeDefId)
+              .reduce((max, option) => Math.max(max, option.sortOrder), -1) + 1,
+          }),
+        }),
+      );
+      return created.id;
     },
-    patchOption: (id, patch) => {
-      const opt = attributeOptions.find((o) => o.id === id);
-      const def = opt ? attributeDefs.find((d) => d.id === opt.attributeDefId) : undefined;
-      setAttributeOptions((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
-      if (patch.label && opt && def && patch.label.trim() && patch.label.trim() !== opt.label) {
-        const next = patch.label.trim();
-        setVariants((prev) =>
-          prev.map((v) =>
-            v.attributes[def.key] === opt.label
-              ? { ...v, attributes: { ...v.attributes, [def.key]: next } }
-              : v
-          )
-        );
-      }
+    patchOption: async (id, patch) => {
+      await mutate(`option:update:${id}`, () =>
+        apiFetch(`/products/options/${id}`, { method: "PATCH", ...jsonBody(patch) }),
+      );
     },
     isOptionUsed: (id) => {
       const opt = attributeOptions.find((o) => o.id === id);
@@ -1034,7 +1178,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ];
       return optionAppearsIn(opt, def, variants, snaps);
     },
-    deleteOption: (id) => {
+    deleteOption: async (id) => {
       const opt = attributeOptions.find((o) => o.id === id);
       if (!opt) return false;
       const def = attributeDefs.find((d) => d.id === opt.attributeDefId);
@@ -1043,16 +1187,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...sales.flatMap((s) => s.lines.map((l) => l.attributeSnapshot)),
       ];
       if (optionAppearsIn(opt, def, variants, snaps)) return false;
-      setAttributeOptions((prev) => prev.filter((o) => o.id !== id));
+      await mutate(`option:delete:${id}`, () => apiFetch(`/products/options/${id}`, { method: "DELETE" }));
       return true;
     },
-    reorderOptions: (attributeDefId, orderedIds) =>
-      setAttributeOptions((prev) =>
-        prev.map((o) => {
-          const i = orderedIds.indexOf(o.id);
-          return o.attributeDefId === attributeDefId && i >= 0 ? { ...o, sortOrder: i } : o;
-        })
-      ),
+    reorderOptions: async (attributeDefId, orderedIds) => {
+      await mutate(`option:order:${attributeDefId}`, () =>
+        apiFetch(`/products/attributes/${attributeDefId}/options/order`, {
+          method: "PUT",
+          ...jsonBody({ ids: orderedIds }),
+        }),
+      );
+    },
     isAttributeUsed: (id) => {
       const def = attributeDefs.find((d) => d.id === id);
       if (!def) return false;
@@ -1060,55 +1205,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (purchases.some((p) => p.attributeSnapshot?.[def.key])) return true;
       return sales.some((s) => s.lines.some((l) => l.attributeSnapshot?.[def.key]));
     },
-    deleteAttribute: (id) => {
-      const def = attributeDefs.find((d) => d.id === id);
-      if (!def) return;
-      const used =
-        variants.some((v) => v.attributes[def.key]) ||
-        purchases.some((p) => p.attributeSnapshot?.[def.key]) ||
-        sales.some((s) => s.lines.some((l) => l.attributeSnapshot?.[def.key]));
-      if (used) {
-        setAttributeDefs((prev) => prev.map((d) => (d.id === id ? { ...d, active: false } : d)));
-        return;
-      }
-      setAttributeDefs((prev) => prev.filter((d) => d.id !== id));
-      setAttributeOptions((prev) => prev.filter((o) => o.attributeDefId !== id));
+    deleteAttribute: async (id) => {
+      await mutate(`attribute:delete:${id}`, () => apiFetch(`/products/attributes/${id}`, { method: "DELETE" }));
     },
-    reorderAttributes: (productId, categoryId, orderedIds) =>
-      setAttributeDefs((prev) =>
-        prev.map((d) => {
-          const i = orderedIds.indexOf(d.id);
-          const same = categoryId ? d.categoryId === categoryId : d.productId === productId && !d.categoryId;
-          return same && i >= 0 ? { ...d, sortOrder: i + 1 } : d;
-        })
-      ),
-    addWarehouse: (name) => {
-      const clean = name.trim();
-      if (!clean) return;
-      setWarehouses((prev) =>
-        prev.some((w) => w.name.toLowerCase() === clean.toLowerCase())
-          ? prev
-          : [...prev, { id: nextId(), businessId: BUSINESS_ID, name: clean, active: true }]
+    reorderAttributes: async (productId, _categoryId, orderedIds) => {
+      await mutate(`attribute:order:${productId}`, () =>
+        apiFetch(`/products/${productId}/attributes/order`, {
+          method: "PUT",
+          ...jsonBody({ ids: orderedIds }),
+        }),
       );
     },
-    renameWarehouse: (id, name) =>
-      setWarehouses((prev) => prev.map((w) => (w.id === id ? { ...w, name: name.trim() || w.name } : w))),
-    setWarehouseActive: (id, active) =>
-      setWarehouses((prev) => prev.map((w) => (w.id === id ? { ...w, active } : w))),
-    addLocation: (warehouseId, name) => {
+    addWarehouse: async (name) => {
       const clean = name.trim();
       if (!clean) return;
-      setLocations((prev) =>
-        prev.some((l) => l.warehouseId === warehouseId && l.name.toLowerCase() === clean.toLowerCase())
-          ? prev
-          : [...prev, { id: nextId(), warehouseId, name: clean, active: true }]
+      if (warehouses.some((warehouse) => warehouse.name.toLowerCase() === clean.toLowerCase())) return;
+      await mutate("warehouse:create", () =>
+        apiFetch("/warehouses", { method: "POST", ...jsonBody({ name: clean }) }),
       );
     },
-    renameLocation: (id, name) =>
-      setLocations((prev) => prev.map((l) => (l.id === id ? { ...l, name: name.trim() || l.name } : l))),
-    setLocationActive: (id, active) =>
-      setLocations((prev) => prev.map((l) => (l.id === id ? { ...l, active } : l))),
-    ensureVariant: (productId, categoryId, attributes, shortName) => {
+    renameWarehouse: async (id, name) => {
+      await mutate(`warehouse:rename:${id}`, () =>
+        apiFetch(`/warehouses/${id}`, { method: "PATCH", ...jsonBody({ name }) }),
+      );
+    },
+    setWarehouseActive: async (id, active) => {
+      await mutate(`warehouse:active:${id}`, () =>
+        apiFetch(`/warehouses/${id}`, { method: "PATCH", ...jsonBody({ active }) }),
+      );
+    },
+    addLocation: async (warehouseId, name) => {
+      const clean = name.trim();
+      if (!clean) return;
+      if (locations.some((location) => location.warehouseId === warehouseId && location.name.toLowerCase() === clean.toLowerCase())) return;
+      await mutate("location:create", () =>
+        apiFetch(`/warehouses/${warehouseId}/locations`, { method: "POST", ...jsonBody({ name: clean }) }),
+      );
+    },
+    renameLocation: async (id, name) => {
+      await mutate(`location:rename:${id}`, () =>
+        apiFetch(`/warehouses/locations/${id}`, { method: "PATCH", ...jsonBody({ name }) }),
+      );
+    },
+    setLocationActive: async (id, active) => {
+      await mutate(`location:active:${id}`, () =>
+        apiFetch(`/warehouses/locations/${id}`, { method: "PATCH", ...jsonBody({ active }) }),
+      );
+    },
+    ensureVariant: async (productId, categoryId, attributes, shortName) => {
       const clean: Record<string, string> = {};
       for (const [key, val] of Object.entries(attributes))
         if (val !== undefined && val.trim() !== "") clean[key] = val.trim();
@@ -1127,82 +1271,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         variants.find((v) => ofProduct(v) && (!categoryId || v.categoryId === categoryId) && attrsEqual(v.attributes, clean)) ??
         (!categoryId ? variants.find((v) => ofProduct(v) && attrsEqual(v.attributes, clean)) : undefined);
       if (existing) {
-        if (!existing.active || !existing.identityKey || !existing.productId)
-          setVariants((prev) =>
-            prev.map((v) =>
-              v.id === existing.id
-                ? { ...v, active: true, identityKey: v.identityKey ?? ident, productId: v.productId || productId }
-                : v
-            )
+        if (!existing.active) {
+          await mutate(`variant:active:${existing.id}`, () =>
+            apiFetch(`/products/variants/${existing.id}`, { method: "PATCH", ...jsonBody({ active: true }) }),
           );
+        }
         return existing;
       }
-      const cat = categoryId ? categories.find((c) => c.id === categoryId) : undefined;
-      const prod = products.find((p) => p.id === productId);
-      const variant: Variant = {
-        id: nextId(),
-        businessId: BUSINESS_ID,
-        productId,
-        categoryId,
-        key: ident,
-        identityKey: ident,
-        attributes: clean,
-        shortName: shortName?.trim() || defaultShortName(cat?.name ?? prod?.name ?? "Item", clean, defs),
-        active: true,
-        createdAt: new Date().toISOString(),
-      };
-      setVariants((prev) => [...prev, variant]);
-      return variant;
-    },
-    setVariantShortName: (id, shortName) =>
-      setVariants((prev) => prev.map((v) => (v.id === id ? { ...v, shortName: shortName.trim() || v.shortName } : v))),
-    setVariantActive: (id, active) =>
-      setVariants((prev) => prev.map((v) => (v.id === id ? { ...v, active } : v))),
-    deleteVariant: (id) => setVariants((prev) => prev.filter((v) => v.id !== id)),
-    // removing a customer also removes their sales and the payments made by them
-    deleteCustomer: (id) => {
-      const saleIds = new Set(
-        sales.filter((s) => s.customerId === id).map((s) => s.id)
-      );
-      setCustomers((prev) => prev.filter((c) => c.id !== id));
-      setSales((prev) => prev.filter((s) => s.customerId !== id));
-      setPayments((prev) =>
-        prev.filter(
-          (p) =>
-            !(
-              p.type === "customer" &&
-              (p.partyId === id || (p.saleId && saleIds.has(p.saleId)))
-            )
-        )
+      const category = categoryId ? categories.find((item) => item.id === categoryId) : undefined;
+      const product = products.find((item) => item.id === productId);
+      return mutate<Variant>("variant:create", () =>
+        apiFetch(`/products/${productId}/variants`, {
+          method: "POST",
+          ...jsonBody({
+            categoryId,
+            attributes: clean,
+            shortName: shortName?.trim() || defaultShortName(category?.name ?? product?.name ?? "Item", clean, defs),
+          }),
+        }),
       );
     },
-    // removing a supplier also removes their purchases, the sales that drew
-    // on that mill's stock, and the payments made to / for those records
-    deleteSupplier: (id) => {
-      const pIds = new Set(
-        purchases.filter((p) => p.supplierId === id).map((p) => p.id)
+    setVariantShortName: async (id, shortName) => {
+      await mutate(`variant:rename:${id}`, () =>
+        apiFetch(`/products/variants/${id}`, { method: "PATCH", ...jsonBody({ shortName }) }),
       );
-      const saleIds = new Set(
-        sales
-          .filter((s) =>
-            s.lines.some(
-              (l) => l.supplierId === id || (l.purchaseId && pIds.has(l.purchaseId))
-            )
-          )
-          .map((s) => s.id)
+    },
+    setVariantActive: async (id, active) => {
+      await mutate(`variant:active:${id}`, () =>
+        apiFetch(`/products/variants/${id}`, { method: "PATCH", ...jsonBody({ active }) }),
       );
-      setSuppliers((prev) => prev.filter((s) => s.id !== id));
-      setPurchases((prev) => prev.filter((p) => p.supplierId !== id));
-      setSales((prev) => prev.filter((s) => !saleIds.has(s.id)));
-      setPayments((prev) =>
-        prev.filter(
-          (p) =>
-            !(
-              (p.saleId && saleIds.has(p.saleId)) ||
-              (p.type === "supplier" && p.partyId === id)
-            )
-        )
-      );
+    },
+    deleteVariant: async (id) => {
+      await mutate(`variant:delete:${id}`, () => apiFetch(`/products/variants/${id}`, { method: "DELETE" }));
+    },
+    deleteCustomer: async (id) => {
+      await mutate(`customer:delete:${id}`, () => apiFetch(`/customers/${id}`, { method: "DELETE" }));
+    },
+    deleteSupplier: async (id) => {
+      await mutate(`supplier:delete:${id}`, () => apiFetch(`/suppliers/${id}`, { method: "DELETE" }));
     },
     // wiping an inventory item removes every purchase and sale of it, so the
     // row disappears from inventory, purchases and sales together
@@ -1232,7 +1338,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setHiddenVariants((prev) => (prev.includes(variantId) ? prev : [...prev, variantId])),
   };
 
-  return <StoreCtx.Provider value={store}>{children}</StoreCtx.Provider>;
+  if (authReady && user?.role === "ADMIN" && !ready) {
+    return (
+      <div className="min-h-screen grid place-items-center text-sm text-[#171717]/70">
+        Loading your business ledger…
+      </div>
+    );
+  }
+
+  return (
+    <StoreCtx.Provider value={store}>
+      {children}
+      {pending && user?.role === "ADMIN" && (
+        <div className="fixed inset-0 z-[99] grid place-items-center bg-white/45 backdrop-blur-[1px]">
+          <div className="rounded-md border border-neutral-200 bg-white px-4 py-3 text-sm shadow-lg">
+            Saving…
+          </div>
+        </div>
+      )}
+      {error && user?.role === "ADMIN" && (
+        <div
+          role="alert"
+          className="fixed right-4 bottom-4 z-[100] max-w-sm rounded-md border border-[#f0e2de] bg-[#faf5f2] px-4 py-3 text-sm text-[#a12b1f] shadow-lg"
+        >
+          <p>{error}</p>
+          <button className="mt-2 underline" onClick={() => setReloadKey((value) => value + 1)}>
+            Try again
+          </button>
+        </div>
+      )}
+    </StoreCtx.Provider>
+  );
 }
 
 export function useStore() {

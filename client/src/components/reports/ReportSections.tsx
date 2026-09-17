@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { BusinessLink } from "@/components/BusinessLink";
 import { fmtCompact, fmtMoney, fmtPct, fmtQtyWithUnit, qtyUnitLabel } from "@/lib/format";
 import type { ProfitReport, QtyBlock, StockCheckView } from "@/lib/profitReport";
 import { Section, StatementRow, StatementRule, StatementTotal } from "./shared";
@@ -211,9 +211,9 @@ export function MoneySides({ report }: { report: ProfitReport }) {
         className="!mb-0"
         title="Money to Pay"
         action={
-          <Link href="/purchases?tab=dues" className="text-[13px] font-medium min-h-[44px] inline-flex items-center">
+          <BusinessLink href="/purchases?tab=dues" className="text-[13px] font-medium min-h-[44px] inline-flex items-center">
             Payment Dues →
-          </Link>
+          </BusinessLink>
         }
       >
         <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70 mb-1">Supplier Due</p>
@@ -224,9 +224,9 @@ export function MoneySides({ report }: { report: ProfitReport }) {
         className="!mb-0"
         title="Money to Receive"
         action={
-          <Link href="/sales" className="text-[13px] font-medium min-h-[44px] inline-flex items-center">
+          <BusinessLink href="/sales" className="text-[13px] font-medium min-h-[44px] inline-flex items-center">
             Sales & Invoices →
-          </Link>
+          </BusinessLink>
         }
       >
         <p className="text-[11px] uppercase tracking-widest font-medium text-[#171717]/70 mb-1">Customer Due</p>
@@ -240,21 +240,18 @@ export function MoneySides({ report }: { report: ProfitReport }) {
 export function Expenses({
   report,
   className = "",
-  onAdd,
 }: {
   report: ProfitReport;
   className?: string;
-  onAdd?: () => void;
 }) {
-  const addButton = onAdd ? (
-    <button
-      type="button"
-      className="btn-ghost !py-2 !px-3 !text-xs min-h-[44px]"
-      onClick={onAdd}
+  const addButton = (
+    <BusinessLink
+      href="/expenses"
+      className="btn-ghost !py-2 !px-3 !text-xs min-h-[44px] inline-flex items-center"
     >
       + Add Expense
-    </button>
-  ) : undefined;
+    </BusinessLink>
+  );
 
   const pc = report.purchaseCharges;
   const sc = report.saleCharges;
