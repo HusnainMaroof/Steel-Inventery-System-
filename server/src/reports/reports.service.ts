@@ -79,24 +79,27 @@ export class ReportsService {
         ),
       ),
     ];
-    const costPurchases = await this.prisma.purchase.findMany({
-      where: {
-        businessId,
-        date: { lte: period.to },
-        ...(productId
-          ? { lines: { some: { productId } } }
-          : productIdsInSales.length
-            ? {
-                OR: [
-                  { id: { in: purchaseIdsFromLines } },
-                  { lines: { some: { productId: { in: productIdsInSales } } } },
-                ],
-              }
-            : {}),
-      },
-      include: { lines: true },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-    });
+    const costPurchases =
+      sales.length === 0
+        ? []
+        : await this.prisma.purchase.findMany({
+            where: {
+              businessId,
+              date: { lte: period.to },
+              ...(productId
+                ? { lines: { some: { productId } } }
+                : productIdsInSales.length
+                  ? {
+                      OR: [
+                        { id: { in: purchaseIdsFromLines } },
+                        { lines: { some: { productId: { in: productIdsInSales } } } },
+                      ],
+                    }
+                  : {}),
+            },
+            include: { lines: true },
+            orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+          });
 
     // ---- landed cost per unit keyed by source purchase + product ----
     const unitCostByPurchaseProduct = new Map<string, number>();

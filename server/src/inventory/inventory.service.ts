@@ -71,11 +71,18 @@ export class InventoryService {
       skip,
       take,
     });
-    const consumed = await this.prisma.saleLine.groupBy({
-      by: ["purchaseId", "productId", "variantId"],
-      where: { sale: { businessId }, purchaseId: { not: null } },
-      _sum: { qty: true },
-    });
+    const purchaseIds = purchases.map((purchase) => purchase.id);
+    const consumed =
+      purchaseIds.length > 0
+        ? await this.prisma.saleLine.groupBy({
+            by: ["purchaseId", "productId", "variantId"],
+            where: {
+              sale: { businessId },
+              purchaseId: { in: purchaseIds },
+            },
+            _sum: { qty: true },
+          })
+        : [];
     const consumedBy = new Map(
       consumed.map((row) => [
         `${row.purchaseId}:${row.productId}:${row.variantId ?? ""}`,

@@ -313,6 +313,7 @@ model Supplier {
   payments  Payment[]
 
   @@index([businessId])
+  @@index([businessId, createdAt])
 }
 
 model Customer {
@@ -329,6 +330,7 @@ model Customer {
   payments Payment[]
 
   @@index([businessId])
+  @@index([businessId, createdAt])
 }
 
 model Purchase {
@@ -352,6 +354,7 @@ model Purchase {
   sourcedSaleLines SaleLine[] @relation("SourcePurchase")
 
   @@index([businessId, date])
+  @@index([businessId, supplierId, date])
   @@index([supplierId])
 }
 
@@ -411,6 +414,8 @@ model Sale {
   allocations PaymentAllocation[]
 
   @@index([businessId, date])
+  @@index([businessId, customerId, date])
+  @@index([businessId, createdAt])
   @@index([customerId])
 }
 
@@ -438,6 +443,7 @@ model SaleLine {
   @@index([productId])
   @@index([variantId])
   @@index([purchaseId])
+  @@index([purchaseId, productId, variantId])
 }
 
 model Invoice {
@@ -565,6 +571,7 @@ model InventoryTransaction {
   @@index([productId, date])
   @@index([referenceType, referenceId])
   @@index([businessId, date])
+  @@index([businessId, productId, date])
   @@index([businessId, variantId, date])
   @@index([purchaseLineId])
   @@index([saleLineId])

@@ -22,7 +22,9 @@ const REPORT_TIMEOUT_MS = 60_000;
 
 function timeoutForPath(path: string): number {
   if (path.includes("/reports/")) return REPORT_TIMEOUT_MS;
-  if (path.includes("/ledger/bootstrap")) return 45_000;
+  if (path.includes("/ledger/bootstrap") || path.includes("/ledger/transactions")) {
+    return 45_000;
+  }
   return DEFAULT_TIMEOUT_MS;
 }
 

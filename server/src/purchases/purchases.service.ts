@@ -6,6 +6,7 @@ import {
   sanitizeAttributeSnapshot,
   sanitizeOptionalText,
 } from "../common/security/sanitize-text";
+import { assertLineReferences } from "../common/catalog/line-reference-validation";
 import { purchaseGoodsTotal } from "../domain/money";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
@@ -317,41 +318,19 @@ export class PurchasesService {
       locationId?: string;
     }>,
   ) {
-    const supplier = await tx.supplier.findFirst({ where: { id: supplierId, businessId } });
+    const supplier = await tx.supplier.findFirst({
+      where: { id: supplierId, businessId },
+      select: { id: true },
+    });
     if (!supplier) throw new BadRequestException("Supplier not found");
     const productIds = [...new Set(lines.map((line) => line.productId))];
-    if (await tx.product.count({ where: { businessId, id: { in: productIds } } }) !== productIds.length) {
+    if (
+      (await tx.product.count({ where: { businessId, id: { in: productIds } } })) !==
+      productIds.length
+    ) {
       throw new BadRequestException("One or more products were not found");
     }
-    for (const line of lines) {
-      if (line.categoryId) {
-        const category = await tx.productCategory.findFirst({
-          where: { id: line.categoryId, businessId, productId: line.productId },
-        });
-        if (!category) throw new BadRequestException("Category not found for product");
-      }
-      if (line.variantId) {
-        const variant = await tx.variant.findFirst({
-          where: {
-            id: line.variantId,
-            businessId,
-            productId: line.productId,
-            ...(line.categoryId ? { categoryId: line.categoryId } : {}),
-          },
-        });
-        if (!variant) throw new BadRequestException("Variant not found for product");
-      }
-      if (line.warehouseId) {
-        const warehouse = await tx.warehouse.findFirst({ where: { id: line.warehouseId, businessId } });
-        if (!warehouse) throw new BadRequestException("Warehouse not found");
-      }
-      if (line.locationId) {
-        const location = await tx.location.findFirst({
-          where: { id: line.locationId, businessId, ...(line.warehouseId ? { warehouseId: line.warehouseId } : {}) },
-        });
-        if (!location) throw new BadRequestException("Location not found");
-      }
-    }
+    await assertLineReferences(tx, businessId, lines);
   }
 
   private async assertReplacementLeavesNonNegativeStock(

@@ -8,6 +8,7 @@ import {
 import { assertPositiveMoney, LIMITS } from "../common/security/limits";
 import { sanitizeOptionalText } from "../common/security/sanitize-text";
 import { PrismaService } from "../prisma/prisma.service";
+import { openPurchasesForSupplier } from "../common/prisma/query-helpers";
 import { settleFifo } from "../domain/payment-settlement";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 
@@ -111,7 +112,11 @@ export class PaymentsService {
               customerId: dto.customerId,
               invoice: { total: { gt: 0 } },
             },
-            include: { invoice: true },
+            select: {
+              id: true,
+              date: true,
+              invoice: { select: { total: true, paid: true } },
+            },
             orderBy: { date: "asc" },
           });
           const open = sales
@@ -123,23 +128,30 @@ export class PaymentsService {
               date: s.date.toISOString().slice(0, 10),
             }));
           const { allocations } = settleFifo(open, dto.amount);
-          for (const a of allocations) {
-            const invoice = await tx.invoice.findFirst({
-              where: { businessId, saleId: a.saleId },
-              select: { id: true },
-            });
-            if (!invoice) {
-              throw new BadRequestException("Invoice not found for allocation");
-            }
-            await incrementInvoicePaidOrThrow(tx, businessId, invoice.id, a.amount);
-            await tx.paymentAllocation.create({
-              data: {
+          if (allocations.length > 0) {
+            const invoices = await tx.invoice.findMany({
+              where: {
                 businessId,
-                paymentId: payment.id,
-                saleId: a.saleId,
-                amount: a.amount,
+                saleId: { in: allocations.map((a) => a.saleId) },
               },
+              select: { id: true, saleId: true },
             });
+            const invoiceBySaleId = new Map(invoices.map((row) => [row.saleId, row.id]));
+            for (const a of allocations) {
+              const invoiceId = invoiceBySaleId.get(a.saleId);
+              if (!invoiceId) {
+                throw new BadRequestException("Invoice not found for allocation");
+              }
+              await incrementInvoicePaidOrThrow(tx, businessId, invoiceId, a.amount);
+              await tx.paymentAllocation.create({
+                data: {
+                  businessId,
+                  paymentId: payment.id,
+                  saleId: a.saleId,
+                  amount: a.amount,
+                },
+              });
+            }
           }
         }
         await this.audit.logTx(tx, {
@@ -176,18 +188,15 @@ export class PaymentsService {
       });
 
       // FIFO across the supplier's oldest unpaid purchases (goods − paid).
-      const openPurchases = await tx.purchase.findMany({
-        where: { businessId, supplierId: dto.supplierId },
-        include: { lines: true },
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      });
+      const openPurchases = await openPurchasesForSupplier(
+        tx,
+        businessId,
+        dto.supplierId,
+      );
       let left = dto.amount;
       for (const purchase of openPurchases) {
         if (left <= 0.005) break;
-        const goods = purchase.lines.reduce(
-          (sum, l) => sum + Number(l.qty) * Number(l.rate),
-          0,
-        );
+        const goods = Number(purchase.goods);
         const due = Math.max(0, goods - Number(purchase.paid));
         const take = Math.min(due, left);
         if (take > 0.005) {

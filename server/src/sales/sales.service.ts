@@ -18,6 +18,8 @@ import {
   sanitizeAttributeSnapshot,
   sanitizeOptionalText,
 } from "../common/security/sanitize-text";
+import { assertLineReferences } from "../common/catalog/line-reference-validation";
+import { consumedQtyByLot } from "../common/prisma/query-helpers";
 import { PrismaService } from "../prisma/prisma.service";
 import { saleGrandTotal } from "../domain/money";
 import { CreateSaleDto } from "./dto/create-sale.dto";
@@ -79,66 +81,50 @@ export class SalesService {
       if (products.length !== productIds.length) {
         throw new BadRequestException("One or more products were not found");
       }
+      await assertLineReferences(tx, businessId, dto.lines);
+
+      const purchaseIds = [
+        ...new Set(dto.lines.map((l) => l.purchaseId).filter(Boolean)),
+      ] as string[];
+      const [purchasesWithLines, consumedByLot] = await Promise.all([
+        purchaseIds.length
+          ? tx.purchase.findMany({
+              where: { id: { in: purchaseIds }, businessId },
+              include: { lines: true },
+            })
+          : Promise.resolve([]),
+        consumedQtyByLot(tx, businessId, purchaseIds),
+      ]);
+      const purchaseById = new Map(purchasesWithLines.map((p) => [p.id, p]));
+
       for (const line of dto.lines) {
-        if (line.categoryId) {
-          const category = await tx.productCategory.findFirst({
-            where: { id: line.categoryId, businessId, productId: line.productId },
-          });
-          if (!category) throw new BadRequestException("Category not found for product");
+        if (!line.purchaseId) continue;
+        const purchase = purchaseById.get(line.purchaseId);
+        if (!purchase) throw new BadRequestException("Source purchase lot not found");
+        const matchingLines = purchase.lines.filter(
+          (purchaseLine) =>
+            purchaseLine.productId === line.productId &&
+            (!line.variantId || purchaseLine.variantId === line.variantId),
+        );
+        if (matchingLines.length === 0) {
+          throw new BadRequestException("Source purchase lot not found");
         }
-        if (line.variantId) {
-          const variant = await tx.variant.findFirst({
-            where: {
-              id: line.variantId,
-              businessId,
-              productId: line.productId,
-              ...(line.categoryId ? { categoryId: line.categoryId } : {}),
-            },
-          });
-          if (!variant) throw new BadRequestException("Variant not found for product");
-        }
-        if (line.purchaseId) {
-          const purchase = await tx.purchase.findFirst({
-            where: {
-              id: line.purchaseId,
-              businessId,
-              lines: {
-                some: {
-                  productId: line.productId,
-                  ...(line.variantId ? { variantId: line.variantId } : {}),
-                },
-              },
-            },
-            include: { lines: true },
-          });
-          if (!purchase) throw new BadRequestException("Source purchase lot not found");
-          const bought = purchase.lines
-            .filter(
-              (purchaseLine) =>
-                purchaseLine.productId === line.productId &&
-                (!line.variantId || purchaseLine.variantId === line.variantId),
-            )
-            .reduce((sum, purchaseLine) => sum + Number(purchaseLine.qty), 0);
-          const alreadySold = await tx.saleLine.aggregate({
-            where: {
-              purchaseId: line.purchaseId,
-              productId: line.productId,
-              ...(line.variantId ? { variantId: line.variantId } : {}),
-              sale: { businessId },
-            },
-            _sum: { qty: true },
-          });
-          const requestedFromLot = dto.lines
-            .filter(
-              (candidate) =>
-                candidate.purchaseId === line.purchaseId &&
-                candidate.productId === line.productId &&
-                candidate.variantId === line.variantId,
-            )
-            .reduce((sum, candidate) => sum + candidate.qty, 0);
-          if (requestedFromLot > bought - Number(alreadySold._sum.qty ?? 0) + 0.0005) {
-            throw new BadRequestException("Insufficient inventory in source purchase lot");
-          }
+        const bought = matchingLines.reduce(
+          (sum, purchaseLine) => sum + Number(purchaseLine.qty),
+          0,
+        );
+        const lotKey = `${line.purchaseId}:${line.productId}:${line.variantId ?? ""}`;
+        const alreadySold = consumedByLot.get(lotKey) ?? 0;
+        const requestedFromLot = dto.lines
+          .filter(
+            (candidate) =>
+              candidate.purchaseId === line.purchaseId &&
+              candidate.productId === line.productId &&
+              candidate.variantId === line.variantId,
+          )
+          .reduce((sum, candidate) => sum + candidate.qty, 0);
+        if (requestedFromLot > bought - alreadySold + 0.0005) {
+          throw new BadRequestException("Insufficient inventory in source purchase lot");
         }
       }
 
@@ -387,10 +373,17 @@ export class SalesService {
       await tx.paymentAllocation.deleteMany({ where: { businessId, saleId: sale.id } });
       await tx.payment.deleteMany({ where: { businessId, saleId: sale.id } });
 
-      for (const paymentId of paymentIds) {
-        const remaining = await tx.paymentAllocation.count({ where: { paymentId } });
-        if (remaining === 0) {
-          await tx.payment.deleteMany({ where: { id: paymentId, businessId, saleId: null } });
+      if (paymentIds.length > 0) {
+        const withRemaining = await tx.paymentAllocation.groupBy({
+          by: ["paymentId"],
+          where: { paymentId: { in: paymentIds } },
+        });
+        const stillUsed = new Set(withRemaining.map((row) => row.paymentId));
+        const orphanIds = paymentIds.filter((id) => !stillUsed.has(id));
+        if (orphanIds.length > 0) {
+          await tx.payment.deleteMany({
+            where: { id: { in: orphanIds }, businessId, saleId: null },
+          });
         }
       }
 

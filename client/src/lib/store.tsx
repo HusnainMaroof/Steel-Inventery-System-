@@ -53,7 +53,6 @@ import type { ProductTemplate } from "./templates";
 import { useAuth } from "./auth";
 import { apiFetch, jsonBody } from "./api";
 import { normalizeBootstrap, type ApiBootstrap } from "./backend-adapters";
-import { fetchAllPages } from "./fetch-paginated";
 
 export const purchaseTotal = (p: Purchase) =>
   p.qty * p.rate +
@@ -400,25 +399,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const loadTransactions = useCallback(async () => {
-    const [customers, suppliers, purchases, sales, payments, expenses, stockChecks] =
-      await Promise.all([
-        fetchAllPages<ApiBootstrap["customers"][number]>("/customers"),
-        fetchAllPages<ApiBootstrap["suppliers"][number]>("/suppliers"),
-        fetchAllPages<ApiBootstrap["purchases"][number]>("/purchases"),
-        fetchAllPages<ApiBootstrap["sales"][number]>("/sales"),
-        fetchAllPages<ApiBootstrap["payments"][number]>("/payments"),
-        fetchAllPages<ApiBootstrap["expenses"][number]>("/expenses"),
-        fetchAllPages<ApiBootstrap["stockChecks"][number]>("/stock-checks"),
-      ]);
-    applyTransactions({
-      customers,
-      suppliers,
-      purchases,
-      sales,
-      payments,
-      expenses,
-      stockChecks,
-    });
+    const payload = await apiFetch<{
+      data: Pick<
+        ApiBootstrap,
+        | "customers"
+        | "suppliers"
+        | "purchases"
+        | "sales"
+        | "payments"
+        | "expenses"
+        | "stockChecks"
+      >;
+    }>("/ledger/transactions");
+    applyTransactions(payload.data);
   }, [applyTransactions]);
 
   const refreshCore = useCallback(async () => {

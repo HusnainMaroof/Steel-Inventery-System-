@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { activityCountsByBusiness } from "../common/prisma/query-helpers";
 import { TemplateProvisionService } from "../catalog/template-provision.service";
 import { SubscriptionPlansService } from "../subscription/subscription-plans.service";
 import { isSubscriptionActive } from "../subscription/subscription.util";
@@ -141,34 +142,7 @@ export class PlatformService {
       })),
     };
 
-    const perBusiness = await Promise.all(
-      owners.map(async (owner) => {
-        const businessId = owner.business?.id;
-        if (!businessId) {
-          return {
-            ownerId: owner.id,
-            businessId: "",
-            sales30d: 0,
-            purchases30d: 0,
-            payments30d: 0,
-          };
-        }
-        const [s, p, pay] = await Promise.all([
-          this.prisma.sale.count({ where: { businessId, date: { gte: since } } }),
-          this.prisma.purchase.count({ where: { businessId, date: { gte: since } } }),
-          this.prisma.payment.count({ where: { businessId, date: { gte: since } } }),
-        ]);
-        return {
-          ownerId: owner.id,
-          businessId,
-          sales30d: s,
-          purchases30d: p,
-          payments30d: pay,
-        };
-      }),
-    );
-
-    const activityByOwner = new Map(perBusiness.map((row) => [row.ownerId, row]));
+    const activityByBusiness = await activityCountsByBusiness(this.prisma, since);
 
     return {
       totals: {
@@ -203,7 +177,7 @@ export class PlatformService {
         .slice(0, 12),
       businesses: owners.map((owner) => {
         const b = owner.business;
-        const activity = activityByOwner.get(owner.id);
+        const activity = b?.id ? activityByBusiness.get(b.id) : undefined;
         const subActive =
           b &&
           isSubscriptionActive({
