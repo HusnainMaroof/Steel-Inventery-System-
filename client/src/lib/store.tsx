@@ -125,6 +125,8 @@ interface Store {
   ready: boolean;
   /** True once transaction collections have been loaded (may lag behind ready). */
   transactionsReady: boolean;
+  /** Sticky: true once the FIRST full transactions load completes — never reset by refreshes. */
+  dataReady: boolean;
   /** Bumps after each successful bootstrap — use to invalidate derived caches */
   dataVersion: number;
   error: string | null;
@@ -317,6 +319,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [hiddenVariants, setHiddenVariants] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   const [transactionsReady, setTransactionsReady] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -384,7 +387,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setExpenses(data.expenses);
       setStockChecks(data.stockChecks);
       setTransactionsReady(true);
-      setDataVersion((v) => v + 1);
+      // dataVersion is bumped once per refresh cycle (after the bootstrap in
+      // refreshCore/refreshFull) — bumping here too made every cache consumer
+      // refetch twice per cycle.
     },
     [
       products,
@@ -412,6 +417,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       >;
     }>("/ledger/transactions");
     applyTransactions(payload.data);
+    setDataReady(true);
   }, [applyTransactions]);
 
   const refreshCore = useCallback(async () => {
@@ -419,8 +425,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
     applyBootstrap(response.data);
     setDataVersion((v) => v + 1);
-    void loadTransactions().catch(() => {
+    void loadTransactions().catch((reason: unknown) => {
       setTransactionsReady(false);
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not load the ledger transactions",
+      );
     });
   }, [applyBootstrap, loadTransactions]);
 
@@ -428,6 +439,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTransactionsReady(false);
     const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
     applyBootstrap(response.data);
+    setDataVersion((v) => v + 1);
     await loadTransactions();
   }, [applyBootstrap, loadTransactions]);
 
@@ -445,6 +457,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         lastReloadKeyRef.current = 0;
         setReady(false);
         setTransactionsReady(false);
+        setDataReady(false);
         setDataVersion(0);
       }
       return;
@@ -457,6 +470,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (tenantChanged) {
       lastTenantRef.current = tenantKey;
       hasBootstrappedRef.current = false;
+      setDataReady(false);
     }
 
     if (hasBootstrappedRef.current && !retryRequested) return;
@@ -1003,6 +1017,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const store: Store = {
     ready,
     transactionsReady,
+    dataReady,
     dataVersion,
     error,
     pending,

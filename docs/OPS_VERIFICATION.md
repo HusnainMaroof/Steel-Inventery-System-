@@ -16,7 +16,7 @@ Items that cannot be verified from the repository alone. Complete in your deploy
 
 ## Monitoring
 
-- [ ] Health endpoint (`GET /health`) monitored
+- [ ] Health endpoint (`GET /health` on Nest; Next.js `GET /api/health` for the browser probe) monitored
 - [ ] Error rate / 5xx alerts configured
 - [ ] Database connection pool / latency monitored
 - [ ] Disk / memory alerts on application host

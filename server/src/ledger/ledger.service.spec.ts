@@ -1,6 +1,6 @@
 import { sanitizeUiSettings } from "../common/security/sanitize-settings";
 import { PrismaService } from "../prisma/prisma.service";
-import { DashboardSummaryService } from "./dashboard-summary.service";
+import { CatalogueCache } from "./catalogue-cache";
 import { LedgerService } from "./ledger.service";
 
 describe("LedgerService", () => {
@@ -19,50 +19,75 @@ describe("LedgerService", () => {
     },
     user: { findMany: jest.fn() },
   };
-  const dashboard = {
-    summarize: jest.fn().mockResolvedValue({
-      stockQty: 0,
-      stockValue: 0,
-      revenue: 0,
-      customerDue: 0,
-      supplierDue: 0,
-      saleCount: 0,
-      purchaseCount: 0,
-      paymentCount: 0,
-      expenseTotal: 0,
-    }),
-  };
   const audit = { log: jest.fn() };
+  const catalogue = new CatalogueCache();
   const service = new LedgerService(
     prisma as unknown as PrismaService,
-    dashboard as unknown as DashboardSummaryService,
     audit as never,
+    catalogue,
   );
 
-  beforeEach(() => jest.clearAllMocks());
+  const catalogueTransactionResult = () => [
+    [{ id: "prod-1", name: "Steel" }],
+    [],
+    [],
+    [],
+    [],
+    [],
+    { settings: { invoiceName: "Test" } },
+  ];
+
+  const zeroCounts = {
+    customers: BigInt(0),
+    suppliers: BigInt(0),
+    purchases: BigInt(0),
+    sales: BigInt(0),
+    payments: BigInt(0),
+    expenses: BigInt(0),
+    stockChecks: BigInt(0),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    catalogue.invalidate("biz-a");
+  });
 
   it("returns a slim bootstrap for a new business", async () => {
-    prisma.$transaction.mockResolvedValue([
-      [],
-      [],
-      [],
-      [],
-      [],
-      [],
-      [{ customers: BigInt(0), suppliers: BigInt(0), purchases: BigInt(0), sales: BigInt(0), payments: BigInt(0), expenses: BigInt(0), stockChecks: BigInt(0) }],
-    ]);
-    prisma.user.findMany.mockResolvedValue([]);
-    prisma.business.findUniqueOrThrow.mockResolvedValue({ settings: { invoiceName: "Test" } });
+    prisma.$transaction.mockResolvedValue(catalogueTransactionResult());
+    prisma.$queryRaw.mockResolvedValue([zeroCounts]);
     const result = await service.bootstrap("biz-a");
     expect(result).toMatchObject({
       version: 3,
-      products: [],
+      products: [{ id: "prod-1", name: "Steel" }],
       purchases: [],
       sales: [],
       settings: { invoiceName: "Test" },
       counts: { customers: 0, sales: 0 },
     });
-    expect(dashboard.summarize).toHaveBeenCalledWith("biz-a");
+  });
+
+  it("serves the catalogue from cache on the second bootstrap (no catalogue transaction)", async () => {
+    prisma.$transaction.mockResolvedValue(catalogueTransactionResult());
+    prisma.$queryRaw.mockResolvedValue([zeroCounts]);
+
+    await service.bootstrap("biz-a");
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+
+    await service.bootstrap("biz-a");
+    // Counts still run live, but the catalogue transaction does not.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it("refetches the catalogue after an invalidation", async () => {
+    prisma.$transaction.mockResolvedValue(catalogueTransactionResult());
+    prisma.$queryRaw.mockResolvedValue([zeroCounts]);
+
+    await service.bootstrap("biz-a");
+    catalogue.invalidate("biz-a");
+    await service.bootstrap("biz-a");
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
 
   it("reads preferences from the authenticated business", async () => {

@@ -28,7 +28,14 @@ export class ApiThrottleGuard implements CanActivate {
     }>();
 
     const path = req.url?.split("?")[0] ?? "";
-    if (path.includes("/health") || path.includes("/auth/login") || path.includes("/auth/status")) {
+    // Session-check endpoints stay exempt so a read burst can never 429 the
+    // client's /auth/me call and silently sign the user out mid-session.
+    if (
+      path.includes("/health") ||
+      path.includes("/auth/login") ||
+      path.includes("/auth/status") ||
+      path.includes("/auth/me")
+    ) {
       return true;
     }
 

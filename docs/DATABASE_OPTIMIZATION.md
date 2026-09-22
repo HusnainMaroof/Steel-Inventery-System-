@@ -1,6 +1,23 @@
 # Database & Query Optimization Report
 
-**Date:** 2026-09-18  
+**Date:** 2026-09-18 (historical audit)  
+**Current note (2026-09-22):** Dashboard KPIs are no longer a server
+`dashboardSummary` query. Bootstrap (`GET /ledger/bootstrap`, `version: 3`)
+returns catalogue + counts only. Trading rows load via
+`GET /ledger/transactions` (`paginateAll`). Client `StoreProvider` derives
+dashboard `stats` after that payload arrives. See
+[ARCHITECTURE.md](ARCHITECTURE.md) and [apis.md](apis.md).
+
+**Latency pass (2026-09-22, post-audit):** three round-trip reductions,
+no business-logic changes — (1) in-process JWT `tokenVersion` cache with
+eager invalidation on logout/password/deactivation
+(`auth/token-version-cache.ts`), (2) catalogue/settings bootstrap cache
+invalidated on every catalogue write (`ledger/catalogue-cache.ts`), (3)
+`/ledger/transactions` now issues one parallel `findMany` per collection
+(service `listAll` methods) instead of count-then-fetch via `paginateAll`
+(deleted). Measured p50: bootstrap 1342→108ms, transactions 2027→864ms,
+customers 625→413ms.
+
 **Scope:** NestJS backend + PostgreSQL (Prisma)  
 **Constraint:** All business logic preserved — no changes to FIFO, balances, profit, inventory, or permissions.
 
@@ -12,7 +29,7 @@
 |------|--------|
 | N+1 elimination (critical paths) | Fixed |
 | Pagination on collection endpoints | Already enforced (`PaginationDto`, max 100) |
-| Dashboard aggregation | Already uses SQL/`groupBy` (no full-table loads) |
+| Dashboard aggregation | Removed from the API — client derives KPIs from `/ledger/transactions` |
 | Composite indexes for hot paths | Added (migration `20260918120000`) |
 | EXPLAIN ANALYZE verification | Run via `server/scripts/explain-audit.mjs` |
 | Unit tests | 36 passed |
@@ -51,7 +68,8 @@ All list endpoints use `PaginationDto` (`page` default 50, `limit` max 100):
 |----------|---------------|-----------|
 | `GET /inventory/stock` | Per active product | `groupBy` + product list |
 | `GET /inventory/variants` | Per variant group | `groupBy` + lookup maps |
-| `GET /ledger/bootstrap` | Catalogue config only | Transactions loaded via paginated lists |
+| `GET /ledger/bootstrap` | Catalogue config + counts | Transaction arrays empty; `version: 3` |
+| `GET /ledger/transactions` | All trading rows | `paginateAll` — first page for count, then one bulk fetch (cap 20 000) |
 | `GET /reports/profit` | Period-bounded | Max 2-year range enforced |
 
 ### Detailed audit table (hot paths)
@@ -65,9 +83,9 @@ All list endpoints use `PaginationDto` (`page` default 50, `limit` max 100):
 | `POST /purchases` | Per-line refs | Many | Per line (≤50) | Various | **Yes (≤4×lines)** | N/A | **`assertLineReferences` batch** |
 | `DELETE /sales/:id` | Per-payment orphan check | Payment, PaymentAllocation | Per payment | `paymentId` | **Yes (per payment)** | N/A | **`groupBy` once** |
 | `GET /inventory/lots` | All consumed lots | SaleLine | All business | `(purchaseId, productId, variantId)` | No | Yes | **Scope to page purchase IDs** |
-| `GET /ledger/bootstrap` | Catalogue + counts | Many | Small | `businessId` | No | N/A | Already slim (v3) |
+| `GET /ledger/bootstrap` | Catalogue + counts | Many | Small | `businessId` | No | N/A | Slim v3 — no `dashboardSummary` |
+| `GET /ledger/transactions` | Parallel `paginateAll` | Customer…StockCheck | All tenant rows | `businessId` | No | Bulk | Replaces N list round-trips |
 | `GET /reports/profit` | Period sales/purchases | Sale, Purchase | Period-bound | `(businessId, date)` | No | N/A | Bounded; JS cost calc required |
-| Dashboard summary | Aggregates | Invoice, InventoryTx, Purchase | 1 row each | `businessId` | No | N/A | Already aggregated |
 
 ---
 

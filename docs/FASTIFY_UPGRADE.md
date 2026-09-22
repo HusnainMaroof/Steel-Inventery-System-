@@ -1,5 +1,8 @@
 # Fastify Security Advisory — Upgrade Plan
 
+Living architecture is in [ARCHITECTURE.md](ARCHITECTURE.md). This file is
+the Nest 11 → 12 / Fastify advisory plan, not the product architecture.
+
 ## Current state
 
 | Package | Version |

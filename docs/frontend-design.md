@@ -4,6 +4,9 @@ The UI conventions every screen in this app follows. The look is minimal,
 professional, ~90% monochrome — configuration power must never surface as
 dense enterprise chrome.
 
+How the app is wired (providers, routes, BFF, store) lives in
+[ARCHITECTURE.md](ARCHITECTURE.md). This file is the visual/UX contract.
+
 ## Colour
 
 | Token | Value | Use |
@@ -78,6 +81,17 @@ dense enterprise chrome.
   warehouses, lot details) hides behind collapsible sections, modals and
   guided flows until invoked.
 
+## Screens
+
+Tenant app lives under `/{businessSlug}/` (dashboard, products, purchases,
+inventory, sales & invoices, customers, suppliers, payments, expenses,
+reports, staff, settings, audit). Super Admin is `/admin/*`. Public:
+`/`, `/login`, `/offline`, `/404`. `invoices` and `profit` redirect into
+`sales` and `reports`.
+
+Chrome: `Shell` (sticky sidebar, role redirects) + `StoreGate` (skeleton
+until first ledger load). Printable `/sales/[id]` skips the sidebar.
+
 ## Shared components
 
 - `client/src/components/ui.tsx` — `Page`, `PageTitle`, `CustomSelect`,
@@ -88,6 +102,8 @@ dense enterprise chrome.
   `StatementTotal` (light and dark variants).
 - `client/src/components/DataTable.tsx` — generic table with mobile card
   rendering (used by screens not yet converted to date-grouped layouts).
+- Feature folders: `components/sales/`, `catalogue/`, `invoice/`,
+  `reports/`, `settings/`, `admin/`.
 
 When a component gains a new capability, existing screens keep their
 appearance exactly — extensions are opt-in parameters only.

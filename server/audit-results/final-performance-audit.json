@@ -1,0 +1,351 @@
+{
+  "scale": {
+    "customers": 201,
+    "suppliers": 1,
+    "sales": 200,
+    "purchases": 200,
+    "payments": 1000,
+    "expenses": 200
+  },
+  "businessId": "cmu6jnet80000ldqoq3eqmqmi",
+  "endpoints": [
+    {
+      "name": "bootstrap",
+      "path": "/ledger/bootstrap",
+      "p50": 108.3181999999997,
+      "p95": 230.3827000000001,
+      "p99": 230.3827000000001,
+      "min": 105.26230000000032,
+      "max": 230.3827000000001,
+      "bytes": 44910,
+      "iterations": 10
+    },
+    {
+      "name": "transactions",
+      "path": "/ledger/transactions",
+      "p50": 977.6628000000019,
+      "p95": 1489.8086000000003,
+      "p99": 1489.8086000000003,
+      "min": 951.656500000001,
+      "max": 1489.8086000000003,
+      "bytes": 811437,
+      "iterations": 10
+    },
+    {
+      "name": "customers",
+      "path": "/customers?page=1&limit=50",
+      "p50": 418.0643999999993,
+      "p95": 427.9772000000012,
+      "p99": 427.9772000000012,
+      "min": 415.1165000000001,
+      "max": 427.9772000000012,
+      "bytes": 9482,
+      "iterations": 10
+    },
+    {
+      "name": "suppliers",
+      "path": "/suppliers?page=1&limit=50",
+      "p50": 413.7983999999997,
+      "p95": 418.97619999999733,
+      "p99": 418.97619999999733,
+      "min": 412.98339999999735,
+      "max": 418.97619999999733,
+      "bytes": 235,
+      "iterations": 10
+    },
+    {
+      "name": "sales",
+      "path": "/sales?page=1&limit=50",
+      "p50": 732.834600000002,
+      "p95": 840.7102999999988,
+      "p99": 840.7102999999988,
+      "min": 726.0153999999966,
+      "max": 840.7102999999988,
+      "bytes": 44582,
+      "iterations": 10
+    },
+    {
+      "name": "purchases",
+      "path": "/purchases?page=1&limit=50",
+      "p50": 735.2410999999993,
+      "p95": 1138.3666999999987,
+      "p99": 1138.3666999999987,
+      "min": 730.8165000000008,
+      "max": 1138.3666999999987,
+      "bytes": 41553,
+      "iterations": 10
+    },
+    {
+      "name": "payments",
+      "path": "/payments?page=1&limit=50",
+      "p50": 625.7114000000001,
+      "p95": 627.9951000000001,
+      "p99": 627.9951000000001,
+      "min": 618.8309000000008,
+      "max": 627.9951000000001,
+      "bytes": 19405,
+      "iterations": 10
+    },
+    {
+      "name": "inventory/stock",
+      "path": "/inventory/stock",
+      "p50": 213.00629999999364,
+      "p95": 218.8963000000076,
+      "p99": 218.8963000000076,
+      "min": 209.2911999999924,
+      "max": 218.8963000000076,
+      "bytes": 18192,
+      "iterations": 10
+    },
+    {
+      "name": "reports",
+      "path": "/reports/profit?mode=month&year=2025&month=3",
+      "p50": 843.6315000000031,
+      "p95": 1450.7021999999997,
+      "p99": 1450.7021999999997,
+      "min": 834.7278000000078,
+      "max": 1450.7021999999997,
+      "bytes": 23374,
+      "iterations": 10
+    }
+  ],
+  "customerBreakdown": {
+    "rows": 201,
+    "payloadEstimate": 9430,
+    "directDb": {
+      "queries": 4,
+      "dbMs": 677,
+      "totalMs": 1463.68,
+      "nodeMs": 786.7
+    },
+    "jwtValidation": {
+      "note": "raw DB reference — cache-bypassed simulation, NOT the live JWT path",
+      "queries": 2,
+      "dbMs": 448,
+      "totalMs": 1228.16
+    }
+  },
+  "reportsProfile": {
+    "period": "2025-03",
+    "rowsLoaded": {
+      "purchases": 0,
+      "purchaseLines": 0,
+      "sales": 0,
+      "saleLines": 0,
+      "expenses": 8,
+      "costPurchases": 200,
+      "costLines": 200
+    },
+    "fetch": {
+      "queries": 5,
+      "dbMs": 1231,
+      "totalMs": 2175,
+      "heapDeltaMb": -1.03
+    },
+    "nodeCalcMs": 0.85,
+    "cogsSqlSafe": false,
+    "cogsSqlReason": "Weighted landed-cost averaging per purchase+product and lot-specific vs weighted fallback cannot be reproduced exactly in SQL without risking divergent COGS."
+  },
+  "search": {
+    "customerCount": 201,
+    "elapsedMs": 225,
+    "seqScan": true,
+    "planSnippet": "Limit  (cost=0.00..7.34 rows=50 width=93) (actual time=0.066..0.143 rows=50.00 loops=1)"
+  },
+  "indexes": [
+    {
+      "label": "Customer list",
+      "indexScan": true,
+      "executionMs": 0.067,
+      "plan": "Limit  (cost=0.15..6.04 rows=50 width=93) (actual time=0.023..0.044 rows=50.00 loops=1) |   Buffers: shared hit=3 |   ->  Index Scan using \"Customer_businessId_createdAt_idx\" on \"Customer\"  (cost=0.15..23.85 rows=201 width=93) (actual time=0.023..0.038 rows=50.00 loops=1) |         Index Cond: (\"businessId\" = 'cmu6jnet80000ldqoq3eqmqmi'::text) |         Filter: active |         Index Searches: 1"
+    },
+    {
+      "label": "Sale FIFO",
+      "indexScan": true,
+      "executionMs": 0.175,
+      "plan": "Limit  (cost=0.42..35.94 rows=50 width=30) (actual time=0.028..0.135 rows=50.00 loops=1) |   Buffers: shared hit=177 |   ->  Nested Loop  (cost=0.42..131.13 rows=184 width=30) (actual time=0.027..0.129 rows=50.00 loops=1) |         Buffers: shared hit=177 |         ->  Index Scan using \"Sale_businessId_date_idx\" on \"Sale\" s  (cost=0.15..25.31 rows=184 width=30) (actual time=0.014..0.038 rows=50.00 loops=1) |               Index Cond: (\"businessId\" = 'cmu6jnet80000ldqoq3eqmqmi'::text)"
+    },
+    {
+      "label": "Purchase supplier FIFO",
+      "indexScan": true,
+      "executionMs": 0.119,
+      "plan": "Limit  (cost=1.01..8.90 rows=50 width=38) (actual time=0.071..0.091 rows=50.00 loops=1) |   Buffers: shared hit=39 |   ->  Incremental Sort  (cost=1.01..30.82 rows=189 width=38) (actual time=0.070..0.085 rows=50.00 loops=1) |         Sort Key: date, \"createdAt\" |         Presorted Key: date |         Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB"
+    },
+    {
+      "label": "SaleLine lot",
+      "indexScan": false,
+      "executionMs": 0.254,
+      "plan": "GroupAggregate  (cost=26.55..26.83 rows=11 width=116) (actual time=0.202..0.204 rows=0.00 loops=1) |   Group Key: sl.\"purchaseId\", sl.\"productId\", sl.\"variantId\" |   Buffers: shared hit=19 |   ->  Sort  (cost=26.55..26.58 rows=11 width=89) (actual time=0.201..0.203 rows=0.00 loops=1) |         Sort Key: sl.\"purchaseId\", sl.\"productId\", sl.\"variantId\" |         Sort Method: quicksort  Memory: 25kB"
+    }
+  ],
+  "pgStats": {
+    "tables": [
+      {
+        "table_name": "Payment",
+        "live_rows": "2032",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:59:40.561Z"
+      },
+      {
+        "table_name": "InventoryTransaction",
+        "live_rows": "448",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:56:40.533Z"
+      },
+      {
+        "table_name": "Invoice",
+        "live_rows": "429",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:58:40.533Z"
+      },
+      {
+        "table_name": "SaleLine",
+        "live_rows": "428",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:58:40.532Z"
+      },
+      {
+        "table_name": "Sale",
+        "live_rows": "428",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:58:40.528Z"
+      },
+      {
+        "table_name": "Product",
+        "live_rows": "426",
+        "dead_rows": "3",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:55:40.499Z"
+      },
+      {
+        "table_name": "Customer",
+        "live_rows": "421",
+        "dead_rows": "7",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:55:40.501Z"
+      },
+      {
+        "table_name": "Purchase",
+        "live_rows": "420",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:56:40.524Z"
+      },
+      {
+        "table_name": "PurchaseLine",
+        "live_rows": "420",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:56:40.528Z"
+      },
+      {
+        "table_name": "Expense",
+        "live_rows": "416",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:59:40.566Z"
+      },
+      {
+        "table_name": "AuditLog",
+        "live_rows": "53",
+        "dead_rows": "0",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-22T11:00:11.535Z"
+      },
+      {
+        "table_name": "User",
+        "live_rows": "41",
+        "dead_rows": "6",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-17T19:47:40.163Z"
+      },
+      {
+        "table_name": "Business",
+        "live_rows": "21",
+        "dead_rows": "16",
+        "last_analyze": null,
+        "last_autoanalyze": null
+      },
+      {
+        "table_name": "Supplier",
+        "live_rows": "20",
+        "dead_rows": "2",
+        "last_analyze": null,
+        "last_autoanalyze": null
+      },
+      {
+        "table_name": "_prisma_migrations",
+        "live_rows": "17",
+        "dead_rows": "8",
+        "last_analyze": null,
+        "last_autoanalyze": "2026-09-18T05:54:40.485Z"
+      }
+    ],
+    "vacuum": [
+      {
+        "name": "autovacuum",
+        "setting": "on"
+      },
+      {
+        "name": "max_connections",
+        "setting": "901"
+      },
+      {
+        "name": "shared_buffers",
+        "setting": "29440"
+      }
+    ]
+  },
+  "concurrency": [
+    {
+      "name": "customers",
+      "concurrency": 20,
+      "wallMs": 1419,
+      "failures": 0,
+      "p50": 1001.774900000004,
+      "p95": 1415.909999999989,
+      "p99": 1417.1229000000021,
+      "min": 418.54769999999553,
+      "max": 1417.1229000000021
+    },
+    {
+      "name": "sales",
+      "concurrency": 20,
+      "wallMs": 1940,
+      "failures": 0,
+      "p50": 1242.9274000000005,
+      "p95": 1878.4648999999918,
+      "p99": 1936.249100000001,
+      "min": 728.4086000000098,
+      "max": 1936.249100000001
+    },
+    {
+      "name": "inventory",
+      "concurrency": 20,
+      "wallMs": 531,
+      "failures": 0,
+      "p50": 513.7894000000088,
+      "p95": 527.2687999999907,
+      "p99": 528.2393000000011,
+      "min": 320.33899999999267,
+      "max": 528.2393000000011
+    },
+    {
+      "name": "bootstrap",
+      "concurrency": 20,
+      "wallMs": 531,
+      "failures": 0,
+      "p50": 323.48910000000615,
+      "p95": 527.006899999993,
+      "p99": 528.3358999999909,
+      "min": 113.0908999999956,
+      "max": 528.3358999999909
+    }
+  ],
+  "bootstrap": null
+}

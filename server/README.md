@@ -5,7 +5,7 @@ system. PostgreSQL is hosted on Neon and accessed only through Prisma.
 
 ## Stack
 
-Node.js · NestJS (Fastify adapter) · TypeScript (strict) · Prisma ·
+Node.js · NestJS 11 (Fastify adapter) · TypeScript (strict) · Prisma 6 ·
 PostgreSQL (Neon) · REST `/api/v1`
 
 ## Setup
@@ -14,7 +14,6 @@ PostgreSQL (Neon) · REST `/api/v1`
 
    ```bash
    cp .env.example .env
-   # .env
    # DATABASE_URL=postgresql://...   (Neon pooled connection)
    # DIRECT_URL=postgresql://...     (Neon direct connection, for migrations)
    # JWT_SECRET=<long random string>
@@ -25,7 +24,7 @@ PostgreSQL (Neon) · REST `/api/v1`
 2. Install dependencies and prepare the database:
 
    ```bash
-   npm install
+   npm install --include=dev
    npm run prisma:generate
    npm run prisma:deploy
    ```
@@ -39,17 +38,31 @@ PostgreSQL (Neon) · REST `/api/v1`
 
 ## API
 
-Every route is versioned under `/api/v1` and (except `POST /api/v1/auth/login`
-and `GET /api/v1/auth/status`) requires a JWT `Authorization: Bearer <token>`
-header. `POST /api/v1/auth/register` is closed (403).
+Every route except `GET /health` is versioned under `/api/v1`. Except
+`POST /api/v1/auth/login`, `GET /api/v1/auth/status`, and
+`POST /api/v1/auth/register` (closed, 403), routes require
+`Authorization: Bearer <token>`.
 
-Modules: auth · owners · ledger/preferences · products (categories, attributes, variants) ·
-inventory (derived stock + movements + adjustments) · purchases · sales ·
-customers · suppliers · payments · invoices · expenses · stock-checks ·
-reports.
+The Next.js app never sends that header from the browser. It stores the
+JWT in an httpOnly cookie and proxies through `/api/tradex/*`.
 
-Errors always return `{ statusCode, message, error }`. List endpoints accept
-`?page=1&limit=20` and return `{ items, page, limit, total, pages }`.
+**Auth / platform:** `auth`, `owners` (SUPERADMIN), `users` (staff),
+`platform` (overview, templates, subscription plans), `media` (logo).
+
+**Tenant hydrate:** `GET /ledger/bootstrap` (catalogue + counts) then
+`GET /ledger/transactions` (all trading rows, one round-trip).
+`GET|PUT /settings` stores invoice/UI prefs on `Business.settings`.
+
+**Domain:** products (categories, attributes, variants) · warehouses ·
+inventory (derived stock, lots, movements, adjustments) · purchases ·
+sales · invoices · customers · suppliers · payments · expenses ·
+stock-checks · reports.
+
+Errors always return `{ statusCode, message, error }`. List endpoints
+accept `?page=1&limit=50` (max 100) and return
+`{ items, page, limit, total, pages }`.
+
+See [docs/apis.md](../docs/apis.md) for the full route table.
 
 ## Architecture rules (binding)
 
@@ -61,8 +74,9 @@ Errors always return `{ statusCode, message, error }`. List endpoints accept
 - Customer/supplier balances are derived from transactions, never stored.
 - Money columns are Prisma `Decimal` — never floats.
 - Schema changes only via Prisma migrations.
-- Normalized Prisma tables are the only source of truth. The client hydrates
-  through `/ledger/bootstrap` and writes through tenant-scoped domain routes.
+- Normalized Prisma tables are the only source of truth. The client
+  hydrates through `/ledger/bootstrap` + `/ledger/transactions` and
+  writes through tenant-scoped domain routes.
 
 ## Tests
 

@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { CatalogueCache } from "../ledger/catalogue-cache";
 import {
   CreateLocationDto,
   CreateWarehouseDto,
@@ -9,7 +10,10 @@ import {
 
 @Injectable()
 export class WarehousesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly catalogue: CatalogueCache,
+  ) {}
 
   async list(businessId: string, skip: number, take: number) {
     const where = { businessId };
@@ -26,13 +30,17 @@ export class WarehousesService {
     return [items, total] as const;
   }
 
-  create(businessId: string, dto: CreateWarehouseDto) {
-    return this.prisma.warehouse.create({ data: { businessId, name: dto.name } });
+  async create(businessId: string, dto: CreateWarehouseDto) {
+    const warehouse = await this.prisma.warehouse.create({ data: { businessId, name: dto.name } });
+    this.catalogue.invalidate(businessId);
+    return warehouse;
   }
 
   async update(businessId: string, id: string, dto: UpdateWarehouseDto) {
     await this.assertWarehouse(businessId, id);
-    return this.prisma.warehouse.update({ where: { id }, data: dto });
+    const warehouse = await this.prisma.warehouse.update({ where: { id }, data: dto });
+    this.catalogue.invalidate(businessId);
+    return warehouse;
   }
 
   async remove(businessId: string, id: string) {
@@ -42,19 +50,24 @@ export class WarehousesService {
     });
     if (used) throw new ConflictException("Warehouse is referenced by purchase history");
     await this.prisma.warehouse.delete({ where: { id } });
+    this.catalogue.invalidate(businessId);
     return { deleted: true, warehouseId: id };
   }
 
   async createLocation(businessId: string, warehouseId: string, dto: CreateLocationDto) {
     await this.assertWarehouse(businessId, warehouseId);
-    return this.prisma.location.create({
+    const location = await this.prisma.location.create({
       data: { businessId, warehouseId, name: dto.name },
     });
+    this.catalogue.invalidate(businessId);
+    return location;
   }
 
   async updateLocation(businessId: string, id: string, dto: UpdateLocationDto) {
     await this.assertLocation(businessId, id);
-    return this.prisma.location.update({ where: { id }, data: dto });
+    const location = await this.prisma.location.update({ where: { id }, data: dto });
+    this.catalogue.invalidate(businessId);
+    return location;
   }
 
   async removeLocation(businessId: string, id: string) {
@@ -64,6 +77,7 @@ export class WarehousesService {
     });
     if (used) throw new ConflictException("Location is referenced by purchase history");
     await this.prisma.location.delete({ where: { id } });
+    this.catalogue.invalidate(businessId);
     return { deleted: true, locationId: id };
   }
 

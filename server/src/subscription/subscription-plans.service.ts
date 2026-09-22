@@ -6,6 +6,7 @@ import {
 import { BillingCycle, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { sanitizePlanPages } from "../common/panel-access";
+import { TokenVersionService } from "../auth/token-version.service";
 import { CreateSubscriptionPlanDto } from "./dto/create-subscription-plan.dto";
 import { UpdateSubscriptionPlanDto } from "./dto/update-subscription-plan.dto";
 
@@ -13,7 +14,10 @@ export const DEFAULT_SUBSCRIPTION_PLAN_ID = "sub_monthly";
 
 @Injectable()
 export class SubscriptionPlansService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tokenVersions: TokenVersionService,
+  ) {}
 
   list(includeInactive = false) {
     return this.prisma.subscriptionPlanDefinition.findMany({
@@ -69,7 +73,7 @@ export class SubscriptionPlansService {
       dto.durationDays !== undefined ? dto.durationDays : current.durationDays;
     this.assertBilling(billingCycle, durationDays);
 
-    return this.prisma.subscriptionPlanDefinition.update({
+    const plan = await this.prisma.subscriptionPlanDefinition.update({
       where: { id },
       data: {
         label: dto.label?.trim(),
@@ -83,6 +87,17 @@ export class SubscriptionPlansService {
         active: dto.active,
       },
     });
+
+    // Businesses on this plan hold billingCycle + planPages in their cached
+    // JWT entries — drop them so the plan edit is enforced immediately.
+    const onPlan = await this.prisma.business.findMany({
+      where: { subscriptionPlanId: id },
+      select: { id: true },
+    });
+    for (const business of onPlan) {
+      this.tokenVersions.invalidateBusiness(business.id);
+    }
+    return plan;
   }
 
   private assertBilling(billingCycle: BillingCycle, durationDays?: number | null) {

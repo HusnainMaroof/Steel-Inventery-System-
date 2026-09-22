@@ -24,6 +24,17 @@ import { PrismaService } from "../prisma/prisma.service";
 import { saleGrandTotal } from "../domain/money";
 import { CreateSaleDto } from "./dto/create-sale.dto";
 
+const listInclude = {
+  customer: { select: { id: true, name: true, shop: true, phone: true } },
+  invoice: true,
+  lines: true,
+} satisfies Prisma.SaleInclude;
+
+const listOrder: Prisma.SaleOrderByWithRelationInput[] = [
+  { date: "desc" },
+  { createdAt: "desc" },
+];
+
 @Injectable()
 export class SalesService {
   constructor(
@@ -296,25 +307,35 @@ export class SalesService {
   }
 
   async list(businessId: string, skip: number, take: number, customerId?: string) {
-    const where: Prisma.SaleWhereInput = {
-      businessId,
-      ...(customerId ? { customerId } : {}),
-    };
+    const where = this.baseWhere(businessId, customerId);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.sale.findMany({
         where,
         skip,
         take,
-        include: {
-          customer: { select: { id: true, name: true, shop: true, phone: true } },
-          invoice: true,
-          lines: true,
-        },
-        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        include: listInclude,
+        orderBy: listOrder,
       }),
       this.prisma.sale.count({ where }),
     ]);
     return [items, total] as const;
+  }
+
+  /** Bulk fetch for /ledger/transactions — one findMany, no count. */
+  listAll(businessId: string, take: number) {
+    return this.prisma.sale.findMany({
+      where: this.baseWhere(businessId),
+      include: listInclude,
+      orderBy: listOrder,
+      take,
+    });
+  }
+
+  private baseWhere(businessId: string, customerId?: string): Prisma.SaleWhereInput {
+    return {
+      businessId,
+      ...(customerId ? { customerId } : {}),
+    };
   }
 
   async byId(businessId: string, id: string) {

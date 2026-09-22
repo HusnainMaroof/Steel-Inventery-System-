@@ -92,6 +92,15 @@ export class ExpensesService {
       .sort((a, b) => b.amount - a.amount);
   }
 
+  /** Bulk fetch for /ledger/transactions — one findMany, no count. */
+  listAll(businessId: string, take: number) {
+    return this.prisma.expense.findMany({
+      where: { businessId },
+      orderBy: { date: "desc" },
+      take,
+    });
+  }
+
   async byId(businessId: string, id: string) {
     const expense = await this.prisma.expense.findFirst({ where: { id, businessId } });
     if (!expense) throw new NotFoundException("Expense not found");

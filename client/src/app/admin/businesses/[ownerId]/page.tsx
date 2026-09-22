@@ -32,6 +32,45 @@ import { invalidateAdminCache } from "@/lib/admin-cache";
 import { planPagesSummary, sanitizePlanPages } from "@/lib/staff-access";
 import { BusyButton, ConfirmModal, Page } from "@/components/ui";
 
+type OwnerResult = Awaited<ReturnType<typeof getOwnerAction>>;
+type TemplatesResult = Awaited<ReturnType<typeof listProductTemplatesAction>>;
+type PlansResult = Awaited<ReturnType<typeof listSubscriptionPlansAction>>;
+
+/**
+ * Module-level in-flight dedupe. Next.js dev remounts this page (Strict Mode
+ * double-mount) and each fresh instance re-runs its load effects with brand
+ * new refs — only module scope survives remounts. `force` bypasses the
+ * dedupe for explicit reloads after mutations.
+ */
+const ownerInFlight = new Map<string, Promise<OwnerResult>>();
+
+function requestOwner(ownerId: string, force = false): Promise<OwnerResult> {
+  if (force) ownerInFlight.delete(ownerId);
+  let request = ownerInFlight.get(ownerId);
+  if (!request) {
+    request = getOwnerAction(ownerId).finally(() => {
+      ownerInFlight.delete(ownerId);
+    });
+    ownerInFlight.set(ownerId, request);
+  }
+  return request;
+}
+
+let adminMetaInFlight: Promise<[TemplatesResult, PlansResult]> | null = null;
+
+function requestAdminMeta(force = false): Promise<[TemplatesResult, PlansResult]> {
+  if (force) adminMetaInFlight = null;
+  if (!adminMetaInFlight) {
+    adminMetaInFlight = Promise.all([
+      listProductTemplatesAction(),
+      listSubscriptionPlansAction(true),
+    ] as const).finally(() => {
+      adminMetaInFlight = null;
+    });
+  }
+  return adminMetaInFlight;
+}
+
 export default function AdminBusinessDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -51,11 +90,11 @@ export default function AdminBusinessDetailPage() {
   const [reactivating, setReactivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const loadOwner = useCallback(async () => {
+  const loadOwner = useCallback(async (force = false) => {
     if (!ownerId) return;
     setLoading(true);
     setLoadError(null);
-    const result = await getOwnerAction(ownerId);
+    const result = await requestOwner(ownerId, force);
     setLoading(false);
     if (!result.ok) {
       setLoadError(result.error);
@@ -72,17 +111,15 @@ export default function AdminBusinessDetailPage() {
 
   useEffect(() => {
     if (!ready || user?.role !== "SUPERADMIN") return;
-    void Promise.all([listProductTemplatesAction(), listSubscriptionPlansAction(true)]).then(
-      ([templatesResult, plansResult]) => {
-        if (templatesResult.ok) setTemplates(templatesResult.templates);
-        if (plansResult.ok) setSubscriptionPlans(plansResult.plans);
-      },
-    );
+    void requestAdminMeta().then(([templatesResult, plansResult]) => {
+      if (templatesResult.ok) setTemplates(templatesResult.templates);
+      if (plansResult.ok) setSubscriptionPlans(plansResult.plans);
+    });
   }, [ready, user?.role]);
 
   const reloadOwner = async () => {
     invalidateAdminCache();
-    await loadOwner();
+    await loadOwner(true);
   };
 
   const revoke = async () => {

@@ -5,6 +5,8 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import type { Sale } from "@/lib/types";
 import { useServerPaginated } from "./use-server-paginated";
 
+const mapSale = (raw: unknown) => mapApiSale(raw as ApiBootstrap["sales"][number]);
+
 /**
  * Server-paginated sales list — does not require full ledger hydration.
  */
@@ -12,7 +14,7 @@ export function usePaginatedSales(limit = DEFAULT_PAGE_SIZE) {
   const result = useServerPaginated<Sale>({
     path: "/sales",
     limit,
-    mapItem: (raw) => mapApiSale(raw as ApiBootstrap["sales"][number]),
+    mapItem: mapSale,
   });
 
   return {

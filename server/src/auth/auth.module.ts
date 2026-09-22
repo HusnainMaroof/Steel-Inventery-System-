@@ -6,6 +6,7 @@ import { AuthService } from "./auth.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { AuthThrottleGuard } from "./auth-throttle.guard";
 import { TokenVersionService } from "./token-version.service";
+import { TokenVersionCache } from "./token-version-cache";
 import { ConfigService } from "../config/config.service";
 import { PrismaModule } from "../prisma/prisma.module";
 
@@ -23,7 +24,13 @@ import { PrismaModule } from "../prisma/prisma.module";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, AuthThrottleGuard, TokenVersionService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    AuthThrottleGuard,
+    TokenVersionService,
+    TokenVersionCache,
+  ],
   exports: [AuthService, TokenVersionService],
 })
 export class AuthModule {}

@@ -8,19 +8,21 @@ import { skeletonForPath } from "@/components/skeletons";
 import { ErrorState } from "@/components/ui";
 
 /**
- * Blocks tenant page content until the ledger bootstrap finishes.
+ * Blocks tenant page content until the ledger bootstrap AND the full
+ * transaction data have both finished loading (first load only — later
+ * refreshes never re-trigger the skeleton).
  * Shell (sidebar) stays visible; only the main area shows a skeleton or error.
  */
 export default function StoreGate({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const { user, ready: authReady } = useAuth();
-  const { ready: storeReady, error, retry } = useStore();
+  const { ready: storeReady, dataReady, error, retry } = useStore();
 
   const isTenantUser = user && user.role !== "SUPERADMIN";
   const waiting =
     (!authReady && Boolean(pathname) && !pathname.startsWith("/admin")) ||
-    (authReady && isTenantUser && !storeReady && !error);
-  const failed = authReady && isTenantUser && !storeReady && !!error;
+    (authReady && isTenantUser && (!storeReady || !dataReady) && !error);
+  const failed = authReady && isTenantUser && (!storeReady || !dataReady) && !!error;
 
   if (waiting) {
     return skeletonForPath(pathname);

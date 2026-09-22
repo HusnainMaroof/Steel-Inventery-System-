@@ -131,6 +131,10 @@ async function profileCustomerList(businessId) {
     return { items, total };
   });
 
+  // RAW REFERENCE, not the live path: simulates the JWT-validation DB query
+  // directly. It deliberately bypasses JwtStrategy + TokenVersionCache, so
+  // this number stays non-zero on warm runs — it is the pre-cache cost the
+  // live endpoints no longer pay (see jwt.strategy.ts / token-version-cache.ts).
   const jwt = await countQueries(async (db) => {
     const user = await db.user.findFirst({
       where: { businessId, role: "ADMIN", active: true },
@@ -161,6 +165,7 @@ async function profileCustomerList(businessId) {
       nodeMs: Math.round(direct.nodeMs * 100) / 100,
     },
     jwtValidation: {
+      note: "raw DB reference — cache-bypassed simulation, NOT the live JWT path",
       queries: jwt.queryCount,
       dbMs: Math.round(jwt.dbMs * 100) / 100,
       totalMs: Math.round(jwt.totalMs * 100) / 100,

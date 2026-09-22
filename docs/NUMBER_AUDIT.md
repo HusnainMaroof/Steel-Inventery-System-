@@ -1,6 +1,7 @@
 # Number reconciliation audit
 
-`/audit` evaluates the authenticated business's API-backed ledger. It does not
+`/{businessSlug}/audit` evaluates the authenticated business's API-backed
+ledger (legacy unprefixed `/audit` is rewritten by `Shell`). It does not
 depend on fixed fixture values, so it is valid for an empty new business and
 for live trading data.
 

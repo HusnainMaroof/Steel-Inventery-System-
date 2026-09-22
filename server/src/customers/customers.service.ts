@@ -16,8 +16,7 @@ export class CustomersService {
 
   async list(businessId: string, skip: number, take: number, search?: string) {
     const where: Prisma.CustomerWhereInput = {
-      businessId,
-      active: true,
+      ...this.baseWhere(businessId),
       ...(search
         ? {
             OR: [
@@ -38,6 +37,19 @@ export class CustomersService {
       this.prisma.customer.count({ where }),
     ]);
     return [items, total] as const;
+  }
+
+  /** Bulk fetch for /ledger/transactions — one findMany, no count. */
+  listAll(businessId: string, take: number) {
+    return this.prisma.customer.findMany({
+      where: this.baseWhere(businessId),
+      orderBy: { createdAt: "asc" },
+      take,
+    });
+  }
+
+  private baseWhere(businessId: string): Prisma.CustomerWhereInput {
+    return { businessId, active: true };
   }
 
   async byId(businessId: string, id: string) {

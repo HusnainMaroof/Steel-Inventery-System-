@@ -72,4 +72,14 @@ export class StockChecksService {
     ]);
     return [items, total] as const;
   }
+
+  /** Bulk fetch for /ledger/transactions — one findMany, no count. */
+  listAll(businessId: string, take: number) {
+    return this.prisma.stockCheck.findMany({
+      where: { businessId },
+      include: { product: { select: { id: true, name: true, unit: true } } },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      take,
+    });
+  }
 }

@@ -29,8 +29,10 @@ export class ReportsService {
     const period = this.periodOf(input);
     const productId = input.productId;
 
-    // ---- transactions in period (scoped to the product when given) ----
-    const purchases = await this.prisma.purchase.findMany({
+    // ---- every independent query starts concurrently ----
+    // (they used to be awaited one by one, stacking a full DB round trip
+    // per query; the report only needs two sequential phases)
+    const salesPromise = this.prisma.sale.findMany({
       where: {
         businessId,
         date: { gte: period.from, lte: period.to },
@@ -45,22 +47,7 @@ export class ReportsService {
       orderBy: { date: "asc" },
     });
 
-    const sales = await this.prisma.sale.findMany({
-      where: {
-        businessId,
-        date: { gte: period.from, lte: period.to },
-        ...(productId ? { lines: { some: { productId } } } : {}),
-      },
-      include: {
-        lines: {
-          where: productId ? { productId } : undefined,
-          include: { product: { select: { id: true, name: true, unit: true } } },
-        },
-      },
-      orderBy: { date: "asc" },
-    });
-
-    const expenses = await this.prisma.expense.findMany({
+    const expensesPromise = this.prisma.expense.findMany({
       where: {
         businessId,
         date: { gte: period.from, lte: period.to },
@@ -68,6 +55,92 @@ export class ReportsService {
         ...(productId ? { productId } : {}),
       },
     });
+
+    const productFilter = productId
+      ? Prisma.sql`AND "productId" = ${productId}`
+      : Prisma.empty;
+    const productsPromise = this.prisma.product.findMany({
+      where: { businessId, ...(productId ? { id: productId } : {}) },
+      select: { id: true, name: true, unit: true },
+    });
+    const openingRowsPromise = this.prisma.$queryRaw<{ productId: string; qty: string }[]>`
+      SELECT "productId", COALESCE(SUM(qty), 0)::text AS qty
+      FROM "InventoryTransaction"
+      WHERE "businessId" = ${businessId}
+        AND date < ${period.from}
+        ${productFilter}
+      GROUP BY "productId"
+    `;
+    const closingRowsPromise = this.prisma.$queryRaw<{ productId: string; qty: string }[]>`
+      SELECT "productId", COALESCE(SUM(qty), 0)::text AS qty
+      FROM "InventoryTransaction"
+      WHERE "businessId" = ${businessId}
+        AND date <= ${period.to}
+        ${productFilter}
+      GROUP BY "productId"
+    `;
+    const invoiceTotalsPromise = this.prisma.invoice.aggregate({
+      where: { businessId },
+      _sum: { total: true },
+    });
+    const invoicePaidPromise = this.prisma.invoice.aggregate({
+      where: { businessId },
+      _sum: { paid: true },
+    });
+    const supplierDueRowsPromise = this.prisma.$queryRaw<{ due: string }[]>`
+      SELECT COALESCE(SUM(
+        GREATEST(
+          0,
+          COALESCE((
+            SELECT SUM(pl."qty" * pl."rate")
+            FROM "PurchaseLine" pl
+            WHERE pl."purchaseId" = p."id"
+          ), 0) - p."paid"
+        )
+      ), 0)::text AS due
+      FROM "Purchase" p
+      WHERE p."businessId" = ${businessId}
+    `;
+    const customerCashPromise = this.prisma.payment.aggregate({
+      where: {
+        businessId,
+        type: "CUSTOMER",
+        date: { gte: period.from, lte: period.to },
+      },
+      _sum: { amount: true },
+    });
+    const supplierCashPromise = this.prisma.payment.aggregate({
+      where: {
+        businessId,
+        type: "SUPPLIER",
+        date: { gte: period.from, lte: period.to },
+      },
+      _sum: { amount: true },
+    });
+    const lineWeightsPromise = this.prisma.$queryRaw<{ productId: string; qty: string; goods: string }[]>`
+      SELECT pl."productId",
+        COALESCE(SUM(pl.qty), 0)::text AS qty,
+        COALESCE(SUM(pl.qty * pl.rate), 0)::text AS goods
+      FROM "PurchaseLine" pl
+      INNER JOIN "Purchase" p ON p.id = pl."purchaseId"
+      WHERE p."businessId" = ${businessId}
+      GROUP BY pl."productId"
+    `;
+    const chargeTotalsPromise = this.prisma.$queryRaw<{ totalCharges: string; totalGoods: string }[]>`
+      SELECT
+        COALESCE(SUM(p.transport + p.loading + p.labour + p."otherCost"), 0)::text AS "totalCharges",
+        COALESCE((
+          SELECT SUM(pl.qty * pl.rate)
+          FROM "PurchaseLine" pl
+          INNER JOIN "Purchase" p2 ON p2.id = pl."purchaseId"
+          WHERE p2."businessId" = ${businessId}
+        ), 0)::text AS "totalGoods"
+      FROM "Purchase" p
+      WHERE p."businessId" = ${businessId}
+    `;
+
+    const sales = await salesPromise;
+    const expenses = await expensesPromise;
 
     const productIdsInSales = [
       ...new Set(sales.flatMap((s) => s.lines.map((l) => l.productId))),
@@ -79,10 +152,12 @@ export class ReportsService {
         ),
       ),
     ];
-    const costPurchases =
+    const costPurchasesPromise: Promise<
+      Prisma.PurchaseGetPayload<{ include: { lines: true } }>[]
+    > =
       sales.length === 0
-        ? []
-        : await this.prisma.purchase.findMany({
+        ? Promise.resolve([])
+        : this.prisma.purchase.findMany({
             where: {
               businessId,
               date: { lte: period.to },
@@ -100,6 +175,32 @@ export class ReportsService {
             include: { lines: true },
             orderBy: [{ date: "asc" }, { createdAt: "asc" }],
           });
+
+    const [
+      costPurchases,
+      products,
+      openingRows,
+      closingRows,
+      invoiceTotals,
+      invoicePaid,
+      supplierDueRows,
+      customerCash,
+      supplierCash,
+      lineWeights,
+      chargeTotals,
+    ] = await Promise.all([
+      costPurchasesPromise,
+      productsPromise,
+      openingRowsPromise,
+      closingRowsPromise,
+      invoiceTotalsPromise,
+      invoicePaidPromise,
+      supplierDueRowsPromise,
+      customerCashPromise,
+      supplierCashPromise,
+      lineWeightsPromise,
+      chargeTotalsPromise,
+    ]);
 
     // ---- landed cost per unit keyed by source purchase + product ----
     const unitCostByPurchaseProduct = new Map<string, number>();
@@ -167,31 +268,6 @@ export class ReportsService {
     );
 
     // ---- stock flow (per product, own unit) from the inventory ledger ----
-    const products = await this.prisma.product.findMany({
-      where: { businessId, ...(productId ? { id: productId } : {}) },
-      select: { id: true, name: true, unit: true },
-    });
-    const productFilter = productId
-      ? Prisma.sql`AND "productId" = ${productId}`
-      : Prisma.empty;
-    const [openingRows, closingRows] = await Promise.all([
-      this.prisma.$queryRaw<{ productId: string; qty: string }[]>`
-        SELECT "productId", COALESCE(SUM(qty), 0)::text AS qty
-        FROM "InventoryTransaction"
-        WHERE "businessId" = ${businessId}
-          AND date < ${period.from}
-          ${productFilter}
-        GROUP BY "productId"
-      `,
-      this.prisma.$queryRaw<{ productId: string; qty: string }[]>`
-        SELECT "productId", COALESCE(SUM(qty), 0)::text AS qty
-        FROM "InventoryTransaction"
-        WHERE "businessId" = ${businessId}
-          AND date <= ${period.to}
-          ${productFilter}
-        GROUP BY "productId"
-      `,
-    ]);
     const openingBy = new Map(openingRows.map((r) => [r.productId, Number(r.qty)]));
     const closingBy = new Map(closingRows.map((r) => [r.productId, Number(r.qty)]));
     const stock = products.map((p) => ({
@@ -203,30 +279,6 @@ export class ReportsService {
     }));
 
     // ---- dues (balances are derived, never stored — §27) ----
-    const [invoiceTotals, invoicePaid, supplierDueRows] = await Promise.all([
-      this.prisma.invoice.aggregate({
-        where: { businessId },
-        _sum: { total: true },
-      }),
-      this.prisma.invoice.aggregate({
-        where: { businessId },
-        _sum: { paid: true },
-      }),
-      this.prisma.$queryRaw<{ due: string }[]>`
-        SELECT COALESCE(SUM(
-          GREATEST(
-            0,
-            COALESCE((
-              SELECT SUM(pl."qty" * pl."rate")
-              FROM "PurchaseLine" pl
-              WHERE pl."purchaseId" = p."id"
-            ), 0) - p."paid"
-          )
-        ), 0)::text AS due
-        FROM "Purchase" p
-        WHERE p."businessId" = ${businessId}
-      `,
-    ]);
     const customerDue = Math.max(
       0,
       Number(invoiceTotals._sum.total ?? 0) - Number(invoicePaid._sum.paid ?? 0),
@@ -234,53 +286,12 @@ export class ReportsService {
     const supplierDue = Number(supplierDueRows[0]?.due ?? 0);
 
     // ---- cash ----
-    const [customerCash, supplierCash] = await Promise.all([
-      this.prisma.payment.aggregate({
-        where: {
-          businessId,
-          type: "CUSTOMER",
-          date: { gte: period.from, lte: period.to },
-        },
-        _sum: { amount: true },
-      }),
-      this.prisma.payment.aggregate({
-        where: {
-          businessId,
-          type: "SUPPLIER",
-          date: { gte: period.from, lte: period.to },
-        },
-        _sum: { amount: true },
-      }),
-    ]);
     const cashReceived = Number(customerCash._sum.amount ?? 0);
     const cashPaid = Number(supplierCash._sum.amount ?? 0);
     const expensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const cashInHand = cashReceived - cashPaid - expensesTotal;
 
     // ---- business value = remaining stock valuation + customer due + cash ----
-    const [lineWeights, chargeTotals] = await Promise.all([
-      this.prisma.$queryRaw<{ productId: string; qty: string; goods: string }[]>`
-        SELECT pl."productId",
-          COALESCE(SUM(pl.qty), 0)::text AS qty,
-          COALESCE(SUM(pl.qty * pl.rate), 0)::text AS goods
-        FROM "PurchaseLine" pl
-        INNER JOIN "Purchase" p ON p.id = pl."purchaseId"
-        WHERE p."businessId" = ${businessId}
-        GROUP BY pl."productId"
-      `,
-      this.prisma.$queryRaw<{ totalCharges: string; totalGoods: string }[]>`
-        SELECT
-          COALESCE(SUM(p.transport + p.loading + p.labour + p."otherCost"), 0)::text AS "totalCharges",
-          COALESCE((
-            SELECT SUM(pl.qty * pl.rate)
-            FROM "PurchaseLine" pl
-            INNER JOIN "Purchase" p2 ON p2.id = pl."purchaseId"
-            WHERE p2."businessId" = ${businessId}
-          ), 0)::text AS "totalGoods"
-        FROM "Purchase" p
-        WHERE p."businessId" = ${businessId}
-      `,
-    ]);
     const weight = new Map(
       lineWeights.map((row) => [
         row.productId,

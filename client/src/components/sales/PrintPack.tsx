@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saleGrandTotal } from "@/lib/store";
 import type { Sale } from "@/lib/types";
+import { useBusinessHref } from "@/components/BusinessLink";
 import { EmptyState } from "@/components/ui";
 import PeriodInvoice from "@/components/sales/PeriodInvoice";
 import { fmtMoney, MONTHS, periodInvoiceNo } from "@/lib/format";
@@ -16,6 +17,7 @@ export default function PrintPack({
   salePaid: (saleId: string) => number;
 }) {
   const router = useRouter();
+  const businessHref = useBusinessHref();
   const currentYear = String(new Date().getFullYear());
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, "0");
   const years = useMemo(() => {
@@ -63,10 +65,11 @@ export default function PrintPack({
 
   const invoiceNo = period === "year" ? periodInvoiceNo(year) : periodInvoiceNo(year, month);
 
-  const printHref =
+  const printHref = businessHref(
     period === "year"
       ? `/sales/print?year=${year}`
-      : `/sales/print?year=${year}&month=${month}`;
+      : `/sales/print?year=${year}&month=${month}`,
+  );
 
   const openPrint = () => {
     if (filtered.length === 0) return;

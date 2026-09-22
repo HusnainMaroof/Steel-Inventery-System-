@@ -16,8 +16,7 @@ export class SuppliersService {
 
   async list(businessId: string, skip: number, take: number, search?: string) {
     const where: Prisma.SupplierWhereInput = {
-      businessId,
-      active: true,
+      ...this.baseWhere(businessId),
       ...(search
         ? {
             OR: [
@@ -38,6 +37,19 @@ export class SuppliersService {
       this.prisma.supplier.count({ where }),
     ]);
     return [items, total] as const;
+  }
+
+  /** Bulk fetch for /ledger/transactions — one findMany, no count. */
+  listAll(businessId: string, take: number) {
+    return this.prisma.supplier.findMany({
+      where: this.baseWhere(businessId),
+      orderBy: { createdAt: "asc" },
+      take,
+    });
+  }
+
+  private baseWhere(businessId: string): Prisma.SupplierWhereInput {
+    return { businessId, active: true };
   }
 
   async byId(businessId: string, id: string) {

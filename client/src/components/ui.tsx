@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import gsap from "gsap";
 
@@ -118,7 +118,8 @@ export function CustomSelect({
   );
 }
 
-/* GSAP count-up number */
+/* GSAP count-up number — tweens from the previous value so data updates
+   never re-animate from zero (first mount animates 0 → value). */
 export function CountUp({
   value,
   prefix = "",
@@ -131,6 +132,7 @@ export function CountUp({
   compact?: boolean;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const prevRef = useRef(0);
   const fmt = (n: number) =>
     compact
       ? Math.abs(n) >= 1e6
@@ -140,10 +142,13 @@ export function CountUp({
           : Math.round(n).toLocaleString()
       : Math.round(n).toLocaleString("en-US");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const obj = { n: 0 };
+    const from = prevRef.current;
+    prevRef.current = value;
+    if (from === value) return;
+    const obj = { n: from };
     const tween = gsap.to(obj, {
       n: value,
       duration: 1,
@@ -157,7 +162,7 @@ export function CountUp({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, prefix, suffix, compact]);
-  return <span ref={ref}>{prefix + fmt(0) + suffix}</span>;
+  return <span ref={ref}>{prefix + fmt(value) + suffix}</span>;
 }
 
 /* Page enter animation */

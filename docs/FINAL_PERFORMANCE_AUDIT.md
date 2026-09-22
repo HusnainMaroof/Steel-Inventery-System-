@@ -1,6 +1,14 @@
 # Final Performance Audit
 
-**Date:** 2026-09-18  
+**Date:** 2026-09-18 (measured numbers below are from this run)  
+**Current note (2026-09-22):** The bulk `GET /ledger/transactions` path
+described here is still what `StoreProvider` uses — now one parallel
+`findMany` per collection (no pagination counts). JWT validation and
+bootstrap catalogue are served from in-process caches invalidated on the
+relevant writes. Measured p50 after the latency pass: bootstrap 108ms,
+transactions 864ms, customers 413ms (SCALE≈200, dev machine → Neon
+ap-southeast-1). See [ARCHITECTURE.md](ARCHITECTURE.md).
+
 **Environment:** NestJS 11 + Prisma 6 + Neon PostgreSQL (ap-southeast-1 pooler)  
 **Test dataset:** SCALE≈200 (`cmu6jnet80000ldqoq3eqmqmi`) — 201 customers, 200 sales, 200 purchases, 1000 payments  
 **Method:** `node scripts/final-performance-audit.mjs` (10 warm iterations, HTTP + direct Prisma profiling)

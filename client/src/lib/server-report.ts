@@ -70,7 +70,12 @@ function serverModeOf(mode: ReportMode, from?: string, to?: string): {
   return { mode: "month", month: new Date().getMonth() + 1 };
 }
 
-export async function fetchServerProfitReport(
+/** In-flight dedupe: identical concurrent report requests share one promise
+ * (React Strict Mode remounts + the store's two dataVersion bumps used to
+ * fire the same heavy report query up to four times at once). */
+const inFlightReports = new Map<string, Promise<ApiProfitReport>>();
+
+export function fetchServerProfitReport(
   params: ReportFetchParams,
 ): Promise<ApiProfitReport> {
   const mapped = serverModeOf(params.mode, params.from, params.to);
@@ -81,7 +86,14 @@ export async function fetchServerProfitReport(
   if (mapped.from) query.set("from", mapped.from);
   if (mapped.to) query.set("to", mapped.to);
   if (params.productId) query.set("productId", params.productId);
-  return apiFetch<ApiProfitReport>(`/reports/profit?${query.toString()}`);
+  const key = query.toString();
+  const existing = inFlightReports.get(key);
+  if (existing) return existing;
+  const request = apiFetch<ApiProfitReport>(`/reports/profit?${key}`).finally(() => {
+    inFlightReports.delete(key);
+  });
+  inFlightReports.set(key, request);
+  return request;
 }
 
 /**

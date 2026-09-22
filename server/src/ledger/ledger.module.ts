@@ -7,7 +7,7 @@ import { PurchasesModule } from "../purchases/purchases.module";
 import { SalesModule } from "../sales/sales.module";
 import { StockChecksModule } from "../stock-checks/stock-checks.module";
 import { SuppliersModule } from "../suppliers/suppliers.module";
-import { DashboardSummaryService } from "./dashboard-summary.service";
+import { CatalogueCacheModule } from "./catalogue-cache.module";
 import { LedgerController } from "./ledger.controller";
 import { LedgerService } from "./ledger.service";
 import { LedgerTransactionsService } from "./ledger-transactions.service";
@@ -16,6 +16,7 @@ import { SettingsController } from "./settings.controller";
 @Module({
   imports: [
     PrismaModule,
+    CatalogueCacheModule,
     CustomersModule,
     SuppliersModule,
     PurchasesModule,
@@ -25,6 +26,6 @@ import { SettingsController } from "./settings.controller";
     StockChecksModule,
   ],
   controllers: [LedgerController, SettingsController],
-  providers: [LedgerService, DashboardSummaryService, LedgerTransactionsService],
+  providers: [LedgerService, LedgerTransactionsService],
 })
 export class LedgerModule {}

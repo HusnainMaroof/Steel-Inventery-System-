@@ -5,6 +5,7 @@ import { usePaginatedSales } from "@/hooks/use-paginated-sales";
 import { useStore } from "@/lib/store";
 import { fmtMoney } from "@/lib/format";
 import { BusyButton, Page, PageTitle, Modal, useToggle } from "@/components/ui";
+import { useBusinessHref } from "@/components/BusinessLink";
 import SaleDetailModal from "@/components/SaleDetailModal";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import SalesTable from "@/components/sales/SalesTable";
@@ -20,6 +21,7 @@ export default function SalesPage() {
   const activeCustomers = customers.filter((customer) => customer.active !== false);
   const api = useSaleDraft();
   const { prefs } = useUiPreferences();
+  const businessHref = useBusinessHref();
   const [viewId, setViewId] = useState<string | null>(null);
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
@@ -196,7 +198,10 @@ export default function SalesPage() {
             type="button"
             onClick={() => {
               setTab(key);
-              const next = key === "print" ? "/sales?tab=print" : "/sales";
+              // Keep the business slug in the URL — a bare /sales would make
+              // the router treat "sales" as an unknown tenant and bounce to
+              // the dashboard.
+              const next = businessHref(key === "print" ? "/sales?tab=print" : "/sales");
               window.history.replaceState(null, "", next);
             }}
             className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors ${

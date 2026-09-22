@@ -14,6 +14,7 @@ describe("UsersService owner deletion", () => {
   const service = new UsersService(
     prisma as unknown as PrismaService,
     {} as AuthService,
+    { invalidateBusiness: jest.fn() } as never,
     { applyTemplates: jest.fn() } as never,
     { getById: jest.fn(), getDefaultPlan: jest.fn() } as never,
     audit as never,

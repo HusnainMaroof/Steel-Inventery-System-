@@ -6,7 +6,7 @@ import { LIMITS } from "../common/security/limits";
 import { sanitizeUiSettings } from "../common/security/sanitize-settings";
 import { PrismaService } from "../prisma/prisma.service";
 import { filterBootstrapForStaff } from "./bootstrap-access";
-import { DashboardSummaryService } from "./dashboard-summary.service";
+import { CatalogueCache, type BootstrapCatalogue } from "./catalogue-cache";
 
 const staffSelect = {
   id: true,
@@ -22,66 +22,20 @@ const staffSelect = {
 export class LedgerService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly dashboard: DashboardSummaryService,
     private readonly audit: AuditService,
+    private readonly catalogueCache: CatalogueCache,
   ) {}
 
   /**
-   * Slim bootstrap — catalogue configuration, settings, staff, dashboard summary.
-   * Transaction collections load via paginated list endpoints.
+   * Slim bootstrap — catalogue configuration, settings, staff, counts.
+   * Catalogue + settings come from an in-process cache that every
+   * catalogue/settings write invalidates synchronously. Counts and staff
+   * are always live. Transaction collections load via /ledger/transactions.
    */
   async bootstrap(businessId: string, role?: Role, staffAccess?: StaffPage[]) {
-    const [
-      products,
-      productItems,
-      categories,
-      attributeDefs,
-      variants,
-      warehouses,
-      counts,
-    ] = await this.prisma.$transaction([
-      this.prisma.product.findMany({ where: { businessId }, orderBy: { createdAt: "asc" } }),
-      this.prisma.productItem.findMany({ where: { businessId }, orderBy: { name: "asc" } }),
-      this.prisma.productCategory.findMany({
-        where: { businessId },
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      }),
-      this.prisma.attributeDef.findMany({
-        where: { businessId },
-        include: { options: { orderBy: [{ sortOrder: "asc" }, { label: "asc" }] } },
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      }),
-      this.prisma.variant.findMany({ where: { businessId }, orderBy: { createdAt: "asc" } }),
-      this.prisma.warehouse.findMany({
-        where: { businessId },
-        include: { locations: { orderBy: { name: "asc" } } },
-        orderBy: { name: "asc" },
-      }),
-      this.prisma.$queryRaw<
-        {
-          customers: bigint;
-          suppliers: bigint;
-          purchases: bigint;
-          sales: bigint;
-          payments: bigint;
-          expenses: bigint;
-          stockChecks: bigint;
-        }[]
-      >`
-        SELECT
-          (SELECT COUNT(*) FROM "Customer" WHERE "businessId" = ${businessId}) AS customers,
-          (SELECT COUNT(*) FROM "Supplier" WHERE "businessId" = ${businessId}) AS suppliers,
-          (SELECT COUNT(*) FROM "Purchase" WHERE "businessId" = ${businessId}) AS purchases,
-          (SELECT COUNT(*) FROM "Sale" WHERE "businessId" = ${businessId}) AS sales,
-          (SELECT COUNT(*) FROM "Payment" WHERE "businessId" = ${businessId}) AS payments,
-          (SELECT COUNT(*) FROM "Expense" WHERE "businessId" = ${businessId}) AS expenses,
-          (SELECT COUNT(*) FROM "StockCheck" WHERE "businessId" = ${businessId}) AS "stockChecks"
-      `,
-    ]);
-
-    const dashboardSummary = await this.dashboard.summarize(businessId);
-
-    const [staff, business] = await Promise.all([
+    const [catalogue, countRows, staff] = await Promise.all([
+      this.loadCatalogue(businessId),
+      this.loadCounts(businessId),
       role === "ADMIN"
         ? this.prisma.user.findMany({
             where: { businessId, role: "SUBADMIN", active: true },
@@ -90,24 +44,18 @@ export class LedgerService {
             take: LIMITS.MAX_PAGE_SIZE,
           })
         : Promise.resolve([]),
-      this.prisma.business.findUniqueOrThrow({
-        where: { id: businessId },
-        select: { settings: true },
-      }),
     ]);
 
-    const row = counts[0];
     const payload = {
       version: 3,
-      dashboardSummary,
       counts: {
-        customers: Number(row?.customers ?? 0),
-        suppliers: Number(row?.suppliers ?? 0),
-        purchases: Number(row?.purchases ?? 0),
-        sales: Number(row?.sales ?? 0),
-        payments: Number(row?.payments ?? 0),
-        expenses: Number(row?.expenses ?? 0),
-        stockChecks: Number(row?.stockChecks ?? 0),
+        customers: Number(countRows.customers ?? 0),
+        suppliers: Number(countRows.suppliers ?? 0),
+        purchases: Number(countRows.purchases ?? 0),
+        sales: Number(countRows.sales ?? 0),
+        payments: Number(countRows.payments ?? 0),
+        expenses: Number(countRows.expenses ?? 0),
+        stockChecks: Number(countRows.stockChecks ?? 0),
       },
       suppliers: [] as unknown[],
       customers: [] as unknown[],
@@ -116,22 +64,98 @@ export class LedgerService {
       payments: [] as unknown[],
       expenses: [] as unknown[],
       stockChecks: [] as unknown[],
-      products,
-      productItems,
-      categories,
-      attributeDefs: attributeDefs.map(({ options: _options, ...def }) => def),
-      attributeOptions: attributeDefs.flatMap((def) => def.options),
-      variants,
-      warehouses: warehouses.map(({ locations: _locations, ...warehouse }) => warehouse),
-      locations: warehouses.flatMap((warehouse) => warehouse.locations),
+      products: catalogue.products,
+      productItems: catalogue.productItems,
+      categories: catalogue.categories,
+      attributeDefs: catalogue.attributeDefs.map(({ options: _options, ...def }) => def),
+      attributeOptions: catalogue.attributeDefs.flatMap((def) => def.options),
+      variants: catalogue.variants,
+      warehouses: catalogue.warehouses.map(({ locations: _locations, ...warehouse }) => warehouse),
+      locations: catalogue.warehouses.flatMap((warehouse) => warehouse.locations),
       staff,
-      settings: business.settings ?? {},
+      settings: catalogue.settings,
     };
 
     if (role === "SUBADMIN") {
       return filterBootstrapForStaff(payload as never, staffAccess);
     }
     return payload;
+  }
+
+  private async loadCatalogue(businessId: string): Promise<BootstrapCatalogue> {
+    const cached = this.catalogueCache.get(businessId);
+    if (cached) return cached;
+
+    const [products, productItems, categories, attributeDefs, variants, warehouses, business] =
+      await this.prisma.$transaction([
+        this.prisma.product.findMany({ where: { businessId }, orderBy: { createdAt: "asc" } }),
+        this.prisma.productItem.findMany({ where: { businessId }, orderBy: { name: "asc" } }),
+        this.prisma.productCategory.findMany({
+          where: { businessId },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        }),
+        this.prisma.attributeDef.findMany({
+          where: { businessId },
+          include: { options: { orderBy: [{ sortOrder: "asc" }, { label: "asc" }] } },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        }),
+        this.prisma.variant.findMany({ where: { businessId }, orderBy: { createdAt: "asc" } }),
+        this.prisma.warehouse.findMany({
+          where: { businessId },
+          include: { locations: { orderBy: { name: "asc" } } },
+          orderBy: { name: "asc" },
+        }),
+        this.prisma.business.findUniqueOrThrow({
+          where: { id: businessId },
+          select: { settings: true },
+        }),
+      ]);
+
+    const data: BootstrapCatalogue = {
+      products,
+      productItems,
+      categories,
+      attributeDefs: attributeDefs as BootstrapCatalogue["attributeDefs"],
+      variants,
+      warehouses: warehouses as BootstrapCatalogue["warehouses"],
+      settings: (business.settings ?? {}) as Record<string, unknown>,
+    };
+    this.catalogueCache.set(businessId, data);
+    return data;
+  }
+
+  private async loadCounts(businessId: string) {
+    const [row] = await this.prisma.$queryRaw<
+      {
+        customers: bigint;
+        suppliers: bigint;
+        purchases: bigint;
+        sales: bigint;
+        payments: bigint;
+        expenses: bigint;
+        stockChecks: bigint;
+      }[]
+    >`
+      SELECT
+        (SELECT COUNT(*) FROM "Customer" WHERE "businessId" = ${businessId}) AS customers,
+        (SELECT COUNT(*) FROM "Supplier" WHERE "businessId" = ${businessId}) AS suppliers,
+        (SELECT COUNT(*) FROM "Purchase" WHERE "businessId" = ${businessId}) AS purchases,
+        (SELECT COUNT(*) FROM "Sale" WHERE "businessId" = ${businessId}) AS sales,
+        (SELECT COUNT(*) FROM "Payment" WHERE "businessId" = ${businessId}) AS payments,
+        (SELECT COUNT(*) FROM "Expense" WHERE "businessId" = ${businessId}) AS expenses,
+        (SELECT COUNT(*) FROM "StockCheck" WHERE "businessId" = ${businessId}) AS "stockChecks"
+    `;
+    return (
+      row ?? {
+        customers: 0 as const,
+        suppliers: 0 as const,
+        purchases: 0 as const,
+        sales: 0 as const,
+        payments: 0 as const,
+        expenses: 0 as const,
+        stockChecks: 0 as const,
+      }
+    );
   }
 
   async getPreferences(businessId: string) {
@@ -158,6 +182,7 @@ export class LedgerService {
       data: { settings },
       select: { settings: true },
     });
+    this.catalogueCache.invalidate(businessId);
     await this.audit.log({
       businessId,
       actorId: actorId ?? null,

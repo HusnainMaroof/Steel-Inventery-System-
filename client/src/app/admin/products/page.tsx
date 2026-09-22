@@ -11,6 +11,26 @@ import { useAuth } from "@/lib/auth";
 import { EmptyState, Page } from "@/components/ui";
 import { invalidateAdminCache } from "@/lib/admin-cache";
 
+type TemplatesFullResult = Awaited<ReturnType<typeof listProductTemplatesFullAction>>;
+
+/**
+ * Module-level in-flight dedupe. Next.js dev remounts this page (Strict Mode
+ * double-mount) and each fresh instance re-runs its load effect with brand
+ * new refs — only module scope survives remounts. `force` bypasses the
+ * dedupe for explicit reloads.
+ */
+let templatesFullInFlight: Promise<TemplatesFullResult> | null = null;
+
+function requestTemplatesFull(force = false): Promise<TemplatesFullResult> {
+  if (force) templatesFullInFlight = null;
+  if (!templatesFullInFlight) {
+    templatesFullInFlight = listProductTemplatesFullAction().finally(() => {
+      templatesFullInFlight = null;
+    });
+  }
+  return templatesFullInFlight;
+}
+
 export default function AdminProductsPage() {
   const { user, ready } = useAuth();
   const [templates, setTemplates] = useState<ProductTemplateFull[]>([]);
@@ -19,10 +39,10 @@ export default function AdminProductsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     setLoadError(null);
-    const result = await listProductTemplatesFullAction();
+    const result = await requestTemplatesFull(force);
     setLoading(false);
     if (!result.ok) {
       setLoadError(result.error);
@@ -39,7 +59,7 @@ export default function AdminProductsPage() {
 
   const reload = async () => {
     invalidateAdminCache();
-    await load();
+    await load(true);
   };
 
   if (ready && user?.role !== "SUPERADMIN") return null;

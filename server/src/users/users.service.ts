@@ -10,6 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { SubscriptionPlansService } from "../subscription/subscription-plans.service";
 import { isSubscriptionActive, subscriptionWindowForPlan } from "../subscription/subscription.util";
 import { AuthService } from "../auth/auth.service";
+import { TokenVersionService } from "../auth/token-version.service";
 import { AuditService } from "../common/audit/audit.service";
 import { purgeBusiness } from "../common/purge-business";
 import { uniqueBusinessSlug } from "../common/slug";
@@ -67,6 +68,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly tokenVersions: TokenVersionService,
     private readonly templateProvision: TemplateProvisionService,
     private readonly subscriptionPlans: SubscriptionPlansService,
     private readonly audit: AuditService,
@@ -293,7 +295,6 @@ export class UsersService {
     const business = await this.prisma.business.findUniqueOrThrow({
       where: { id: user.businessId },
     });
-
     const currentPlan = business.subscriptionPlanId
       ? await this.subscriptionPlans.getById(business.subscriptionPlanId)
       : await this.subscriptionPlans.getDefaultPlan();
@@ -338,6 +339,9 @@ export class UsersService {
         subscriptionEndsAt: endsAt,
       },
     });
+    // Cached JWT entries carry subscription state — drop them so the new
+    // plan/status is enforced on the next request, not after the TTL.
+    this.tokenVersions.invalidateBusiness(user.businessId);
 
     const updated = await this.prisma.user.findUniqueOrThrow({
       where: { id: ownerId },
@@ -371,6 +375,9 @@ export class UsersService {
     await this.prisma.$transaction(async (tx) => {
       await purgeBusiness(tx, user.businessId);
     });
+    // The purge hard-deletes logins without a tokenVersion bump — drop the
+    // business's cached JWT entries so deleted tokens die with the account.
+    this.tokenVersions.invalidateBusiness(user.businessId);
   }
 
   async listStaff(businessId: string, skip: number, take: number) {

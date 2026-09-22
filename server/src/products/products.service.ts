@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { CatalogueCache } from "../ledger/catalogue-cache";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
@@ -16,10 +17,13 @@ import {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly catalogue: CatalogueCache,
+  ) {}
 
-  create(businessId: string, dto: CreateProductDto) {
-    return this.prisma.product.create({
+  async create(businessId: string, dto: CreateProductDto) {
+    const product = await this.prisma.product.create({
       data: {
         businessId,
         name: dto.name,
@@ -29,6 +33,8 @@ export class ProductsService {
         specLabel: dto.specLabel,
       },
     });
+    this.catalogue.invalidate(businessId);
+    return product;
   }
 
   async list(businessId: string, skip: number, take: number) {
@@ -64,7 +70,7 @@ export class ProductsService {
 
   async update(businessId: string, id: string, dto: UpdateProductDto) {
     await this.assertExists(businessId, id);
-    return this.prisma.product.update({
+    const product = await this.prisma.product.update({
       where: { id },
       data: {
         name: dto.name,
@@ -75,6 +81,8 @@ export class ProductsService {
         active: dto.active,
       },
     });
+    this.catalogue.invalidate(businessId);
+    return product;
   }
 
   async remove(businessId: string, id: string) {
@@ -92,7 +100,11 @@ export class ProductsService {
       },
       select: { id: true },
     });
-    if (used) return this.prisma.product.update({ where: { id }, data: { active: false } });
+    if (used) {
+      const deactivated = await this.prisma.product.update({ where: { id }, data: { active: false } });
+      this.catalogue.invalidate(businessId);
+      return deactivated;
+    }
     await this.prisma.$transaction([
       this.prisma.variant.deleteMany({ where: { businessId, productId: id } }),
       this.prisma.attributeDef.deleteMany({ where: { businessId, productId: id } }),
@@ -100,19 +112,24 @@ export class ProductsService {
       this.prisma.productCategory.deleteMany({ where: { businessId, productId: id } }),
       this.prisma.product.delete({ where: { id } }),
     ]);
+    this.catalogue.invalidate(businessId);
     return { deleted: true, productId: id };
   }
 
   async createCategory(businessId: string, productId: string, dto: CreateCategoryDto) {
     await this.assertExists(businessId, productId);
-    return this.prisma.productCategory.create({
+    const category = await this.prisma.productCategory.create({
       data: { businessId, productId, name: dto.name, description: dto.description },
     });
+    this.catalogue.invalidate(businessId);
+    return category;
   }
 
   async updateCategory(businessId: string, id: string, dto: UpdateCategoryDto) {
     await this.assertCategory(businessId, id);
-    return this.prisma.productCategory.update({ where: { id }, data: dto });
+    const category = await this.prisma.productCategory.update({ where: { id }, data: dto });
+    this.catalogue.invalidate(businessId);
+    return category;
   }
 
   async removeCategory(businessId: string, id: string) {
@@ -122,12 +139,15 @@ export class ProductsService {
       this.prisma.saleLine.count({ where: { sale: { businessId }, categoryId: id } }),
     ]);
     if (purchases || sales) {
-      return this.prisma.productCategory.update({ where: { id }, data: { active: false } });
+      const deactivated = await this.prisma.productCategory.update({ where: { id }, data: { active: false } });
+      this.catalogue.invalidate(businessId);
+      return deactivated;
     }
     await this.prisma.$transaction([
       this.prisma.variant.deleteMany({ where: { businessId, categoryId: id } }),
       this.prisma.productCategory.delete({ where: { id } }),
     ]);
+    this.catalogue.invalidate(businessId);
     return { deleted: true, categoryId: id };
   }
 
@@ -139,7 +159,7 @@ export class ProductsService {
         throw new BadRequestException("Category does not belong to product");
       }
     }
-    return this.prisma.attributeDef.create({
+    const attribute = await this.prisma.attributeDef.create({
       data: {
         businessId,
         productId,
@@ -153,11 +173,15 @@ export class ProductsService {
         active: dto.active ?? true,
       },
     });
+    this.catalogue.invalidate(businessId);
+    return attribute;
   }
 
   async updateAttribute(businessId: string, id: string, dto: UpdateAttributeDto) {
     await this.assertAttribute(businessId, id);
-    return this.prisma.attributeDef.update({ where: { id }, data: dto });
+    const attribute = await this.prisma.attributeDef.update({ where: { id }, data: dto });
+    this.catalogue.invalidate(businessId);
+    return attribute;
   }
 
   async removeAttribute(businessId: string, id: string) {
@@ -167,9 +191,12 @@ export class ProductsService {
       select: { attributes: true },
     });
     if (variants.some((v) => Object.prototype.hasOwnProperty.call(v.attributes as object, def.key))) {
-      return this.prisma.attributeDef.update({ where: { id }, data: { active: false } });
+      const deactivated = await this.prisma.attributeDef.update({ where: { id }, data: { active: false } });
+      this.catalogue.invalidate(businessId);
+      return deactivated;
     }
     await this.prisma.attributeDef.delete({ where: { id } });
+    this.catalogue.invalidate(businessId);
     return { deleted: true, attributeDefId: id };
   }
 
@@ -186,12 +213,13 @@ export class ProductsService {
         this.prisma.attributeDef.update({ where: { id }, data: { sortOrder } }),
       ),
     );
+    this.catalogue.invalidate(businessId);
     return { reordered: dto.ids.length };
   }
 
   async createOption(businessId: string, attributeDefId: string, dto: CreateOptionDto) {
     await this.assertAttribute(businessId, attributeDefId);
-    return this.prisma.attributeOption.create({
+    const option = await this.prisma.attributeOption.create({
       data: {
         attributeDefId,
         label: dto.label,
@@ -200,11 +228,15 @@ export class ProductsService {
         active: dto.active ?? true,
       },
     });
+    this.catalogue.invalidate(businessId);
+    return option;
   }
 
   async updateOption(businessId: string, id: string, dto: UpdateOptionDto) {
     await this.assertOption(businessId, id);
-    return this.prisma.attributeOption.update({ where: { id }, data: dto });
+    const option = await this.prisma.attributeOption.update({ where: { id }, data: dto });
+    this.catalogue.invalidate(businessId);
+    return option;
   }
 
   async removeOption(businessId: string, id: string) {
@@ -219,9 +251,12 @@ export class ProductsService {
           (variant.attributes as Record<string, unknown>)[option.def.key] === option.label,
       )
     ) {
-      return this.prisma.attributeOption.update({ where: { id }, data: { active: false } });
+      const deactivated = await this.prisma.attributeOption.update({ where: { id }, data: { active: false } });
+      this.catalogue.invalidate(businessId);
+      return deactivated;
     }
     await this.prisma.attributeOption.delete({ where: { id } });
+    this.catalogue.invalidate(businessId);
     return { deleted: true, optionId: id };
   }
 
@@ -238,6 +273,7 @@ export class ProductsService {
         this.prisma.attributeOption.update({ where: { id }, data: { sortOrder } }),
       ),
     );
+    this.catalogue.invalidate(businessId);
     return { reordered: dto.ids.length };
   }
 
@@ -272,7 +308,7 @@ export class ProductsService {
     const shortName = dto.shortName?.trim() || Object.values(attributes).join(" · ");
 
     try {
-      return await this.prisma.variant.create({
+      const variant = await this.prisma.variant.create({
         data: {
           businessId,
           productId,
@@ -283,6 +319,8 @@ export class ProductsService {
           shortName,
         },
       });
+      this.catalogue.invalidate(businessId);
+      return variant;
     } catch {
       throw new ConflictException("This variant already exists");
     }
@@ -290,7 +328,9 @@ export class ProductsService {
 
   async updateVariant(businessId: string, id: string, dto: UpdateVariantDto) {
     await this.assertVariant(businessId, id);
-    return this.prisma.variant.update({ where: { id }, data: dto });
+    const variant = await this.prisma.variant.update({ where: { id }, data: dto });
+    this.catalogue.invalidate(businessId);
+    return variant;
   }
 
   async removeVariant(businessId: string, id: string) {
@@ -300,9 +340,12 @@ export class ProductsService {
       this.prisma.saleLine.count({ where: { sale: { businessId }, variantId: id } }),
     ]);
     if (purchases || sales) {
-      return this.prisma.variant.update({ where: { id }, data: { active: false } });
+      const deactivated = await this.prisma.variant.update({ where: { id }, data: { active: false } });
+      this.catalogue.invalidate(businessId);
+      return deactivated;
     }
     await this.prisma.variant.delete({ where: { id } });
+    this.catalogue.invalidate(businessId);
     return { deleted: true, variantId: id };
   }
 

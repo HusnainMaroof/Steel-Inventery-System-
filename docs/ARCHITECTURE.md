@@ -1,342 +1,489 @@
 # Tradex architecture
 
-Tradex is a multi-tenant depot ledger built with Next.js 16, NestJS 11,
-Prisma, and PostgreSQL. Purchases add stock, sales remove stock, and the
-dashboard, invoices, dues, and reports are derived from the same persisted
-records.
+Tradex is a multi-tenant depot ledger. Purchases add stock, sales remove
+stock, and the dashboard, invoices, dues, and reports are derived from the
+same persisted records. There is no JSON ledger snapshot and no runtime
+demo seed.
+
+**Stack:** Next.js 16 (App Router, React 19) · NestJS 11 (Fastify) · Prisma 6 ·
+PostgreSQL (Neon). One Nest app, one database. Controllers stay thin;
+business logic lives in services. Money is Prisma `Decimal`, never floats.
 
 ## Repository layout
 
 ```text
-client/                 # Next.js 16 UI (App Router)
-  src/app/              # Pages, layouts, Server Actions, BFF route handlers
-  src/app/api/          # /api/tradex/* BFF proxy, /api/auth/*, /api/health
-  src/app/[businessSlug]/  # Tenant pages (dashboard, sales, …)
-  src/app/admin/        # Super Admin platform panel
-  src/components/       # Shell, StoreGate, sales/invoices/reports UI
-  src/lib/                # Store, money math, backend adapters, auth
-  src/hooks/              # Paginated sales, platform admin data
-  src/proxy.ts            # Cookie-level route gate (Next.js 16 proxy convention)
+client/                         # Next.js 16 UI
+  src/app/                      # Pages, layouts, Server Actions, BFF
+    layout.tsx                  # AuthProvider → StoreProvider → Shell
+    page.tsx                    # Public marketing home
+    login/ offline/ 404/
+    admin/                      # Super Admin panel
+    [businessSlug]/             # Tenant app (StoreGate layout)
+    actions/                    # login, owners, staff, platform, media
+    api/health                  # Browser health probe
+    api/auth/{me,status}        # Session user + registration flag
+    api/tradex/[...path]        # Catch-all BFF → Nest /api/v1
+  src/components/               # Shell, StoreGate, feature UI
+  src/lib/                      # Store, adapters, money, BFF, types
+  src/hooks/                    # Paginated sales, platform admin
+  src/proxy.ts                  # Cookie + known-path gate (Next 16)
 
-server/                 # NestJS + Prisma API (PostgreSQL)
-  src/auth/             # Login, JWT, token invalidation
-  src/ledger/           # Bootstrap, settings, dashboard summary
-  src/products/         # Catalogue (products, categories, attributes, variants)
-  src/warehouses/       # Warehouses and locations
-  src/inventory/        # Stock ledger, lots, movements, adjustments
-  src/purchases/        # Purchase receipts
-  src/sales/            # Sales + invoice creation
-  src/payments/         # Customer/supplier payments (FIFO settlement)
-  src/customers/        # Customers + per-customer ledger
-  src/suppliers/        # Suppliers + payables
-  src/expenses/         # Shop and per-product expenses
-  src/stock-checks/     # Physical stock checks
-  src/reports/          # Profit reports
-  src/users/            # Staff CRUD (owner) + owner CRUD (super admin)
-  src/platform/         # Super-admin overview, templates, subscription plans
-  src/media/            # Cloudinary business-logo upload
-  src/domain/           # Pure money, FIFO, profit, availability logic
-  src/common/           # Guards, rate limits, audit, security limits
-  prisma/               # Schema and migrations
+server/                         # NestJS + Prisma API
+  src/main.ts                   # Fastify, helmet, prefix, versioning
+  src/app.module.ts             # Modular monolith wiring
+  src/auth/                     # Login, JWT, tokenVersion + cache, Super Admin seed
+  src/users/                    # Staff CRUD + Super Admin owners
+  src/ledger/                   # Bootstrap (+ catalogue cache), transactions bulk, settings
+  src/products/                 # Catalogue (categories, attributes, variants)
+  src/warehouses/               # Warehouses and locations
+  src/inventory/                # Derived stock, lots, movements, adjustments
+  src/purchases/                # Purchase receipts + stock in
+  src/sales/                    # Sales + invoice creation + stock out
+  src/payments/                 # Customer/supplier payments (FIFO)
+  src/invoices/                 # Invoice list/read (1:1 with sale)
+  src/customers/                # Customers + per-customer ledger
+  src/suppliers/                # Suppliers + payables
+  src/expenses/                 # Shop and per-product expenses
+  src/stock-checks/             # Physical vs system qty
+  src/reports/                  # Period profit / stock / cash / dues
+  src/platform/                 # Super Admin overview, templates, plans
+  src/media/                    # Cloudinary business-logo upload
+  src/subscription/             # Plan window + active-subscription checks
+  src/domain/                   # Pure money, FIFO, profit, availability
+  src/common/                   # Guards, pagination, audit, locks, limits
+  prisma/                       # Schema and migrations
 
-docs/                   # Architecture, APIs, design, QA checklists
+docs/                           # Architecture, APIs, design, QA
 ```
+
+Types live in `client/src/lib/types.ts` (`client/src/types/` is empty).
 
 ## Runtime
 
 ```text
 Browser
-  -> Next.js pages (/{businessSlug}/… or /admin/…)
-  -> AuthProvider + StoreProvider + Shell
-  -> Next.js /api BFF (httpOnly session cookie)
-  -> Nest /api/v1 (Bearer JWT)
-  -> Prisma / PostgreSQL
+  → Next.js pages (/{businessSlug}/… or /admin/…)
+  → AuthProvider + StoreProvider → ServerStatusMonitor + Shell
+  → Next.js /api BFF (httpOnly session cookie)
+  → Nest /api/v1 (Authorization: Bearer JWT)
+  → Prisma / PostgreSQL
 ```
 
 The browser never receives the Nest access token. Login stores it in the
-Next.js `session` cookie. Browser data requests go through route handlers,
-which attach the token server-side via `tradexFetch`.
+Next.js `session` cookie (httpOnly, `sameSite: strict`, 12 hours, `secure`
+in production). Browser data requests go through `/api/tradex/*`, which
+attaches the token server-side via `tradexFetch`. CSP `connect-src 'self'`
+enforces that — Nest is not called from the browser.
 
-### Two-phase client hydration
+CORS on Nest is locked to `CLIENT_ORIGIN`. Super Admin and staff mutations
+that are not JSON BFF (logo upload, owner CRUD) use Server Actions, which
+also call Nest with the cookie-held JWT.
 
-1. **Bootstrap** — `GET /ledger/bootstrap` returns catalogue configuration,
-   warehouses, staff list, UI settings, record counts, and a pre-aggregated
-   `dashboardSummary`. Transaction collections are empty in this payload.
-2. **Transactions** — `StoreProvider` immediately fetches all paginated list
-   endpoints (`/customers`, `/suppliers`, `/purchases`, `/sales`, `/payments`,
-   `/expenses`, `/stock-checks`) via `fetchAllPages` and sets
-   `transactionsReady`.
+---
 
-`StoreGate` blocks tenant pages until bootstrap succeeds. Screens that need
-full ledger data wait on `transactionsReady` or use page-level pagination
-(e.g. sales list).
+## Frontend architecture
 
-## Accounts and administration
+### Stack
 
-### Roles
+| Piece | Version / notes |
+|-------|-----------------|
+| Next.js | `^16.3.4` App Router |
+| React | `^19.0.0` |
+| Tailwind | `^4` (`@tailwindcss/postcss`) |
+| Tables / motion | `@tanstack/react-table`, `framer-motion`, `gsap` |
+| State | React Context (`StoreProvider`, `AuthProvider`) — no Redux, no React Query |
 
-| Role | Scope |
-|------|-------|
-| `SUPERADMIN` | Platform operator; only `/admin` routes |
-| `ADMIN` | Business owner; full access to their depot |
-| `SUBADMIN` | Staff login; restricted to pages in `User.access[]` |
+`next.config.ts` sets security headers and CSP. There are no rewrites or
+redirects in Next config; tenant redirects live in page files and `Shell`.
 
-One `SUPERADMIN` is bootstrapped from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
-Public registration is closed (`POST /auth/register` returns 403). Owners are
-created by the Super Admin.
+### Provider tree
 
-### Super Admin (`/admin`)
-
-| Route | Purpose |
-|-------|---------|
-| `/admin/overview` | Business counts, subscription mix, 30-day activity |
-| `/admin/businesses` | Owner logins, plans, templates, per-tenant activity |
-| `/admin/businesses/[ownerId]` | Single-business detail |
-| `/admin/products` | Catalogue template management |
-| `/admin/subscriptions` | Subscription plan definitions |
-
-Super Admin APIs under `/api/v1/platform/*` and `/api/v1/owners/*`:
-
-- Register owners with a **subscription plan** and **product templates**
-  (steel, cement, wire, paint, tiles — provisioned server-side)
-- `PATCH /owners/:id/subscription` — plan, status, expiry
-- `POST /owners/:id/templates` — apply templates (skips duplicate names)
-- `GET|POST|PATCH /platform/subscription-plans` — plan definitions with
-  `allowedPages` (sidebar module gating)
-- `GET|POST /platform/templates` — custom catalogue templates
-
-Expired or cancelled subscriptions block tenant API access during JWT
-validation. Revoking an owner sets the login inactive; it never deletes the
-business or its ledger.
-
-### Business owner staff
-
-Owners manage staff at `/{businessSlug}/staff` via `/api/v1/users`:
-
-- Create `SUBADMIN` logins with a title and page access list
-- Staff see only modules allowed by both their `access[]` and the business
-  subscription plan's `allowedPages`
-- `StaffAccessGuard` and `filterBootstrapForStaff` enforce page-level ACL
-- Logout invalidates all sessions via `User.tokenVersion` bump
-
-## Tenant URLs
-
-Each business has a unique `slug`. Tenant pages live under:
+`client/src/app/layout.tsx`:
 
 ```text
-/{businessSlug}/dashboard
-/{businessSlug}/purchases
-/{businessSlug}/sales
-…
+AuthProvider
+  StoreProvider
+    ServerStatusMonitor     # probes GET /api/health every 45s
+    Shell                   # sidebar / role redirects / print chrome skip
+      {children}
 ```
 
-Helpers in `client/src/lib/business-path.ts` build paths; `proxy.ts` and
-`Shell` enforce role navigation (Super Admin cannot open tenant routes; staff
-cannot open pages outside their access).
+Tenant layouts wrap children in `StoreGate`. Super Admin never waits on
+the ledger store.
 
-Printable views: `/{businessSlug}/sales/[id]`, `/{businessSlug}/invoices/[id]`,
-`/{businessSlug}/sales/print`.
+### Routing
 
-Reconciliation: `/{businessSlug}/audit`.
+Canonical paths are `isKnownAppPath` in `client/src/lib/app-routes.ts`.
+Unknown paths redirect to `/404?from=…`.
 
-## Persisted tenant data
+**Public:** `/`, `/login`, `/offline`, `/404`.
 
-Each catalogue and trading record is stored in its normalized Prisma table.
-All controllers derive `businessId` from the JWT, so callers cannot select
-another tenant. Business invoice/profile preferences are stored on
-`Business.settings` through `/api/v1/settings`.
+**Super Admin:** `/admin` → `/admin/overview`, `/admin/businesses`,
+`/admin/businesses/[ownerId]`, `/admin/products`, `/admin/subscriptions`.
 
-There is no JSON ledger snapshot or runtime demo seed. Every create, update,
-delete, payment, and stock check uses its dedicated domain endpoint inside
-Prisma transactions.
+**Tenant** (all under `/{businessSlug}/`):
+
+| Path | Screen |
+|------|--------|
+| `dashboard` | KPI overview |
+| `products` | Catalogue configurator |
+| `purchases`, `purchases/[id]` | Purchases + detail |
+| `inventory` | Stock / lots / movements |
+| `sales`, `sales/[id]`, `sales/print` | Sales & invoices, printable bill, batch print |
+| `customers`, `suppliers` | Parties |
+| `payments` | Receive / pay |
+| `expenses` | Shop expenses |
+| `reports` | Profit, stock, cash, dues |
+| `staff` | Owner-only staff logins |
+| `settings` | Owner-only invoice / UI prefs |
+| `audit` | Number-reconciliation QA |
+
+Legacy aliases redirect: `invoices` → `sales`, `invoices/[id]` → `sales/[id]`,
+`profit` → `reports`. Unprefixed paths (`/dashboard`, `/sales`, …) are
+rewritten by `Shell` to `/{businessSlug}…`. Bare `/{slug}` is not a page.
+
+Printable routes (`/sales/*` and `/invoices/*` after the slug is stripped)
+render without sidebar chrome.
+
+`BusinessLink` prefixes `user.businessSlug` so tenant hrefs can stay
+`/sales`-style.
+
+### Auth and gating
+
+Three layers:
+
+1. **`src/proxy.ts`** (Next 16 proxy, compiled as middleware) — unknown path
+   → `/404`; missing `session` cookie on a non-public path → `/login?next=`.
+   Cookie presence only; no role check here.
+2. **`Shell`** — Super Admin cannot open tenant routes; tenants cannot open
+   `/admin`; wrong slug rewrites to the user's own slug; `canOpenPath`
+   (`staff-access.ts`) enforces plan pages + staff `access[]`.
+3. **`StoreGate`** — tenant pages wait until `authReady` and first
+   `storeReady` + `dataReady`. Later refreshes do not re-skeleton.
+   Bootstrap failure shows `ErrorState` with retry.
+
+Roles (`SUPERADMIN` | `ADMIN` | `SUBADMIN`):
+
+| Role | Home | Nav |
+|------|------|-----|
+| Super Admin | `/admin/overview` | Platform nav only |
+| Owner (`ADMIN`) | `/{slug}/dashboard` | All modules on the subscription plan, including staff/settings |
+| Staff (`SUBADMIN`) | first allowed page | `access[]` ∩ staff pages; never staff/settings |
+
+`invoices` maps to `sales`; `profit` maps to `reports`. Subscription
+`allowedPages` gates both sidebar and Nest `StaffAccessGuard`.
+
+Login / logout are Server Actions (`src/app/actions/auth.ts`):
+`POST /api/v1/auth/login` then `createSession`; logout calls
+`POST /api/v1/auth/logout` (bumps `tokenVersion`) then deletes the cookie.
+`AuthProvider` hydrates from `GET /api/auth/me`.
+
+### Data layer
+
+**Two-phase tenant hydration** (`client/src/lib/store.tsx`):
+
+1. **Bootstrap** — `GET /ledger/bootstrap` (via BFF). Catalogue, warehouses,
+   staff (owners only), UI settings, record **counts**. Transaction arrays
+   in this payload are empty. `version: 3`. There is no `dashboardSummary`.
+2. **Transactions** — `GET /ledger/transactions`. One round-trip that bulk-
+   loads customers, suppliers, purchases, sales, payments, expenses, and
+   stock checks (one parallel `findMany` per collection on the server, cap
+   20 000 rows each). Sets `transactionsReady` / `dataReady`.
+
+`StoreProvider` skips load when there is no user or the user is Super
+Admin. Tenant change (`user.id:user.businessId`) resets and re-bootstraps.
+`refresh()` coalesces full bootstrap + transactions
+(`refresh-coalesce.ts`).
+
+`backend-adapters.ts` maps Nest records into store types:
+
+| Server | Client |
+|--------|--------|
+| `Purchase` + `lines[]` | One row per line; parent `paid` copied; multi-line id `${purchaseId}::${lineId}` |
+| `Sale` + `invoice` | `invoiceNo` / `invoicePaid` / `invoiceTotal` from `Invoice` |
+| `Payment` + `allocations[]` | FIFO settlements exposed per payment |
+| Supplier payments | Replayed FIFO client-side onto `purchase.paymentHistory` |
+
+**Authoritative money**
+
+- Customer paid/due: `Invoice.paid` / `Invoice.total`
+- Mill payable: goods value only (`qty × rate` per purchase document)
+- Purchase `paid`: document-level; multi-line rows share one parent id
+
+**Derived on the client** (not stored): `inventory`, `inventoryByVariant`,
+`stockLots`, `stockMovements`, `salePaid`, `customerBalance`,
+`supplierBalance`, `stats`. FIFO lot consume and money helpers in
+`client/src/lib/money.ts` mirror `server/src/domain/money.ts`. Dashboard
+KPIs come from this derived `stats` object after transactions load.
+
+Timeouts (`apiFetch` / `tradexFetch`): default 30s, bootstrap/transactions
+45s (client `apiFetch`; server `tradexFetch` special-cases bootstrap 45s
+and reports 60s), reports 60s. 502/503/504 → `/offline`; 404 → `/404`.
+
+List screens that page on the server use `usePaginatedSales` /
+`useServerPaginated` (`limit` 25). Super Admin data uses
+`usePlatformAdminData` + Server Actions, cached in `admin-cache.ts`.
+
+### Mutations
+
+Tenant writes go through `StoreProvider.mutate` → `apiFetch` → BFF → Nest,
+then `await refresh()`. Not optimistic, except UI prefs (`PUT /settings`)
+and local hide/delete of sold-out inventory rows (cosmetic; no API).
+
+`addProductItem` / `addQuality` / `deleteProductItem` / `deleteQuality`
+are no-ops — the catalogue is configuration-driven via products,
+categories, attributes, options, and variants.
+
+Super Admin pages never use the ledger store. They call Server Actions
+against `/api/v1/owners` and `/api/v1/platform/*`. Logo upload is
+multipart (`uploadBusinessLogoAction`), not JSON BFF.
+
+### Feature UI
+
+| Folder | Role |
+|--------|------|
+| `components/sales/` | New sale modal, table, draft hook, print pack |
+| `components/catalogue/` | Attribute fields, variant badge |
+| `components/invoice/` | Brand header |
+| `components/reports/` | Report sections |
+| `components/settings/` | Warehouse panel |
+| `components/admin/` | Overview, templates, subscription plans |
+| Shared | `InvoiceDocument`, `ReceivePaymentModal`, `SaleDetailModal`, `DataTable`, `ui.tsx` |
+
+---
+
+## Backend architecture
+
+### Stack
+
+| Piece | Notes |
+|-------|--------|
+| NestJS 11 | Fastify adapter (`@nestjs/platform-fastify`) |
+| Prisma 6 | Sole DB access; Neon pooled `DATABASE_URL` + `DIRECT_URL` for migrations |
+| Auth | Passport JWT, bcryptjs, `tokenVersion` |
+| Uploads | `@fastify/multipart` + Sharp + Cloudinary |
+| Validation | Global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`) |
+
+`main.ts`: global prefix `api` (health excluded), URI version `1` so
+tenant routes are `/api/v1/…`. Helmet on Fastify, CORS credentials to
+`clientOrigin`, `AllExceptionsFilter`, logging + JSON-normalization
+interceptors. Listen fails if Postgres is unreachable.
+
+### Modular monolith
+
+`AppModule` imports domain modules. There are no microservices, Redis, or
+queues. Rate limits are an in-process store (`rate-limit-store.ts`) — a
+shared store is required only if you run multiple API instances.
+
+| Module | Controller prefix | Guard |
+|--------|-------------------|-------|
+| Auth | `auth` | Public login/status; JWT on me/logout |
+| Users | `users` | `ADMIN` |
+| Owners | `owners` | `SUPERADMIN` |
+| Platform | `platform` | `SUPERADMIN` |
+| Ledger | `ledger` | JWT + staff page `dashboard` |
+| Settings | `settings` | `ADMIN` |
+| Products | `products` | staff page `products` |
+| Warehouses | `warehouses` | staff page `inventory` |
+| Inventory | `inventory` | staff page `inventory` |
+| Purchases | `purchases` | staff page `purchases` |
+| Sales | `sales` | staff page `sales` |
+| Invoices | `invoices` | staff page `sales` |
+| Payments | `payments` | staff page `payments` |
+| Customers | `customers` | staff page `customers` |
+| Suppliers | `suppliers` | staff page `suppliers` |
+| Expenses | `expenses` | staff page `expenses` |
+| Stock checks | `stock-checks` | staff page `inventory` |
+| Reports | `reports` | staff page `reports` |
+| Media | `media` | `SUPERADMIN` or `ADMIN` |
+| Health | `health` | Public, unversioned |
+
+`StaffAccessGuard` (used with `@RequireStaffPage`): plan `allowedPages`
+first, then staff `access[]`. Super Admin bypasses staff-page checks.
+`businessId` is always taken from the JWT. Callers cannot select another
+tenant.
+
+### Bootstrap and transactions
+
+`LedgerService.bootstrap` (payload `version: 3`) returns catalogue,
+warehouses/locations, staff (ADMIN only), settings, and SQL counts.
+Catalogue + settings are served from an in-process cache
+(`ledger/catalogue-cache.ts`) that **every** catalogue/settings write
+invalidates synchronously in the same service method — no TTL, so a
+renamed product shows on the next bootstrap. Counts and staff are always
+live. Transaction collections are empty arrays.
+
+`GET /ledger/transactions` (`LedgerTransactionsService`) loads every
+trading collection with **one parallel `findMany` per collection** via
+each service's `listAll` (no pagination counts — the client bulk-load
+path reads only the row arrays), capped at 20 000 rows per collection.
+This replaced N paginated list calls from the client.
+
+There is **no** dashboard-summary service. Dashboard KPIs are computed
+in the client store from the transaction set.
+
+`filterBootstrapForStaff` strips catalogue/settings the staff page list
+does not need.
+
+Settings (`GET|PUT /settings`) store invoice/UI preferences on
+`Business.settings` JSON, sanitized and size-capped
+(`MAX_SETTINGS_BYTES`).
+
+### Domain layer
+
+Pure functions under `server/src/domain/`:
+
+- `money.ts` — landed cost, sale totals, mill goods amount
+- `payment-settlement.ts` — `settleFifo` for invoices and purchases
+- `sale-availability.ts` — remaining lot qty before a sale is accepted
+- `profit.ts` — period P&L building blocks
+
+`stock-locks.ts` takes PostgreSQL advisory transaction locks
+(`pg_advisory_xact_lock`) per business/product/variant (and per lot on
+sourced sales) so concurrent sales cannot pass the same stock check.
+
+Purchases, sales, payments, and adjustments run inside
+`prisma.$transaction`. Failure rolls the whole document back.
 
 ### Prisma model overview
 
-**Tenant hub:** `Business` (slug, settings, subscription fields)
+**Tenant hub:** `Business` (slug, settings JSON, subscription fields)
+
+**Auth:** `User` (role, `tokenVersion`, `access[]`, `title`)
+
+**Platform:** `SubscriptionPlanDefinition` (`allowedPages`),
+`CatalogTemplate`, `AuditLog`
 
 **Catalogue:** `Product`, `ProductCategory`, `ProductItem`, `AttributeDef`,
-`AttributeOption`, `Variant`
+`AttributeOption`, `Variant` (`identityKey` unique per business)
 
 **Storage:** `Warehouse`, `Location`
 
-**Parties:** `Supplier`, `Customer`
+**Parties:** `Supplier`, `Customer` (soft-deactivate via `active`)
 
-**Trading:** `Purchase` + `PurchaseLine`, `Sale` + `SaleLine`, `Invoice`
-(1:1 with sale), `Payment` + `PaymentAllocation`
+**Trading:** `Purchase` + `PurchaseLine`, `Sale` + `SaleLine` (optional
+`purchaseId` source lot), `Invoice` (1:1 with sale, `paid`/`total`),
+`Payment` + `PaymentAllocation`
 
-**Operations:** `Expense`, `StockCheck`, `InventoryTransaction`
+**Operations:** `Expense`, `StockCheck`, `InventoryTransaction` (signed qty)
 
-**Platform:** `SubscriptionPlanDefinition`, `CatalogTemplate`, `AuditLog`
+Enums: `Role`, `PaymentType`, `PaymentMethod`, `ExpenseCategory`,
+`InventoryTxType` (`PURCHASE` | `SALE` | `ADJUSTMENT` | `RETURN`),
+`BillingCycle`, `SubscriptionStatus`.
 
-**Auth:** `User` (role, `tokenVersion`, `access[]` for staff)
+### How stock and money move
 
-### Bootstrap shape (client normalization)
+Stock is **not** a column. `InventoryTransaction` is a signed movement
+ledger. Current qty is the sum of ledger rows per product/variant.
 
-`client/src/lib/backend-adapters.ts` maps the API payload into store types.
-Transaction rows arrive from paginated list endpoints, not bootstrap:
+- Purchase create writes `PURCHASE` rows in the same transaction as the
+  document. Charges (transport/loading/labour/other) are landed cost paid
+  by the business — they are **not** mill payable.
+- Sale create checks availability, locks keys, writes `SALE` rows, and
+  creates the `Invoice` snapshot (`number`, `total`, initial `paid`).
+- Sale delete writes reversal ledger rows and removes the invoice and
+  allocations.
+- `POST /inventory/adjustments` is the only non-purchase/sale stock
+  change, and it is still a ledgered `ADJUSTMENT`.
+- Customer payments allocate to a chosen invoice or FIFO oldest unpaid
+  (`PaymentAllocation`). Amount cannot exceed remaining due.
+- Supplier payments FIFO-settle oldest unpaid purchase documents (goods
+  value only).
+- Invoice snapshots do not change when catalogue names later change.
+  Historical lines store `attributeSnapshot`, `productName`, unit, rate.
 
-| Server record | Client notes |
-|---------------|--------------|
-| `Purchase` + `lines[]` | Expanded to one row per line; parent `paid` copied to every line |
-| `Sale` + `invoice` | `invoiceNo`, `invoicePaid`, `invoiceTotal` from `Invoice` row |
-| `Payment` + `allocations[]` | FIFO invoice settlements exposed per payment |
-| Supplier payments | Replayed FIFO client-side to build `purchase.paymentHistory` |
+---
 
-**Authoritative money fields**
+## Accounts and administration
 
-- Customer invoice paid/due: `Invoice.paid` / `Invoice.total` (not client FIFO alone)
-- Mill payable: goods value per purchase document (`qty × rate` summed per parent id)
-- Purchase `paid`: document-level; multi-line purchases share one parent id via `purchaseId`
+One `SUPERADMIN` is created at API boot from `ADMIN_EMAIL` /
+`ADMIN_PASSWORD` if none exists. Public registration is closed
+(`POST /auth/register` → 403). Owners are created by Super Admin.
 
-## Ledger rules
+Expired or cancelled subscriptions fail JWT validation with 403.
+Revoking an owner sets the login inactive; it never deletes the business
+or its ledger.
 
-### Stock
+Owners manage staff at `/{slug}/staff` via `/api/v1/users` (`SUBADMIN`
+logins with title + page access). Logout increments `User.tokenVersion`
+so every outstanding JWT for that user is rejected.
 
-Stock is not stored as a column. `InventoryTransaction` is a signed movement
-ledger (`PURCHASE`, `SALE`, `ADJUSTMENT`, `RETURN`). Current qty is the sum of
-ledger rows per product/variant. Purchases and sales write ledger entries
-atomically in the same Prisma transaction as their parent document.
+---
 
-- Variants are the stockable unit; purchase lots preserve supplier and
-  traceability metadata (lot/heat/batch numbers).
-- FIFO lot consumption determines remaining lots and cost of goods sold.
-- `sale-availability.ts` checks ledger balances before sale creation.
-- PostgreSQL advisory locks (`stock-locks.ts`) prevent TOCTOU overselling.
+## Caching (in-process, single instance)
 
-### Money
+Two caches cut a Neon round trip from the hot paths; neither holds
+trading (transaction) data.
 
-- Mill payable is goods value only; transport/loading/labour/other costs are
-  landed cost paid by the business.
-- Customer payments settle a selected invoice or the oldest unpaid invoices
-  (`settleFifo` in `domain/payment-settlement.ts`). Allocations are stored in
-  `PaymentAllocation`.
-- Supplier payments FIFO-settle oldest unpaid purchase documents.
-- Invoice snapshots do not change when catalogue display names later change.
-- Money helpers in `client/src/lib/money.ts` mirror `server/src/domain/money.ts`.
+| Cache | File | Key | Invalidation | Staleness |
+|-------|------|-----|--------------|-----------|
+| JWT `tokenVersion` | `auth/token-version-cache.ts` | userId, TTL 45s | eager on every `TokenVersionService.bump()` (logout, password change, deactivate); `invalidateBusiness()` on subscription PATCH, platform plan edit, and business deletion | Revocation: immediate. Subscription expiry: re-evaluated against the clock on every hit — immediate. Business slug/name: ≤45s (cosmetic) |
+| Bootstrap catalogue | `ledger/catalogue-cache.ts` | businessId, no TTL | every product/category/attribute/option/variant/warehouse/location/settings write in its own service method (enforced by `catalogue-invalidation.spec.ts`) | none — synchronous |
 
-The normalized Prisma models and transaction-safe domain APIs are the source
-of truth for every current screen and report.
+Both are single-instance only. A shared store (Redis) is required only
+if the API runs multiple instances behind a load balancer. The cache
+entries carry the business's subscription fields, and cache hits
+re-evaluate `isSubscriptionActive` against the current time, so
+subscription expiry is enforced with no staleness window. Every write
+path that changes subscription or plan state invalidates eagerly:
+`PATCH /owners/:id/subscription` and `DELETE /owners/:id` per business,
+`PATCH /platform/subscription-plans/:id` for every business on that
+plan (plan edits change `billingCycle`/`allowedPages` on all of them).
+Measured impact (SCALE≈200, dev machine → Neon ap-southeast-1): every
+authenticated endpoint lost ~215ms (one RTT); bootstrap p50 1342→108ms;
+`/ledger/transactions` 2027→864ms.
 
-## Client store
-
-`StoreProvider` (`client/src/lib/store.tsx`) uses React Context (no Redux).
-It hydrates from bootstrap, loads transactions in parallel, and refreshes after
-mutations via coalesced `refresh()`.
-
-Key derived values:
-
-- `inventory`, `inventoryByVariant`, `stockLots`, `stockMovements` — from
-  purchases, sales, and ledger rules
-- `salePaid(id)` — uses `Invoice.paid` when present; otherwise FIFO simulation
-- `supplierBalance(id)` — groups purchases by parent document id
-- `saleGrandTotal(s)` — uses `Invoice.total` when present; rounds like server
-- `stats` — dashboard figures; bootstrap `dashboardSummary` for fast first paint
-
-`AuthProvider` (`client/src/lib/auth.tsx`) hydrates the current user from
-`/api/auth/me`. Server Actions in `src/app/actions/auth.ts` handle login/logout.
+---
 
 ## Security
 
-### Authentication and session
+- JWT in httpOnly `session` cookie; BFF attaches Bearer server-side.
+- `assertSameOrigin()` + `assertSafeProxyPath()` on BFF mutations.
+- Logout / deactivate / password change bump `tokenVersion`, and the
+  in-process cache entry for that user is deleted in the same call, so
+  revocation is immediate (see Caching).
+- Global ValidationPipe; DTOs + `LIMITS` (money, qty, lines, daily
+  payment total, settings size).
+- `sanitizeText` / `sanitizeUiSettings` on free-text and settings.
+- Logo: `POST /media/business-logo`, Sharp + Cloudinary, 8 MB multipart cap.
+- Throttle: login 15 / 15 min in production (keyed by email, else IP);
+  60 / 15 min in development; API 240 reads / 90 writes per min per IP;
+  reports 20 / min per user.
+- Nest Helmet; Next security headers + HSTS in production; BFF
+  `Cache-Control: private, no-store`.
+- Prisma parameterized queries only.
 
-- JWT in httpOnly `session` cookie (`sameSite: strict`, `secure` in production)
-- BFF (`/api/tradex/*`) attaches Bearer token server-side; browser never sees it
-- `assertSameOrigin()` blocks cross-origin mutations on the BFF
-- Logout bumps `User.tokenVersion` — all outstanding JWTs are rejected
-
-### Input validation and caps
-
-- Global Nest `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`)
-- `server/src/common/security/limits.ts` — money, qty, line, and daily payment caps
-- `sanitizeText` / `sanitizeUiSettings` on free-text and settings payloads
-- Logo uploads via `POST /media/business-logo` — Cloudinary + Sharp, size-capped
-
-### Rate limiting
-
-Custom in-memory store (not `@nestjs/throttler`):
-
-- Login: `AuthThrottleGuard` — 10 attempts / 15 min per IP
-- API: `ApiThrottleGuard` — 240 reads / 90 writes per min per IP
-
-### Headers
-
-- Nest: `@fastify/helmet` on Fastify adapter
-- Next.js: security headers + HSTS in production (`next.config.ts`)
-- BFF responses: `Cache-Control: private, no-store`, `X-Frame-Options: DENY`
-
-### SQL injection
-
-Prisma parameterized queries only. No user input is concatenated into SQL.
-
-## Routes
-
-### Public
-
-- `/`, `/login`, `/offline`, `/404`
-
-### Super Admin
-
-- `/admin`, `/admin/overview`, `/admin/businesses`, `/admin/businesses/[ownerId]`,
-  `/admin/products`, `/admin/subscriptions`
-
-### Business owner and staff
-
-All under `/{businessSlug}/`:
-
-- `dashboard`, `products`, `purchases`, `inventory`, `sales`, `customers`,
-  `suppliers`, `payments`, `expenses`, `reports`, `settings`, `staff`
-- Detail: `purchases/[id]`, `sales/[id]`, `invoices/[id]`
-- `sales/print`, `audit`, `profit`, `invoices`
-
-Next.js `proxy.ts` provides the cookie-level route gate. `Shell` applies role
-and staff-page navigation.
+---
 
 ## Resilience and UX
 
-### Errors
+- Nest `AllExceptionsFilter` maps Prisma P2002/P2025/P2003 to safe
+  `{ statusCode, message, error }` — no stack traces to the client.
+- Bootstrap failure blocks tenant pages (`StoreGate` + retry).
+- Mutation errors toast with **Try again**; forms keep local input.
+- Global `store.pending` + disabled submit buttons prevent double-post.
+- Reports use `ReportsSkeleton` while `GET /reports/profit` runs.
+- List endpoints: `PaginationDto` default 50, max 100
+  (`{ items, page, limit, total, pages }`).
+- Invoice list on the sales page uses `GET /sales?page=&limit=25`.
 
-- Nest `AllExceptionsFilter` maps Prisma errors (P2002, P2025, P2003) to safe HTTP responses.
-- Bootstrap failure blocks tenant pages via `StoreGate` + `ErrorState` (retry reloads ledger).
-- Mutation errors show a toast with **Try again**; forms keep local input.
-
-### Loading
-
-- `StoreGate` shows route skeletons until bootstrap succeeds.
-- Global mutation bar (`store.pending`) + per-form disabled states prevent double submit.
-- Reports tab uses `ReportsSkeleton` while `GET /reports/profit` runs.
-- `transactionsReady` gates screens that need the full transaction set.
-
-### Timeouts
-
-| Path | Timeout |
-|------|---------|
-| Default API | 30s |
-| Bootstrap | 45s |
-| Reports | 60s |
-
-Implemented in `client/src/lib/fetch-with-timeout.ts` (browser + BFF).
-
-### Pagination
-
-- Invoice list (`/sales` tab) uses `GET /sales?page=&limit=25` via `usePaginatedSales`.
-- Bootstrap transaction load uses `fetchAllPages` (100 per page, max 200 pages).
-- Server list endpoints use `PaginationDto` (max 100 per page).
-- Reports return aggregated period data (not paginated lists).
-
-### Database indexes
-
-- `Invoice(businessId, createdAt)` — invoice list sort
-- `Payment(saleId)`, `Payment(businessId, type, date)` — payments and cash reports
-- Deploy with `npm run prisma:deploy` in `server/`
+---
 
 ## Verification
 
 - Client: `npm run build` in `client/`
 - Server: `npm run prisma:generate`, `npm run build`, `npm test` in `server/`
 - Database: `npm run prisma:deploy` in `server/`
-- Runtime: create an owner, enter a purchase/sale/payment, refresh, and confirm
-  inventory, invoice, dashboard, report, and `/{slug}/audit` still reconcile.
-- QA: open `/{slug}/audit` — every check should print `[PASS]` on a healthy ledger.
+- Runtime: create an owner, enter a purchase / sale / payment, refresh,
+  and confirm inventory, invoice, dashboard, reports, and
+  `/{slug}/audit` still reconcile.
+- QA: `/{slug}/audit` — every check should print `[PASS]` on a healthy
+  ledger.
+
+Unit tests cover domain money/FIFO, purchases, ledger bootstrap,
+staff-access, invoice atomicity, and settings sanitization. The e2e
+suite in `server/test/` needs a reachable `DATABASE_URL`.
 
 See also: [apis.md](apis.md), [frontend-design.md](frontend-design.md),
-[NUMBER_AUDIT.md](NUMBER_AUDIT.md).
+[NUMBER_AUDIT.md](NUMBER_AUDIT.md),
+[DATABASE_OPTIMIZATION.md](DATABASE_OPTIMIZATION.md).

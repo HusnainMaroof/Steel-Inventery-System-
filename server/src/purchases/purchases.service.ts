@@ -23,6 +23,16 @@ export function replacementStockShortage(
   return [...stock.entries()].find(([, qty]) => qty < -0.0005)?.[0];
 }
 
+const listInclude = {
+  supplier: { select: { id: true, name: true, mill: true } },
+  lines: { include: { product: { select: { id: true, name: true, unit: true } } } },
+} satisfies Prisma.PurchaseInclude;
+
+const listOrder: Prisma.PurchaseOrderByWithRelationInput[] = [
+  { date: "desc" },
+  { createdAt: "desc" },
+];
+
 @Injectable()
 export class PurchasesService {
   constructor(
@@ -168,24 +178,35 @@ export class PurchasesService {
   }
 
   async list(businessId: string, skip: number, take: number, supplierId?: string) {
-    const where = {
-      businessId,
-      ...(supplierId ? { supplierId } : {}),
-    };
+    const where = this.baseWhere(businessId, supplierId);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.purchase.findMany({
         where,
         skip,
         take,
-        include: {
-          supplier: { select: { id: true, name: true, mill: true } },
-          lines: { include: { product: { select: { id: true, name: true, unit: true } } } },
-        },
-        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        include: listInclude,
+        orderBy: listOrder,
       }),
       this.prisma.purchase.count({ where }),
     ]);
     return [items, total] as const;
+  }
+
+  /** Bulk fetch for /ledger/transactions — one findMany, no count. */
+  listAll(businessId: string, take: number) {
+    return this.prisma.purchase.findMany({
+      where: this.baseWhere(businessId),
+      include: listInclude,
+      orderBy: listOrder,
+      take,
+    });
+  }
+
+  private baseWhere(businessId: string, supplierId?: string) {
+    return {
+      businessId,
+      ...(supplierId ? { supplierId } : {}),
+    };
   }
 
   async byId(businessId: string, id: string) {
