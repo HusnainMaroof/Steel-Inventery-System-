@@ -1,3 +1,5 @@
+import { getClientOrigin } from "@/lib/server/client-origin";
+
 const BLOCKED_SEGMENTS = new Set(["..", ".", ""]);
 
 /** Reject path traversal and empty segments in BFF proxy paths. */
@@ -19,26 +21,31 @@ export function assertSameOrigin(request: Request): string | null {
   const method = request.method.toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return null;
 
-  const host = request.headers.get("host");
+  const allowedOrigin = new URL(getClientOrigin()).origin;
   const origin = request.headers.get("origin");
-  const allowed = (process.env.CLIENT_ORIGIN ?? "http://localhost:3000").replace(/\/$/, "");
 
   if (origin) {
-    const normalized = origin.replace(/\/$/, "");
-    if (normalized !== allowed) {
-      const localHttp = host ? `http://${host}` : null;
-      const localHttps = host ? `https://${host}` : null;
-      if (normalized !== localHttp && normalized !== localHttps) {
+    try {
+      if (new URL(origin).origin !== allowedOrigin) {
         return "Cross-origin request blocked";
       }
+    } catch {
+      return "Cross-origin request blocked";
     }
     return null;
   }
 
   const referer = request.headers.get("referer");
-  if (referer && host && !referer.includes(host)) {
+  if (!referer) return "Cross-origin request blocked";
+
+  try {
+    if (new URL(referer).origin !== allowedOrigin) {
+      return "Cross-origin request blocked";
+    }
+  } catch {
     return "Cross-origin request blocked";
   }
+
   return null;
 }
 

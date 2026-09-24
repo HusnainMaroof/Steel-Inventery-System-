@@ -151,15 +151,25 @@ export class PurchasesService {
       });
 
       if (paid > 0) {
-        await tx.payment.create({
+        const paidAt = new Date();
+        const payment = await tx.payment.create({
           data: {
             businessId,
-            date: new Date(dto.date),
+            date: paidAt,
             type: "SUPPLIER",
             supplierId: dto.supplierId,
             amount: paid,
             method: "CASH",
+            purchaseId: purchase.id,
             note: `Payment recorded with purchase ${purchase.id}`,
+          },
+        });
+        await tx.paymentAllocation.create({
+          data: {
+            businessId,
+            paymentId: payment.id,
+            purchaseId: purchase.id,
+            amount: paid,
           },
         });
       }
@@ -223,17 +233,101 @@ export class PurchasesService {
 
   async update(businessId: string, id: string, dto: UpdatePurchaseDto, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
-      const current = await tx.purchase.findFirst({
+      let current = await tx.purchase.findFirst({
         where: { id, businessId },
         include: { lines: true },
       });
       if (!current) throw new NotFoundException("Purchase not found");
+
+      // Serialize purchase edits with supplier payments so a concurrent FIFO
+      // settlement cannot use stale goods/paid values. Lock both supplier
+      // buckets in stable order if a supplier change was requested.
+      const originalSupplierId = current.supplierId;
+      const supplierLocks = [...new Set([
+        originalSupplierId,
+        ...(dto.supplierId ? [dto.supplierId] : []),
+      ])].sort();
+      for (const supplierId of supplierLocks) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`suppay:${businessId}:${supplierId}`}))`;
+      }
+      current = await tx.purchase.findFirst({
+        where: { id, businessId },
+        include: { lines: true },
+      });
+      if (!current) throw new NotFoundException("Purchase not found");
+      if (current.supplierId !== originalSupplierId) {
+        throw new BadRequestException("Purchase changed while being edited. Reload and try again.");
+      }
+
+      if (dto.paid !== undefined && dto.paid !== Number(current.paid)) {
+        throw new BadRequestException(
+          "Purchase payments cannot be edited here. Record or correct them through supplier payments.",
+        );
+      }
+      if (dto.supplierId && dto.supplierId !== current.supplierId) {
+        const [linkedPayment, legacyUnallocatedPayment] = await Promise.all([
+          tx.payment.findFirst({
+            where: {
+              businessId,
+              type: "SUPPLIER",
+              OR: [
+                { purchaseId: id },
+                { allocations: { some: { purchaseId: id } } },
+              ],
+            },
+            select: { id: true },
+          }),
+          tx.payment.findFirst({
+            where: {
+              businessId,
+              type: "SUPPLIER",
+              supplierId: current.supplierId,
+              purchaseId: null,
+              allocations: { none: {} },
+            },
+            select: { id: true },
+          }),
+        ]);
+        if (current.paid.gt(0) || linkedPayment || legacyUnallocatedPayment) {
+          throw new BadRequestException(
+            "Cannot change the supplier after payment history exists for this purchase or supplier.",
+          );
+        }
+      }
       if (dto.lines) {
-        const sourcedSales = await tx.saleLine.count({
-          where: { purchaseId: id, sale: { businessId } },
-        });
+        const [sourcedSales, linkedPayment, legacyUnallocatedPayment] = await Promise.all([
+          tx.saleLine.count({
+            where: { purchaseId: id, sale: { businessId } },
+          }),
+          tx.payment.findFirst({
+            where: {
+              businessId,
+              type: "SUPPLIER",
+              OR: [
+                { purchaseId: id },
+                { allocations: { some: { purchaseId: id } } },
+              ],
+            },
+            select: { id: true },
+          }),
+          tx.payment.findFirst({
+            where: {
+              businessId,
+              type: "SUPPLIER",
+              supplierId: current.supplierId,
+              purchaseId: null,
+              allocations: { none: {} },
+            },
+            select: { id: true },
+          }),
+        ]);
         if (sourcedSales) {
           throw new BadRequestException("Cannot replace purchase lines after stock from this lot was sold");
+        }
+        if (current.paid.gt(0) || linkedPayment || legacyUnallocatedPayment) {
+          throw new BadRequestException(
+            "Cannot replace purchase lines after supplier payment history exists",
+          );
         }
       }
 
@@ -262,7 +356,7 @@ export class PurchasesService {
       await this.assertReplacementLeavesNonNegativeStock(tx, businessId, id, lines);
 
       const goodsTotal = purchaseGoodsTotal(lines);
-      const paid = dto.paid ?? Number(current.paid);
+      const paid = Number(current.paid);
       if (paid > goodsTotal + 0.005) {
         throw new BadRequestException(`Paid amount (${paid}) cannot exceed the goods total (${goodsTotal})`);
       }
@@ -300,7 +394,13 @@ export class PurchasesService {
 
   async remove(businessId: string, id: string, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
-      const purchase = await tx.purchase.findFirst({
+      let purchase = await tx.purchase.findFirst({
+        where: { id, businessId },
+        include: { lines: true },
+      });
+      if (!purchase) throw new NotFoundException("Purchase not found");
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`suppay:${businessId}:${purchase.supplierId}`}))`;
+      purchase = await tx.purchase.findFirst({
         where: { id, businessId },
         include: { lines: true },
       });
@@ -310,6 +410,34 @@ export class PurchasesService {
       });
       if (sourcedSales) {
         throw new BadRequestException("Cannot delete a purchase lot referenced by sales");
+      }
+      const [linkedPayment, legacyUnallocatedPayment] = await Promise.all([
+        tx.payment.findFirst({
+          where: {
+            businessId,
+            type: "SUPPLIER",
+            OR: [
+              { purchaseId: id },
+              { allocations: { some: { purchaseId: id } } },
+            ],
+          },
+          select: { id: true },
+        }),
+        tx.payment.findFirst({
+          where: {
+            businessId,
+            type: "SUPPLIER",
+            supplierId: purchase.supplierId,
+            purchaseId: null,
+            allocations: { none: {} },
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (Number(purchase.paid) > 0 || linkedPayment || legacyUnallocatedPayment) {
+        throw new BadRequestException(
+          "Cannot delete a purchase while supplier payment history may reference it",
+        );
       }
       await this.assertReplacementLeavesNonNegativeStock(tx, businessId, id, []);
       await tx.inventoryTransaction.deleteMany({

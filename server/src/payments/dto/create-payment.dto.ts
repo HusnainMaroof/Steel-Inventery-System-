@@ -42,6 +42,11 @@ export class CreatePaymentDto {
   @IsCuid()
   saleId?: string;
 
+  /** Settle one specific purchase (supplier dues) — can never exceed its remaining goods due. */
+  @IsOptional()
+  @IsCuid()
+  purchaseId?: string;
+
   @IsOptional()
   @IsString()
   @MinLength(1)

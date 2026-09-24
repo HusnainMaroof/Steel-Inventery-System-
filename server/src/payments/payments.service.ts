@@ -9,7 +9,7 @@ import { assertPositiveMoney, LIMITS } from "../common/security/limits";
 import { sanitizeOptionalText } from "../common/security/sanitize-text";
 import { PrismaService } from "../prisma/prisma.service";
 import { openPurchasesForSupplier } from "../common/prisma/query-helpers";
-import { settleFifo } from "../domain/payment-settlement";
+import { settleFifo, settleSupplierFifo } from "../domain/payment-settlement";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 
 const listInclude = {
@@ -96,10 +96,16 @@ export class PaymentsService {
         });
 
         if (dto.saleId) {
-          const invoice = await tx.invoice.findFirst({
-            where: { businessId, saleId: dto.saleId },
+          const sale = await tx.sale.findFirst({
+            where: { id: dto.saleId, businessId, customerId: dto.customerId },
+            select: {
+              invoice: true,
+            },
           });
-          if (!invoice) throw new BadRequestException("Invoice not found");
+          const invoice = sale?.invoice;
+          if (!invoice || invoice.businessId !== businessId) {
+            throw new BadRequestException("Invoice not found for this customer");
+          }
           const due = Number(invoice.total) - Number(invoice.paid);
           if (dto.amount > due + 0.005) {
             throw new BadRequestException(
@@ -195,35 +201,71 @@ export class PaymentsService {
           amount: dto.amount,
           method: dto.method ?? "CASH",
           note: dto.note,
+          purchaseId: dto.purchaseId,
         },
       });
 
-      // FIFO across the supplier's oldest unpaid purchases (goods − paid).
-      const openPurchases = await openPurchasesForSupplier(
-        tx,
-        businessId,
-        dto.supplierId,
-      );
-      let left = dto.amount;
-      for (const purchase of openPurchases) {
-        if (left <= 0.005) break;
-        const goods = Number(purchase.goods);
-        const due = Math.max(0, goods - Number(purchase.paid));
-        const take = Math.min(due, left);
-        if (take > 0.005) {
-          const ok = await incrementPurchasePaid(
-            tx,
-            businessId,
-            purchase.id,
-            take,
-            goods,
+      const applyToPurchase = async (purchaseId: string, take: number, goods: number) => {
+        const ok = await incrementPurchasePaid(tx, businessId, purchaseId, take, goods);
+        if (!ok) {
+          throw new BadRequestException(
+            "Supplier payment would exceed the purchase goods total",
           );
-          if (!ok) {
-            throw new BadRequestException(
-              "Supplier payment would exceed the purchase goods total",
-            );
+        }
+        await tx.paymentAllocation.create({
+          data: {
+            businessId,
+            paymentId: payment.id,
+            purchaseId,
+            amount: take,
+          },
+        });
+      };
+
+      if (dto.purchaseId) {
+        const row = await openPurchasesForSupplier(tx, businessId, dto.supplierId).then(
+          (rows) => rows.find((r) => r.id === dto.purchaseId),
+        );
+        if (!row) {
+          throw new BadRequestException("Purchase not found for this supplier");
+        }
+        const goods = Number(row.goods);
+        const due = Math.max(0, goods - Number(row.paid));
+        if (dto.amount > due + 0.005) {
+          throw new BadRequestException(
+            `Payment (${dto.amount}) exceeds the remaining due (${Math.max(0, due)}) on this purchase`,
+          );
+        }
+        await applyToPurchase(dto.purchaseId, dto.amount, goods);
+      } else {
+        // FIFO across the supplier's oldest unpaid purchases (goods − paid).
+        const openPurchases = await openPurchasesForSupplier(
+          tx,
+          businessId,
+          dto.supplierId,
+        );
+        const settlement = settleSupplierFifo(
+          openPurchases.map((purchase) => ({
+            purchaseId: purchase.id,
+            goodsTotal: Number(purchase.goods),
+            paid: Number(purchase.paid),
+          })),
+          dto.amount,
+        );
+        if (settlement.unallocated > 0.005) {
+          throw new BadRequestException(
+            `Supplier payment exceeds the remaining payable by ${settlement.unallocated.toFixed(2)}`,
+          );
+        }
+        const goodsByPurchaseId = new Map(
+          openPurchases.map((purchase) => [purchase.id, Number(purchase.goods)]),
+        );
+        for (const allocation of settlement.allocations) {
+          const goods = goodsByPurchaseId.get(allocation.purchaseId);
+          if (goods === undefined) {
+            throw new BadRequestException("Purchase not found for this supplier");
           }
-          left = Math.round((left - take) * 100) / 100;
+          await applyToPurchase(allocation.purchaseId, allocation.amount, goods);
         }
       }
 

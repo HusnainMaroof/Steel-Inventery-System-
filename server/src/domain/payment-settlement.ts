@@ -50,6 +50,43 @@ export function settleFifo(
   return { allocations, unallocated: round2(Math.max(0, left)) };
 }
 
+export interface OpenPurchase {
+  purchaseId: string;
+  goodsTotal: number;
+  paid: number;
+}
+
+export interface PurchaseAllocation {
+  purchaseId: string;
+  amount: number;
+}
+
+export interface SupplierSettlementResult {
+  allocations: PurchaseAllocation[];
+  unallocated: number;
+}
+
+/** Settle a supplier payment against open purchase dues in the given FIFO order. */
+export function settleSupplierFifo(
+  openPurchases: OpenPurchase[],
+  amount: number,
+): SupplierSettlementResult {
+  let left = amount;
+  const allocations: PurchaseAllocation[] = [];
+
+  for (const purchase of openPurchases) {
+    if (left <= 0.005) break;
+    const due = round2(Math.max(0, purchase.goodsTotal - purchase.paid));
+    const take = Math.min(due, left);
+    if (take > 0.005) {
+      allocations.push({ purchaseId: purchase.purchaseId, amount: round2(take) });
+      left = round2(left - take);
+    }
+  }
+
+  return { allocations, unallocated: round2(Math.max(0, left)) };
+}
+
 /** Supplier payable = per purchase (goods total − paid). Charges are on us. */
 export function supplierPayable(
   purchases: { goodsTotal: number; paid: number }[],

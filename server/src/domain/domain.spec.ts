@@ -1,6 +1,6 @@
 import { landedCostPerUnit, saleGrandTotal } from "./money";
 import { findShortages, stockLevelsFromLedger } from "./sale-availability";
-import { settleFifo, supplierPayable } from "./payment-settlement";
+import { settleFifo, settleSupplierFifo, supplierPayable } from "./payment-settlement";
 import { computeProfit } from "./profit";
 
 describe("money", () => {
@@ -98,6 +98,26 @@ describe("payment FIFO settlement (§10)", () => {
     );
     expect(result.allocations).toEqual([{ saleId: "a", amount: 10 }]);
     expect(result.unallocated).toBe(490);
+  });
+});
+
+describe("supplier payment FIFO settlement", () => {
+  it("allocates oldest dues first and reports any unallocated overpayment", () => {
+    expect(
+      settleSupplierFifo(
+        [
+          { purchaseId: "old", goodsTotal: 100, paid: 70 },
+          { purchaseId: "new", goodsTotal: 80, paid: 0 },
+        ],
+        120,
+      ),
+    ).toEqual({
+      allocations: [
+        { purchaseId: "old", amount: 30 },
+        { purchaseId: "new", amount: 80 },
+      ],
+      unallocated: 10,
+    });
   });
 });
 
