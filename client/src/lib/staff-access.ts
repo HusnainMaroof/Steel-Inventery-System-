@@ -1,4 +1,4 @@
-import type { TradexRole, TradexUser } from "./auth-types";
+import type { TijarattRole, TijarattUser } from "./auth-types";
 import { businessPath, businessSlugFromPath, pagePathFromBusinessRoute } from "./business-path";
 
 export const STAFF_PAGES = [
@@ -108,7 +108,7 @@ export function planPagesSummary(pages?: BusinessPanelPage[]): string {
   return list.map(panelPageLabel).join(", ");
 }
 
-type NavUser = Pick<TradexUser, "role" | "access" | "businessSlug" | "planPages">;
+type NavUser = Pick<TijarattUser, "role" | "access" | "businessSlug" | "planPages">;
 
 export function pagesFor(user: NavUser) {
   const slug = user.businessSlug;
@@ -131,7 +131,9 @@ export function homePathFor(user: NavUser | null | undefined): string {
   if (!user) return "/login";
   if (user.role === "SUPERADMIN") return "/admin/overview";
   const first = pagesFor(user)[0];
-  return first?.href ?? businessPath(user.businessSlug, "dashboard");
+  if (first) return first.href;
+  /* Avoid sending staff to dashboard when they cannot open it. */
+  return businessPath(user.businessSlug, "dashboard");
 }
 
 function staffPageKey(path: string): BusinessPanelPage | null {
@@ -171,4 +173,4 @@ export function canOpenPath(user: NavUser | null | undefined, pathname: string):
   return sanitizeAccess(user.access).includes(key as StaffPage);
 }
 
-export type AccessUser = Pick<TradexUser, "role" | "access" | "businessSlug" | "planPages">;
+export type AccessUser = Pick<TijarattUser, "role" | "access" | "businessSlug" | "planPages">;

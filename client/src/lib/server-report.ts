@@ -33,6 +33,7 @@ export type ApiProfitReport = {
   };
   remainingValuation: number;
   businessValue: number;
+  salesGrandTotals?: number[];
 };
 
 export type ReportFetchParams = {

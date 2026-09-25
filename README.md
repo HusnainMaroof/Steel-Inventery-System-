@@ -1,11 +1,11 @@
-# Tradex — Steel & Cement Inventory System
+# Tijaratt — Business Ledger
 
 A multi-tenant depot ledger for stock, sales, payments and profit.
 Authentication, business-owner accounts, invoice settings, and each
 tenant's complete ledger persist in PostgreSQL through the Nest API.
 
 The browser talks only to Next.js. Nest JWTs stay in an httpOnly
-`session` cookie; `/api/tradex/*` attaches them server-side.
+`session` cookie; `/api/tijaratt/*` attaches them server-side.
 
 ## Getting Started
 
@@ -35,7 +35,7 @@ docs/             # All project documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — frontend and backend
   architecture, data model, stock and money flow, pages.
-- [docs/apis.md](docs/apis.md) — REST `/api/v1`, BFF `/api/tradex/*`,
+- [docs/apis.md](docs/apis.md) — REST `/api/v1`, BFF `/api/tijaratt/*`,
   Server Actions.
 - [docs/frontend-design.md](docs/frontend-design.md) — design system:
   colour tokens, typography, layout and UX conventions.

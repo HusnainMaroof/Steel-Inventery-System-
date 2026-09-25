@@ -9,8 +9,15 @@ type Props = Omit<ComponentProps<typeof Link>, "href"> & { href: string };
 
 /** Tenant link — prefixes the signed-in business slug automatically. */
 export function BusinessLink({ href, ...props }: Props) {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
   const page = href.startsWith("/") ? href.slice(1) : href;
+  if (!ready) {
+    return (
+      <span {...props} aria-busy="true">
+        {props.children}
+      </span>
+    );
+  }
   const target =
     user?.businessSlug && user.role !== "SUPERADMIN"
       ? businessPath(user.businessSlug, page)

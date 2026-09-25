@@ -58,6 +58,13 @@ export const fmtTime = (iso: string) =>
     hour: "numeric",
     minute: "2-digit",
   });
+
+/** Business date plus clock time when the row was recorded (e.g. purchase saved). */
+export const fmtDateWithRecordedTime = (dateIso: string, recordedAtIso?: string) => {
+  const datePart = fmtDate(dateIso);
+  if (!recordedAtIso) return datePart;
+  return `${datePart} · ${fmtTime(recordedAtIso)}`;
+};
 // for full ISO timestamps — shows date and clock time
 export const fmtDateTime = (iso: string) => {
   const d = new Date(iso);

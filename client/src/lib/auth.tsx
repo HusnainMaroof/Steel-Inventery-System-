@@ -13,10 +13,10 @@ import {
   logoutAction,
 } from "@/app/actions/auth";
 import { homePathFor } from "@/lib/staff-access";
-import type { TradexRole, TradexUser } from "@/lib/auth-types";
+import type { TijarattRole, TijarattUser } from "@/lib/auth-types";
 
-export type Role = TradexRole;
-export type AuthUser = TradexUser;
+export type Role = TijarattRole;
+export type AuthUser = TijarattUser;
 
 export type { BusinessProfile } from "@/lib/business-profile";
 export { useBusinessProfile } from "@/lib/business-profile";

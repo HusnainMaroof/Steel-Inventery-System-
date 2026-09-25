@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
-import { BusyButton, Modal } from "@/components/ui";
+import { BusyButton, Modal, InlineFormError } from "@/components/ui";
+import { userFacingError } from "@/lib/user-error";
+import { DatePicker } from "@/components/ui/date-picker";
 import { fmtMoney, fmtDate } from "@/lib/format";
 
 const numVal = (n: number) => (n === 0 ? "" : String(n));
@@ -74,16 +76,20 @@ function PaymentForm({
       return;
     }
     setErr("");
-    await addPayment({
-      date,
-      type: "customer",
-      partyId: sale.customerId,
-      amount: amt,
-      method,
-      saleId: sale.id,
-      note: note.trim() || `Payment on ${sale.invoiceNo}`,
-    });
-    onClose();
+    try {
+      await addPayment({
+        date,
+        type: "customer",
+        partyId: sale.customerId,
+        amount: amt,
+        method,
+        saleId: sale.id,
+        note: note.trim() || `Payment on ${sale.invoiceNo}`,
+      });
+      onClose();
+    } catch (reason) {
+      setErr(userFacingError(reason, "Could not record this payment."));
+    }
   };
 
   return (
@@ -110,7 +116,7 @@ function PaymentForm({
       <form onSubmit={submit} noValidate className="grid grid-cols-2 gap-4">
         <div>
           <label>Date</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          <DatePicker value={date} onChange={setDate} ariaLabel="Payment date" disableFuture />
         </div>
         <div>
           <label>Method</label>

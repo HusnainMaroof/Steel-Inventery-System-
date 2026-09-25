@@ -1,22 +1,16 @@
 import "server-only";
 import { fetchWithTimeout, isTimeoutError } from "../fetch-with-timeout";
 import { getSessionToken } from "./session";
-import type { TradexRole, TradexUser } from "../auth-types";
+import type { TijarattRole, TijarattUser } from "../auth-types";
 import { sanitizeAccess, sanitizePlanPages, type StaffPage } from "../staff-access";
+import { getTijarattApiBase } from "./tijaratt-api-base";
 
-export type { TradexRole, TradexUser, StaffPage };
+export type { TijarattRole, TijarattUser, StaffPage };
 
 type NestErrorBody = {
   message?: string | string[];
   error?: string;
 };
-
-function apiBase(): string {
-  return (process.env.TRADEX_API_URL ?? "http://127.0.0.1:4000").replace(
-    /\/$/,
-    "",
-  );
-}
 
 function readMessage(body: unknown, fallback: string): string {
   if (!body || typeof body !== "object") return fallback;
@@ -26,7 +20,7 @@ function readMessage(body: unknown, fallback: string): string {
   return fallback;
 }
 
-export async function tradexFetch<T>(
+export async function tijarattFetch<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<{ ok: true; data: T; status: number } | { ok: false; message: string; status: number }> {
@@ -49,7 +43,7 @@ export async function tradexFetch<T>(
   let res: Response;
   try {
     res = await fetchWithTimeout(
-      `${apiBase()}${path}`,
+      `${getTijarattApiBase()}${path}`,
       { ...init, headers, cache: "no-store" },
       timeoutMs,
     );
@@ -64,7 +58,7 @@ export async function tradexFetch<T>(
     return {
       ok: false,
       status: 503,
-      message: "Cannot reach the Tradex server. Is it running?",
+      message: "Cannot reach the Tijaratt API. Is it running?",
     };
   }
 
@@ -93,7 +87,7 @@ export function toPublicUser(raw: {
   id: string;
   email: string;
   name: string;
-  role: TradexRole;
+  role: TijarattRole;
   businessId: string;
   businessName?: string;
   businessSlug?: string;
@@ -101,7 +95,7 @@ export function toPublicUser(raw: {
   access?: string[];
   planPages?: string[];
   business?: { name: string; slug?: string } | null;
-}): TradexUser {
+}): TijarattUser {
   return {
     id: raw.id,
     email: raw.email,

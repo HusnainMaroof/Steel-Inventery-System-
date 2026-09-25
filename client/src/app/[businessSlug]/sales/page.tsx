@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { usePaginatedSales } from "@/hooks/use-paginated-sales";
 import { useStore } from "@/lib/store";
 import { fmtMoney } from "@/lib/format";
-import { BusyButton, Page, PageTitle, Modal, useToggle } from "@/components/ui";
+import { BusyButton, Page, PageTitle, Modal, useToggle, InlineFormError } from "@/components/ui";
+import { userFacingError } from "@/lib/user-error";
 import { useBusinessHref } from "@/components/BusinessLink";
 import SaleDetailModal from "@/components/SaleDetailModal";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
@@ -35,6 +36,7 @@ export default function SalesPage() {
   // customer add (the only popup left — a secondary action)
   const { open: newCustOpen, onOpen: onNewCustOpen, onClose: onNewCustClose } = useToggle();
   const [newCust, setNewCust] = useState({ name: "", shop: "", phone: "" });
+  const [newCustError, setNewCustError] = useState("");
 
   /* ---- sale header ---- */
   const [existingId, setExistingId] = useState(customers[0]?.id ?? "");
@@ -46,6 +48,7 @@ export default function SalesPage() {
   const [labourCharges, setLabourCharges] = useState(0);
   const [paidNow, setPaidNow] = useState(0);
   const [payError, setPayError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
   /* ---- money on the current draft ---- */
   const subtotal = api.lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
@@ -71,6 +74,7 @@ export default function SalesPage() {
     setLabourCharges(0);
     setPaidNow(0);
     setPayError("");
+    setSubmitError("");
     setSaleDate(new Date().toISOString().slice(0, 10));
     setExistingId(activeCustomers[0]?.id ?? "");
     setNewOpen(true);
@@ -79,14 +83,18 @@ export default function SalesPage() {
   const saveNewCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCust.name.trim() || isPending("customer:create")) return;
-    const id = await addCustomer({
-      name: newCust.name.trim(),
-      shop: newCust.shop.trim(),
-      phone: newCust.phone.trim(),
-    });
-    setExistingId(id);
-    setNewCust({ name: "", shop: "", phone: "" });
-    onNewCustClose();
+    try {
+      const id = await addCustomer({
+        name: newCust.name.trim(),
+        shop: newCust.shop.trim(),
+        phone: newCust.phone.trim(),
+      });
+      setExistingId(id);
+      setNewCust({ name: "", shop: "", phone: "" });
+      onNewCustClose();
+    } catch (reason) {
+      setNewCustError(userFacingError(reason, "Could not add this customer."));
+    }
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -98,7 +106,9 @@ export default function SalesPage() {
       return;
     }
     setPayError("");
-    const saleId = await addSale({
+    setSubmitError("");
+    try {
+      const saleId = await addSale({
       date: saleDate,
       customerId: existingId,
       discountPct,
@@ -120,9 +130,12 @@ export default function SalesPage() {
         purchaseId: l.purchaseId || undefined,
       })),
     });
-    api.removeAll();
-    setNewOpen(false);
-    setViewId(saleId);
+      api.removeAll();
+      setNewOpen(false);
+      setViewId(saleId);
+    } catch (reason) {
+      setSubmitError(userFacingError(reason, "Could not save this sale. Check stock and try again."));
+    }
   };
 
   const customerName = (id: string) => customers.find((c) => c.id === id)?.name ?? id;
@@ -191,7 +204,7 @@ export default function SalesPage() {
       <div className="flex gap-6 border-b border-neutral-200 mb-4">
         {([
           ["invoices", "Invoices"],
-          ["print", "Print pack"],
+          ["print", "Print Invoice"],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -280,11 +293,13 @@ export default function SalesPage() {
         itemsCount={api.lines.length}
         submitting={isPending("sale:create")}
         showOptionalDetails={prefs.showOptionalDetails}
+        submitError={submitError}
       />
 
       {/* add customer popup — the only popup left */}
       <Modal open={newCustOpen} onClose={onNewCustClose} title="New Customer">
         <form onSubmit={saveNewCustomer} className="grid gap-4">
+          {newCustError ? <InlineFormError message={newCustError} /> : null}
           <div>
             <label>Name *</label>
             <input value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} required autoFocus />

@@ -3,13 +3,13 @@
 import { createSession, deleteSession } from "@/lib/server/session";
 import {
   toPublicUser,
-  tradexFetch,
-  type TradexRole,
-  type TradexUser,
-} from "@/lib/server/tradex";
+  tijarattFetch,
+  type TijarattRole,
+  type TijarattUser,
+} from "@/lib/server/tijaratt";
 
 export type AuthActionResult =
-  | { ok: true; user: TradexUser }
+  | { ok: true; user: TijarattUser }
   | { ok: false; error: string };
 
 type TokenResponse = {
@@ -18,7 +18,7 @@ type TokenResponse = {
     id: string;
     email: string;
     name: string;
-    role: TradexRole;
+    role: TijarattRole;
     businessId: string;
     businessName?: string;
     businessSlug?: string;
@@ -34,11 +34,11 @@ function validEmail(email: string): boolean {
 
 async function sessionFromToken(token: string, fallback: TokenResponse["user"]): Promise<AuthActionResult> {
   await createSession(token);
-  const me = await tradexFetch<{
+  const me = await tijarattFetch<{
     id: string;
     email: string;
     name: string;
-    role: TradexRole;
+    role: TijarattRole;
     businessId: string;
     business?: { name: string; slug?: string } | null;
     title?: string | null;
@@ -59,7 +59,7 @@ export async function loginAction(
   if (!validEmail(trimmed)) return { ok: false, error: "Enter a valid email address." };
   if (password.length < 6) return { ok: false, error: "Password must be at least 6 characters." };
 
-  const result = await tradexFetch<TokenResponse>("/api/v1/auth/login", {
+  const result = await tijarattFetch<TokenResponse>("/api/v1/auth/login", {
     method: "POST",
     body: JSON.stringify({ email: trimmed, password }),
   });
@@ -74,7 +74,7 @@ export async function clearSessionAction(): Promise<void> {
 export async function logoutAction(): Promise<void> {
   const token = await import("@/lib/server/session").then((m) => m.getSessionToken());
   if (token) {
-    await tradexFetch("/api/v1/auth/logout", {
+    await tijarattFetch("/api/v1/auth/logout", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });

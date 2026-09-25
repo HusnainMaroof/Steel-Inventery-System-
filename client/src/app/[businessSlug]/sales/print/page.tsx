@@ -5,38 +5,37 @@ import { BusinessLink } from "@/components/BusinessLink";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import PeriodInvoice from "@/components/sales/PeriodInvoice";
-import { MONTHS, periodInvoiceNo } from "@/lib/format";
+import { rangeInvoiceNo, rangeTitle } from "@/components/sales/PrintPack";
 
 function BatchPrintInner() {
   const params = useSearchParams();
-  const year = params.get("year") ?? "";
-  const month = params.get("month");
+  const from = params.get("from");
+  const to = params.get("to");
   const { sales } = useStore();
 
   const list = useMemo(() => {
     return sales
       .filter((s) => {
-        if (year && s.date.slice(0, 4) !== year) return false;
-        if (month && s.date.slice(5, 7) !== month) return false;
-        return !!(year || month);
+        if (from && s.date < from) return false;
+        if (to && s.date > to) return false;
+        return !!(from || to);
       })
       .sort((a, b) => a.date.localeCompare(b.date) || a.invoiceNo.localeCompare(b.invoiceNo));
-  }, [sales, year, month]);
+  }, [sales, from, to]);
 
-  const monthName = MONTHS.find((m) => m.value === month)?.label;
-  const title = month && year ? `${monthName} ${year}` : year ? year : "Invoices";
-  const invoiceNo = periodInvoiceNo(year, month);
+  const title = rangeTitle(from, to);
+  const invoiceNo = rangeInvoiceNo(from, to);
 
   useEffect(() => {
     if (list.length === 0) return;
     const t = window.setTimeout(() => window.print(), 450);
     return () => window.clearTimeout(t);
-  }, [list.length, year, month]);
+  }, [list.length, from, to]);
 
-  if (!year) {
+  if (!from && !to) {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
-        <p className="text-neutral-500">Pick a month or year from Sales first.</p>
+        <p className="text-neutral-500">Pick a date range from Sales first.</p>
       </div>
     );
   }

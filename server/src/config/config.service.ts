@@ -29,6 +29,11 @@ export class ConfigService implements OnModuleInit {
     if (this.adminPassword.length < 8) {
       throw new Error("ADMIN_PASSWORD must be at least 8 characters.");
     }
+    if (this.nodeEnv === "production" && !process.env.CLIENT_ORIGIN?.trim()) {
+      throw new Error(
+        "CLIENT_ORIGIN is required in production (public URL of the Next.js app).",
+      );
+    }
   }
 
   get databaseUrl(): string {
@@ -74,7 +79,7 @@ export class ConfigService implements OnModuleInit {
       cloudName: (process.env.CLOUDINARY_CLOUD_NAME ?? "").trim(),
       apiKey: (process.env.CLOUDINARY_API_KEY ?? "").trim(),
       apiSecret: (process.env.CLOUDINARY_API_SECRET ?? "").trim(),
-      folder: (process.env.CLOUDINARY_FOLDER ?? "tradex/business-logos").trim(),
+      folder: (process.env.CLOUDINARY_FOLDER ?? "tijaratt/business-logos").trim(),
     };
   }
 }

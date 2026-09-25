@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { PRIVATE_API_HEADERS } from "@/lib/bff-security";
-import { toPublicUser, tradexFetch, type TradexRole } from "@/lib/server/tradex";
+import { toPublicUser, tijarattFetch, type TijarattRole } from "@/lib/server/tijaratt";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const result = await tradexFetch<{
+  const result = await tijarattFetch<{
     id: string;
     email: string;
     name: string;
-    role: TradexRole;
+    role: TijarattRole;
     businessId: string;
     business?: { name: string } | null;
     title?: string | null;

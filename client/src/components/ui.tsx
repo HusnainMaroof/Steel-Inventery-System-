@@ -385,7 +385,7 @@ export function Modal({
             <div className="flex items-start justify-between gap-4 px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-neutral-100 shrink-0">
               <div className="min-w-0">
                 <h2 className="text-base sm:text-lg font-semibold tracking-tight text-neutral-900">{title}</h2>
-                {subtitle && <p className="text-[13px] text-neutral-400 mt-0.5">{subtitle}</p>}
+           
               </div>
               <button
                 type="button"
@@ -570,12 +570,15 @@ export function useToggle(initial = false) {
    nothing in it yet. Use `compact` inside cards / small list areas. */
 export function EmptyState({
   emoji = "🌱",
+  icon,
   title,
   hint,
   action,
   compact = false,
 }: {
   emoji?: string;
+  /** Prefer SVG icon over emoji for structural empty states */
+  icon?: ReactNode;
   title: string;
   hint?: string;
   action?: ReactNode;
@@ -590,7 +593,16 @@ export function EmptyState({
         compact ? "py-8" : "py-14"
       }`}
     >
-      {emoji ? (
+      {icon ? (
+        <div
+          aria-hidden
+          className={`flex items-center justify-center rounded-2xl border border-neutral-200 bg-neutral-50 text-neutral-400 ${
+            compact ? "w-12 h-12" : "w-16 h-16"
+          }`}
+        >
+          {icon}
+        </div>
+      ) : emoji ? (
       <motion.span
         aria-hidden
         className={compact ? "text-3xl leading-none" : "text-5xl leading-none"}
@@ -610,6 +622,19 @@ export function EmptyState({
       )}
       {action && <div className="mt-4">{action}</div>}
     </motion.div>
+  );
+}
+
+/** Inline validation / API error under a form or modal section */
+export function InlineFormError({ message }: { message?: string | null }) {
+  if (!message?.trim()) return null;
+  return (
+    <div
+      role="alert"
+      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-[13px] leading-snug text-red-800"
+    >
+      {message}
+    </div>
   );
 }
 
@@ -678,3 +703,5 @@ export function PaginationBar({
     </div>
   );
 }
+
+export { RowActionsMenu, type RowActionsMenuItem } from "./ui/row-actions-menu";

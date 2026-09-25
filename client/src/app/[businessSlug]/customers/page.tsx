@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
 import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
@@ -15,7 +15,7 @@ type DateGroup = {
 };
 
 export default function CustomersPage() {
-  const { customers, sales, salePaid, attributeDefs, addCustomer, deleteCustomer, isPending } = useStore();
+  const { customers, sales, salePaid, attributeDefs, addCustomer, deleteCustomer, isPending, payments } = useStore();
   const activeCustomers = customers.filter((customer) => customer.active !== false);
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const { open, onOpen, onClose } = useToggle();
@@ -28,6 +28,15 @@ export default function CustomersPage() {
 
   const [viewCustomerId, setViewCustomerId] = useState<string | null>(null);
   const viewCustomer = customers.find((c) => c.id === viewCustomerId);
+  const viewCustomerName =
+    viewCustomer?.name ??
+    payments.find((p) => p.type === "customer" && p.partyId === viewCustomerId)?.partyName ??
+    "Customer";
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("view");
+    if (id) setViewCustomerId(id);
+  }, []);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; shop: string; phone: string } | null>(null);
 
   const confirmDeleteCustomer = async () => {
@@ -215,18 +224,18 @@ export default function CustomersPage() {
       )}
 
       {/* View History Modal */}
-      <Modal open={!!viewCustomerId} onClose={() => setViewCustomerId(null)} title={viewCustomer ? `History — ${viewCustomer.name}` : "History"} size="4xl">
-        {viewCustomer && (
+      <Modal open={!!viewCustomerId} onClose={() => setViewCustomerId(null)} title={`History — ${viewCustomerName}`} size="4xl">
+        {viewCustomerId && (
           <div className="max-h-[70vh] overflow-y-auto -mx-5 sm:-mx-7 px-5 sm:px-7">
             {/* Customer Info */}
             <div className="bg-neutral-50 border border-neutral-200 p-4 mb-5">
               <div className="flex items-center gap-3">
                 <span className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-sm font-bold text-white shrink-0">
-                  {viewCustomer.name.charAt(0).toUpperCase()}
+                  {viewCustomerName.charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0">
-                  <span className="block font-bold text-base text-neutral-900">{viewCustomer.name}</span>
-                  <span className="block text-[11px] text-neutral-400">{[viewCustomer.shop, viewCustomer.phone].filter(Boolean).join(" · ")}</span>
+                  <span className="block font-bold text-base text-neutral-900">{viewCustomerName}</span>
+                  <span className="block text-[11px] text-neutral-400">{viewCustomer ? [viewCustomer.shop, viewCustomer.phone].filter(Boolean).join(" · ") : "Not in active customer list"}</span>
                 </div>
               </div>
             </div>

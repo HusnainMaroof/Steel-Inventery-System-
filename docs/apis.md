@@ -1,4 +1,4 @@
-# Tradex APIs
+# Tijaratt APIs
 
 Nest serves REST under `/api/v1` (URI versioning, global prefix `api`).
 `GET /health` is unversioned and public.
@@ -9,22 +9,22 @@ header. It uses same-origin BFF handlers so the JWT stays in the httpOnly
 `session` cookie.
 
 Full paths below are Nest paths. The browser equivalent is
-`/api/tradex/<path>` (no `/api/v1` prefix on the BFF URL).
+`/api/tijaratt/<path>` (no `/api/v1` prefix on the BFF URL).
 
 ## How the browser talks to Nest
 
 ```text
-Browser  GET /api/tradex/sales?page=1
-  → Next.js src/app/api/tradex/[...path]/route.ts
+Browser  GET /api/tijaratt/sales?page=1
+  → Next.js src/app/api/tijaratt/[...path]/route.ts
       assertSafeProxyPath + assertSameOrigin (mutations)
-      tradexFetch("/api/v1/sales?page=1") with Bearer from cookie
+      tijarattFetch("/api/v1/sales?page=1") with Bearer from cookie
   → Nest SalesController.list
 ```
 
 | Client | Nest |
 |--------|------|
-| `/api/tradex/ledger/bootstrap` | `GET /api/v1/ledger/bootstrap` |
-| `/api/tradex/purchases` | `/api/v1/purchases` |
+| `/api/tijaratt/ledger/bootstrap` | `GET /api/v1/ledger/bootstrap` |
+| `/api/tijaratt/purchases` | `/api/v1/purchases` |
 | `/api/auth/me` | `GET /api/v1/auth/me` |
 | `/api/auth/status` | `GET /api/v1/auth/status` |
 | `/api/health` | `GET /health` (6s timeout, `{ ok: true\|false }`) |
@@ -356,10 +356,10 @@ Nest with the Bearer token.
 
 | Method | Path | Backend |
 |--------|------|---------|
-| GET | `/api/health` | `GET {TRADEX_API_URL}/health` |
+| GET | `/api/health` | `GET {TIJARATT_API_URL}/health` |
 | GET | `/api/auth/me` | `GET /api/v1/auth/me` |
 | GET | `/api/auth/status` | `GET /api/v1/auth/status` |
-| * | `/api/tradex/[...path]` | `/api/v1/{path}{search}` |
+| * | `/api/tijaratt/[...path]` | `/api/v1/{path}{search}` |
 
 Empty dirs `src/app/api/ledger/` and `src/app/api/preferences/` have no
 `route.ts` — they are not live endpoints.

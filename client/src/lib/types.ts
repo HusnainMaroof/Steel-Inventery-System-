@@ -78,7 +78,9 @@ export interface Purchase {
   paid?: number; // amount already paid to the supplier
   lastPaidAt?: string; // date of the most recent payment (ISO yyyy-mm-dd)
   lastPaidAmount?: number; // amount paid in that most recent payment
-  paymentHistory?: { date: string; amount: number }[]; // every payment, newest last
+  paymentHistory?: { date: string; amount: number }[]; // ISO datetime preferred for display
+  /** When this purchase was saved in the system (ISO datetime). */
+  createdAt?: string;
 }
 
 export interface SaleLine {
@@ -120,12 +122,17 @@ export interface Payment {
   date: string;
   type: PaymentType;
   partyId: string;
+  /** From payment.customer/supplier on load — needed when party is inactive and omitted from bootstrap lists */
+  partyName?: string;
   amount: number;
   method: "Cash" | "Bank" | "Cheque";
   saleId?: string; // the specific invoice this payment settles (customer payments)
+  purchaseId?: string; // the specific purchase this payment settles (supplier payments)
   note?: string;
-  /** FIFO invoice settlements recorded server-side */
-  allocations?: { saleId: string; amount: number }[];
+  /** When the payment row was recorded (ISO datetime). */
+  createdAt?: string;
+  /** Invoice / purchase settlements recorded server-side */
+  allocations?: { saleId?: string; purchaseId?: string; amount: number }[];
 }
 
 export interface Expense {

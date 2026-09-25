@@ -16,8 +16,6 @@ import { canOpenPath, pagesFor } from "@/lib/staff-access";
 import { useUiPreferences } from "@/lib/preferences";
 import { AuthBootstrapSkeleton, skeletonForPath } from "@/components/skeletons";
 
-const TRADEX_LOGO = "/images/logo.png";
-
 const ICONS: Record<string, ReactNode> = {
   dashboard: <path d="M2 8.5 8 3l6 5.5V14a.5.5 0 0 1-.5.5h-3v-4h-3v4h-3A.5.5 0 0 1 2 14Z" />,
   purchases: <path d="M2 3h2l1.6 8.5a1 1 0 0 0 1 .8h5.9a1 1 0 0 0 1-.8L15 6H4.5M6.5 14.5h.01M11.5 14.5h.01" />,
@@ -34,13 +32,15 @@ const ICONS: Record<string, ReactNode> = {
   overview: <path d="M2 8.5 8 3l6 5.5V14a.5.5 0 0 1-.5.5h-3v-4h-3v4h-3A.5.5 0 0 1 2 14Z" />,
   businesses: <path d="M2.5 3.5h11v9h-11ZM5 6.5h6M5 9h4M8 12.5v2.5M6 15h4" />,
   subscriptions: <path d="M2 5.5h12v7H2ZM2 5.5 8 2.5l6 3M11.5 9h.01" />,
+  system: <path d="M8 1.75a6.25 6.25 0 1 0 0 12.5 6.25 6.25 0 0 0 0-12.5ZM8 4v4l2.5 1.5" />,
 };
 
 const PLATFORM_ADMIN_NAV = [
   { key: "overview" as const, href: "/admin/overview", label: "Overview" },
   { key: "businesses" as const, href: "/admin/businesses", label: "Businesses" },
-  { key: "products" as const, href: "/admin/products", label: "Products" },
-  { key: "subscriptions" as const, href: "/admin/subscriptions", label: "Subscriptions" },
+  { key: "subscriptions" as const, href: "/admin/subscriptions", label: "Plans" },
+  { key: "products" as const, href: "/admin/products", label: "Catalog" },
+  { key: "system" as const, href: "/admin/system", label: "System" },
 ];
 
 function UserBlock({
@@ -124,18 +124,33 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+
 function BrandMark({
   brand,
   logoSrc,
   collapsed = false,
   className = "",
+  logoPlaceholder = false,
 }: {
   brand: string;
   logoSrc: string | null;
   collapsed?: boolean;
   className?: string;
+  /** When true and no logo image, show “Your logo” instead of the business name. */
+  logoPlaceholder?: boolean;
 }) {
   if (!logoSrc) {
+    if (logoPlaceholder) {
+      return (
+        <span
+          className={`font-medium text-neutral-500 ${
+            collapsed ? "text-[10px] uppercase tracking-wide text-center leading-tight" : "text-[13px]"
+          } ${className}`}
+        >
+          {collapsed ? "Logo" : "Your logo"}
+        </span>
+      );
+    }
     return (
       <span
         className={`font-semibold tracking-tight text-[#171717] ${
@@ -161,6 +176,34 @@ function BrandMark({
   );
 }
 
+function AdminMobileTabBar({ pathname }: { pathname: string | null }) {
+  return (
+    <nav
+      className="sticky top-14 z-30 border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
+      aria-label="Admin sections"
+    >
+      <div className="flex gap-0.5 overflow-x-auto px-2 pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {PLATFORM_ADMIN_NAV.map((n) => {
+          const active = pathname === n.href || (pathname?.startsWith(`${n.href}/`) ?? false);
+          return (
+            <Link
+              key={n.href}
+              href={n.href}
+              className={`shrink-0 whitespace-nowrap px-3.5 py-2.5 text-[12px] font-medium transition-colors border-b-2 -mb-px ${
+                active
+                  ? "border-neutral-900 text-neutral-900"
+                  : "border-transparent text-neutral-500 hover:text-neutral-800"
+              }`}
+            >
+              {n.label}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 function MobileNav({
   navLinks,
   user,
@@ -168,6 +211,8 @@ function MobileNav({
   brand,
   brandHref,
   logoSrc,
+  pathname,
+  logoPlaceholder,
   children,
 }: {
   navLinks: (onNavigate?: () => void) => ReactNode;
@@ -176,6 +221,8 @@ function MobileNav({
   brand: string;
   brandHref: string;
   logoSrc: string | null;
+  pathname: string | null;
+  logoPlaceholder: boolean;
   children: ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -209,11 +256,12 @@ function MobileNav({
           </svg>
         </button>
         <Link href={brandHref} title={brand} className="flex-1 min-w-0 flex justify-center px-2">
-          <BrandMark brand={brand} logoSrc={logoSrc} className="h-14 w-14 object-contain object-center" />
+          <BrandMark brand={brand} logoSrc={logoSrc} className="h-14 w-14 object-contain object-center" logoPlaceholder={logoPlaceholder} />
         </Link>
         <span className="w-9" aria-hidden />
       </header>
-      <main className="p-4">{children}</main>
+      {user.role === "SUPERADMIN" ? <AdminMobileTabBar pathname={pathname} /> : null}
+      <main className="p-4 min-w-0 overflow-x-hidden">{children}</main>
       <AnimatePresence>
         {drawerOpen && (
           <>
@@ -234,7 +282,7 @@ function MobileNav({
               <div className="flex flex-col justify-between min-h-full py-6 px-4">
                 <div>
                   <div className="flex items-center justify-between mb-8 min-h-20">
-                    <BrandMark brand={brand} logoSrc={logoSrc} className="h-20 w-20 object-contain object-left" />
+                    <BrandMark brand={brand} logoSrc={logoSrc} className="h-20 w-20 object-contain object-left" logoPlaceholder={logoPlaceholder} />
                     <button
                       onClick={() => setDrawerOpen(false)}
                       aria-label="Close menu"
@@ -262,12 +310,18 @@ export default function Shell({ children }: { children: ReactNode }) {
   const { prefs } = useUiPreferences();
   const router = useRouter();
 
+  const isMarketingRoute =
+    pathname === "/pricing" ||
+    pathname === "/privacy-policy" ||
+    pathname === "/terms-and-conditions";
   const isPublic =
     pathname === "/" ||
     pathname === "/login" ||
     pathname === "/offline" ||
-    pathname === "/404";
+    pathname === "/404" ||
+    isMarketingRoute;
   const isAdminRoute = pathname === "/admin" || pathname?.startsWith("/admin/");
+  const isMarketingPage = pathname === "/" || isMarketingRoute;
   const tenantPage = pagePathFromBusinessRoute(pathname ?? "") ?? "";
   const isPrintable =
     tenantPage.startsWith("/sales/") || tenantPage.startsWith("/invoices/");
@@ -275,6 +329,7 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!pathname || !ready || !user) return;
+    if (isMarketingRoute) return;
 
     if (user.role === "SUPERADMIN") {
       if (pathname === "/" || pathname === "/login") router.replace("/admin/overview");
@@ -309,7 +364,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     if (!canOpenPath(user, pathname)) {
       router.replace(roleHome);
     }
-  }, [pathname, user, ready, isAdminRoute, roleHome, router]);
+  }, [pathname, user, ready, isAdminRoute, isMarketingRoute, roleHome, router]);
 
   if (!ready) {
     if (isPublic) return <>{children}</>;
@@ -327,13 +382,14 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   const brand =
     user.role === "SUPERADMIN"
-      ? "Tradex"
+      ? "Tijaratt"
       : user.businessName?.trim() || user.name;
   const businessLogo = prefs.logoUrl.trim() || prefs.logoDataUrl.trim();
   const logoSrc =
     user.role === "SUPERADMIN"
       ? null
-      : businessLogo || TRADEX_LOGO;
+      : businessLogo || null;
+  const useLogoPlaceholder = user.role !== "SUPERADMIN";
 
   const roleNav =
     user.role === "SUPERADMIN"
@@ -383,7 +439,8 @@ export default function Shell({ children }: { children: ReactNode }) {
     </nav>
   );
 
-  if (pathname === "/" || pathname === "/login") return null;
+  if (isMarketingPage) return <>{children}</>;
+  if (pathname === "/login") return null;
   if (isPrintable) return <>{children}</>;
 
   const pendingRedirect =
@@ -420,7 +477,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                   collapsed ? "flex w-full justify-center" : "block flex-1"
                 }`}
               >
-                <BrandMark brand={brand} logoSrc={logoSrc} collapsed={collapsed} />
+                <BrandMark brand={brand} logoSrc={logoSrc} collapsed={collapsed} logoPlaceholder={useLogoPlaceholder} />
               </Link>
               <button
                 type="button"
@@ -451,6 +508,8 @@ export default function Shell({ children }: { children: ReactNode }) {
         brand={brand}
         brandHref={roleHome}
         logoSrc={logoSrc}
+        pathname={pathname}
+        logoPlaceholder={useLogoPlaceholder}
       >
         {mainContent}
       </MobileNav>

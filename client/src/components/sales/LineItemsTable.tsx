@@ -1,6 +1,6 @@
 "use client";
 
-import { fmtMoney, fmtRateWithUnit } from "@/lib/format";
+import { fmtMoney } from "@/lib/format";
 import type { SaleDraftApi, SaleDraftLine } from "./useSaleDraft";
 
 const numVal = (n: number) => (n === 0 ? "" : String(n));
@@ -41,7 +41,7 @@ export default function LineItemsTable({
             <th>Attributes / Source</th>
             <th>Quality Name</th>
             <th className="num">Qty</th>
-            <th className="num">Rate</th>
+            <th className="num">Selling price</th>
             <th className="num">Amount</th>
             <th />
           </tr>
@@ -94,8 +94,16 @@ export default function LineItemsTable({
                   </div>
                   {over && <span className="block text-[10px] text-red-600 font-normal">Over stock!</span>}
                 </td>
-                <td className="num tabular-nums text-neutral-600">
-                  {rate > 0 ? fmtRateWithUnit(rate, l.unit) : "—"}
+                <td className="num">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    className="!w-28 text-right tabular-nums"
+                    value={numVal(rate)}
+                    onChange={(e) => api.setLine(i, { rate: Number(e.target.value) })}
+                    required
+                  />
                 </td>
                 <td className="num tabular-nums font-medium">{fmtMoney(qty * rate)}</td>
                 <td className="num">

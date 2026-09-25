@@ -37,12 +37,15 @@ export function AttributeFields({
   onChange,
   optionsOf,
   requiredError,
+  gridClassName = "grid sm:grid-cols-2 gap-4",
 }: {
   defs: AttributeDef[];
   value: Record<string, string>;
   onChange: (patch: Record<string, string>) => void;
   optionsOf?: (defId: string) => AttributeOption[];
   requiredError?: Record<string, string>;
+  /** Override grid layout (e.g. one row for size / grade / manufacturer) */
+  gridClassName?: string;
 }) {
   const ordered = [...defs]
     .filter((d) => d.active)
@@ -52,7 +55,7 @@ export function AttributeFields({
   const set = (key: string, v: string) => onChange({ ...value, [key]: v });
 
   return (
-    <div className="grid sm:grid-cols-2 gap-4">
+    <div className={gridClassName}>
       {ordered.map((def) => (
         <div key={def.id}>
           <label htmlFor={`attr-${def.id}`}>

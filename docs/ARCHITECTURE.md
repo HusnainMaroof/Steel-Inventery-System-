@@ -1,6 +1,6 @@
-# Tradex architecture
+# Tijaratt architecture
 
-Tradex is a multi-tenant depot ledger. Purchases add stock, sales remove
+Tijaratt is a multi-tenant depot ledger. Purchases add stock, sales remove
 stock, and the dashboard, invoices, dues, and reports are derived from the
 same persisted records. There is no JSON ledger snapshot and no runtime
 demo seed.
@@ -71,8 +71,8 @@ Browser
 
 The browser never receives the Nest access token. Login stores it in the
 Next.js `session` cookie (httpOnly, `sameSite: strict`, 12 hours, `secure`
-in production). Browser data requests go through `/api/tradex/*`, which
-attaches the token server-side via `tradexFetch`. CSP `connect-src 'self'`
+in production). Browser data requests go through `/api/tijaratt/*`, which
+attaches the token server-side via `tijarattFetch`. CSP `connect-src 'self'`
 enforces that — Nest is not called from the browser.
 
 CORS on Nest is locked to `CLIENT_ORIGIN`. Super Admin and staff mutations
@@ -216,8 +216,8 @@ Admin. Tenant change (`user.id:user.businessId`) resets and re-bootstraps.
 `client/src/lib/money.ts` mirror `server/src/domain/money.ts`. Dashboard
 KPIs come from this derived `stats` object after transactions load.
 
-Timeouts (`apiFetch` / `tradexFetch`): default 30s, bootstrap/transactions
-45s (client `apiFetch`; server `tradexFetch` special-cases bootstrap 45s
+Timeouts (`apiFetch` / `tijarattFetch`): default 30s, bootstrap/transactions
+45s (client `apiFetch`; server `tijarattFetch` special-cases bootstrap 45s
 and reports 60s), reports 60s. 502/503/504 → `/offline`; 404 → `/404`.
 
 List screens that page on the server use `usePaginatedSales` /

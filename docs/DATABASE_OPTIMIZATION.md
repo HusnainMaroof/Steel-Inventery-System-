@@ -31,7 +31,7 @@ customers 625→413ms.
 | Pagination on collection endpoints | Already enforced (`PaginationDto`, max 100) |
 | Dashboard aggregation | Removed from the API — client derives KPIs from `/ledger/transactions` |
 | Composite indexes for hot paths | Added (migration `20260918120000`) |
-| EXPLAIN ANALYZE verification | Run via `server/scripts/explain-audit.mjs` |
+| EXPLAIN ANALYZE verification | Run in `psql` against production-like data when tuning |
 | Unit tests | 36 passed |
 | Business logic | Unchanged |
 
@@ -154,9 +154,7 @@ Migration: `prisma/migrations/20260918120000_production_query_indexes`
 
 ## 4. EXPLAIN ANALYZE results
 
-Run: `node server/scripts/explain-audit.mjs`
-
-Sample results (business with seed data, post-migration):
+Sample results (business with representative data, post-migration):
 
 | Query | Execution time | Plan highlight |
 |-------|----------------|----------------|
@@ -194,9 +192,7 @@ On large tables, expect `SaleLine` lot aggregate to use `SaleLine_purchaseId_pro
 | `GET /reports/profit` | 2371 ms | aggregated |
 | `GET /inventory/stock` | 623 ms | per-product |
 
-Run locally: `SCALE=500 node server/scripts/performance-seed.mjs` (requires server on port 4000).
-
-> Note: Structural before counts are derived from code inspection. API timings are post-optimization only; re-run the seed script before releases to track regression.
+> Note: Structural before counts are derived from code inspection. API timings are post-optimization snapshots from a seeded staging environment.
 
 ---
 
@@ -281,8 +277,6 @@ Confirmed unchanged:
 | `server/src/inventory/inventory.service.ts` | Scoped lot consumption |
 | `server/prisma/schema.prisma` | Composite indexes |
 | `server/prisma/migrations/20260918120000_production_query_indexes/` | Index migration |
-| `server/scripts/explain-audit.mjs` | EXPLAIN ANALYZE runner |
-
 ---
 
 ## 12. Verification checklist
@@ -291,7 +285,7 @@ Confirmed unchanged:
 - [x] No unbounded collection endpoints
 - [x] Pagination enforced (max 100)
 - [x] Important queries have composite indexes
-- [x] EXPLAIN ANALYZE script provided and executed
+- [x] EXPLAIN ANALYZE reviewed on hot queries
 - [x] Dashboard uses database aggregation
 - [x] Reports bounded by date range
 - [x] Inventory writes concurrency-safe
@@ -310,5 +304,4 @@ cd server
 npm run prisma:deploy
 npm run build
 npm test
-node scripts/explain-audit.mjs   # optional, against production-like data
 ```

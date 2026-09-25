@@ -23,7 +23,7 @@ export function filterBootstrapForStaff(
     purchases: can("purchases") ? data.purchases : [],
     sales: can("sales") ? data.sales : [],
     payments: can("payments") ? data.payments : [],
-    expenses: can("expenses") ? data.expenses : [],
+    expenses: can("expenses") ? (data.expenses ?? []) : [],
     stockChecks: can("inventory") ? data.stockChecks : [],
     products:
       can("products") || can("inventory") || salesContext ? data.products : [],
@@ -40,6 +40,36 @@ export function filterBootstrapForStaff(
     warehouses: can("inventory") ? data.warehouses : [],
     locations: can("inventory") ? data.locations : [],
     staff: [],
-    settings: {},
+    settings: data.settings ?? {},
+  };
+}
+
+export type StaffTransactionPayload = {
+  customers: unknown[];
+  suppliers: unknown[];
+  purchases: unknown[];
+  sales: unknown[];
+  payments: unknown[];
+  expenses: unknown[];
+  stockChecks: unknown[];
+};
+
+/** Same access rules as bootstrap — staff only receive rows for allowed modules. */
+export function filterTransactionsForStaff(
+  data: StaffTransactionPayload,
+  access: string[] | undefined,
+): StaffTransactionPayload {
+  const allowed = new Set(sanitizeAccess(access));
+  const can = (page: StaffPage) => has(allowed, page);
+  const salesContext = can("sales") || can("purchases");
+
+  return {
+    customers: can("customers") || salesContext ? data.customers : [],
+    suppliers: can("suppliers") || can("purchases") ? data.suppliers : [],
+    purchases: can("purchases") ? data.purchases : [],
+    sales: can("sales") ? data.sales : [],
+    payments: can("payments") ? data.payments : [],
+    expenses: can("expenses") ? (data.expenses ?? []) : [],
+    stockChecks: can("inventory") ? data.stockChecks : [],
   };
 }

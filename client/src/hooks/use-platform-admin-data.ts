@@ -10,6 +10,7 @@ import {
   type SubscriptionPlanOption,
 } from "@/app/actions/platform";
 import { listOwnersAction, type OwnerAccount } from "@/app/actions/users";
+import { userFacingError } from "@/lib/user-error";
 import { invalidateAdminCache, readAdminCache, writeAdminCache } from "@/lib/admin-cache";
 
 type LoadOpts = {
@@ -136,7 +137,7 @@ export function usePlatformAdminData(
           },
         });
       } catch (reason) {
-        setLoadError(reason instanceof Error ? reason.message : "Could not load platform data");
+        setLoadError(userFacingError(reason, "Could not load platform data"));
       } finally {
         setLoading(false);
       }

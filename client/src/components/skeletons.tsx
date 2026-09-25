@@ -253,10 +253,12 @@ export function AdminOverviewSkeleton() {
           <Skeleton key={i} className="h-[88px] rounded-lg" />
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Skeleton className="h-44 rounded-lg" />
-        <Skeleton className="h-44 rounded-lg" />
+      <Skeleton className="h-24 rounded-lg mb-6" />
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-6">
+        <Skeleton className="xl:col-span-7 h-52 rounded-lg" />
+        <Skeleton className="xl:col-span-5 h-52 rounded-lg" />
       </div>
+      <Skeleton className="h-64 rounded-lg" />
     </PageShell>
   );
 }
@@ -365,6 +367,7 @@ export function skeletonForPath(pathname: string) {
   if (pathname.startsWith("/admin/businesses")) return <AdminBusinessesSkeleton />;
   if (pathname.startsWith("/admin/products")) return <AdminProductsSkeleton />;
   if (pathname.startsWith("/admin/subscriptions")) return <AdminSubscriptionsSkeleton />;
+  if (pathname.startsWith("/admin/system")) return <AdminOverviewSkeleton />;
   if (pathname.startsWith("/admin")) return <AdminOverviewSkeleton />;
 
   const page = pathname.replace(/^\/[^/]+/, "") || "/dashboard";

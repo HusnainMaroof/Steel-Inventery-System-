@@ -4,12 +4,9 @@ export function NotFoundScreen() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f8f7] px-5 py-10">
       <div className="w-full max-w-md text-center">
-        <div className="mb-8">
-          <div className="text-xl font-semibold tracking-tight">Tradex</div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-[#171717]/70 mt-1.5">
-            Business Ledger
-          </div>
-        </div>
+        <Link href="/" className="mb-8 inline-flex text-xl font-semibold tracking-tight">
+          Tijaratt
+        </Link>
 
         <div className="panel bg-white p-7 sm:p-9">
           <p className="text-[56px] font-bold tracking-tighter text-[#171717]/10 leading-none">404</p>

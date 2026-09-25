@@ -88,10 +88,7 @@ export default function LoginPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.05, ease }}
         >
-          <div className="text-xl font-semibold tracking-tight">Tradex</div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-[#171717]/70 mt-1.5">
-            Business Ledger
-          </div>
+          <Link href="/" className="text-xl font-semibold tracking-tight">Tijaratt</Link>
         </motion.div>
 
         <motion.div
@@ -182,7 +179,7 @@ export default function LoginPage() {
             href="/"
             className="text-xs font-medium text-[#171717]/70 hover:text-black transition-colors"
           >
-            &larr; Back to homepage
+            &larr; Back to Tijaratt
           </Link>
         </motion.div>
       </motion.div>

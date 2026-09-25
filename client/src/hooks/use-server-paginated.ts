@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { userFacingError } from "@/lib/user-error";
 import { apiFetch } from "@/lib/api";
 import type { Paginated } from "@/lib/pagination";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
@@ -77,7 +78,7 @@ export function useServerPaginated<T>({
       setTotal(res.total);
       setTotalPages(res.pages);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to load data");
+      setError(userFacingError(reason, "Failed to load data"));
     } finally {
       setLoading(false);
     }

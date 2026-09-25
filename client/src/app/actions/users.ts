@@ -1,6 +1,6 @@
 "use server";
 
-import { tradexFetch, type TradexRole } from "@/lib/server/tradex";
+import { tijarattFetch, type TijarattRole } from "@/lib/server/tijaratt";
 import { sanitizeAccess, type StaffPage } from "@/lib/staff-access";
 import type { BillingCycle, SubscriptionStatus } from "./platform";
 
@@ -34,7 +34,7 @@ export type OwnerAccount = {
   id: string;
   email: string;
   name: string;
-  role: TradexRole;
+  role: TijarattRole;
   active: boolean;
   createdAt?: string;
   subscriptionActive?: boolean;
@@ -46,7 +46,7 @@ export type StaffAccount = {
   id: string;
   email: string;
   name: string;
-  role: TradexRole;
+  role: TijarattRole;
   title: string | null;
   access: StaffPage[];
   createdAt?: string;
@@ -60,12 +60,12 @@ type Paginated<T> = {
   pages: number;
 };
 
-async function fetchAllTradexPages<T>(path: string, limit = 100): Promise<T[]> {
+async function fetchAllTijarattPages<T>(path: string, limit = 100): Promise<T[]> {
   const items: T[] = [];
   let page = 1;
   let pages = 1;
   do {
-    const result = await tradexFetch<Paginated<T>>(`${path}?page=${page}&limit=${limit}`);
+    const result = await tijarattFetch<Paginated<T>>(`${path}?page=${page}&limit=${limit}`);
     if (!result.ok) throw new Error(result.message);
     items.push(...result.data.items);
     pages = result.data.pages;
@@ -79,7 +79,7 @@ export async function listOwnersAction(): Promise<
   { ok: true; owners: OwnerAccount[] } | { ok: false; error: string }
 > {
   try {
-    const owners = await fetchAllTradexPages<OwnerAccount>("/api/v1/owners");
+    const owners = await fetchAllTijarattPages<OwnerAccount>("/api/v1/owners");
     return { ok: true, owners };
   } catch (error) {
     return {
@@ -92,7 +92,7 @@ export async function listOwnersAction(): Promise<
 export async function getOwnerAction(
   id: string,
 ): Promise<{ ok: true; owner: OwnerAccount } | { ok: false; error: string }> {
-  const result = await tradexFetch<OwnerAccount>(`/api/v1/owners/${id}`);
+  const result = await tijarattFetch<OwnerAccount>(`/api/v1/owners/${id}`);
   if (!result.ok) return { ok: false, error: result.message };
   return { ok: true, owner: result.data };
 }
@@ -119,7 +119,7 @@ export async function createOwnerAction(input: {
   if (businessName.length < 2) {
     return { ok: false, error: "Business name is required." };
   }
-  const result = await tradexFetch<OwnerAccount>("/api/v1/owners", {
+  const result = await tijarattFetch<OwnerAccount>("/api/v1/owners", {
     method: "POST",
     body: JSON.stringify({
       name,
@@ -142,7 +142,7 @@ export async function applyOwnerTemplatesAction(
   if (!templateIds.length) {
     return { ok: false, error: "Select at least one product template." };
   }
-  const result = await tradexFetch<OwnerAccount>(`/api/v1/owners/${id}/templates`, {
+  const result = await tijarattFetch<OwnerAccount>(`/api/v1/owners/${id}/templates`, {
     method: "POST",
     body: JSON.stringify({ templateIds }),
   });
@@ -158,7 +158,7 @@ export async function updateOwnerSubscriptionAction(
     endsAt?: string;
   },
 ): Promise<{ ok: true; owner: OwnerAccount } | { ok: false; error: string }> {
-  const result = await tradexFetch<OwnerAccount>(`/api/v1/owners/${id}/subscription`, {
+  const result = await tijarattFetch<OwnerAccount>(`/api/v1/owners/${id}/subscription`, {
     method: "PATCH",
     body: JSON.stringify(input),
   });
@@ -169,7 +169,7 @@ export async function updateOwnerSubscriptionAction(
 export async function deleteOwnerAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const result = await tradexFetch<unknown>(`/api/v1/owners/${id}`, {
+  const result = await tijarattFetch<unknown>(`/api/v1/owners/${id}`, {
     method: "DELETE",
   });
   if (!result.ok) return { ok: false, error: result.message };
@@ -183,7 +183,7 @@ export async function updateOwnerAction(
   if (input.password !== undefined && input.password.length < 8) {
     return { ok: false, error: "Password must be at least 8 characters." };
   }
-  const result = await tradexFetch<OwnerAccount>(`/api/v1/owners/${id}`, {
+  const result = await tijarattFetch<OwnerAccount>(`/api/v1/owners/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   });
@@ -195,7 +195,7 @@ export async function listStaffAction(): Promise<
   { ok: true; staff: StaffAccount[] } | { ok: false; error: string }
 > {
   try {
-    const staff = await fetchAllTradexPages<StaffAccount>("/api/v1/users");
+    const staff = await fetchAllTijarattPages<StaffAccount>("/api/v1/users");
     return {
       ok: true,
       staff: staff.map((member) => ({
@@ -231,7 +231,7 @@ export async function createStaffAction(input: {
   }
   if (title.length < 2) return { ok: false, error: "Job title is required." };
   if (!access.length) return { ok: false, error: "Pick at least one page." };
-  const result = await tradexFetch<StaffAccount>("/api/v1/users", {
+  const result = await tijarattFetch<StaffAccount>("/api/v1/users", {
     method: "POST",
     body: JSON.stringify({
       name,
@@ -255,7 +255,7 @@ export async function updateStaffAction(
   if (input.title !== undefined) body.title = input.title.trim();
   if (input.access !== undefined) body.access = sanitizeAccess(input.access);
   if (input.password) body.password = input.password;
-  const result = await tradexFetch<StaffAccount>(`/api/v1/users/${id}`, {
+  const result = await tijarattFetch<StaffAccount>(`/api/v1/users/${id}`, {
     method: "PATCH",
     body: JSON.stringify(body),
   });
@@ -266,7 +266,7 @@ export async function updateStaffAction(
 export async function removeStaffAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const result = await tradexFetch<unknown>(`/api/v1/users/${id}`, {
+  const result = await tijarattFetch<unknown>(`/api/v1/users/${id}`, {
     method: "DELETE",
   });
   if (!result.ok) return { ok: false, error: result.message };

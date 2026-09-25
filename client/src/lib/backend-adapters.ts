@@ -48,6 +48,7 @@ type ApiLine = {
 type ApiPurchase = {
   id: string;
   date: string;
+  createdAt: string;
   supplierId: string;
   transport: number;
   loading: number;
@@ -74,14 +75,18 @@ type ApiSale = {
 type ApiPayment = {
   id: string;
   date: string;
+  createdAt?: string;
   type: "CUSTOMER" | "SUPPLIER";
   customerId?: string | null;
   supplierId?: string | null;
+  customer?: { id: string; name: string; shop?: string | null } | null;
+  supplier?: { id: string; name: string; mill?: string | null } | null;
   amount: number;
   method: "CASH" | "BANK" | "CHEQUE";
   saleId?: string | null;
+  purchaseId?: string | null;
   note?: string | null;
-  allocations?: { saleId: string; amount: number | string }[];
+  allocations?: { saleId?: string | null; purchaseId?: string | null; amount: number | string }[];
 };
 
 type ApiExpense = Omit<Expense, "category"> & {
@@ -144,6 +149,7 @@ function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
       purchaseId: purchase.id,
       lineId,
       date: dateOnly(purchase.date),
+      createdAt: purchase.createdAt,
       supplierId: purchase.supplierId,
       product: line.productName ?? undefined,
       item: line.item,
@@ -165,7 +171,7 @@ function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
       labourCharges: parseDecimal(purchase.labour) * share,
       otherCost: parseDecimal(purchase.otherCost) * share,
       sellRate: line.sellRate == null ? undefined : parseDecimal(line.sellRate),
-      paid,
+      paid: paid * share,
     };
   });
 }
@@ -218,24 +224,31 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
   const payments: Payment[] = raw.payments.map((payment) => ({
     id: payment.id,
     date: dateOnly(payment.date),
+    createdAt: payment.createdAt,
     type: payment.type === "CUSTOMER" ? "customer" : "supplier",
     partyId:
       payment.type === "CUSTOMER"
-        ? payment.customerId ?? ""
-        : payment.supplierId ?? "",
+        ? payment.customerId ?? payment.customer?.id ?? ""
+        : payment.supplierId ?? payment.supplier?.id ?? "",
+    partyName:
+      payment.type === "CUSTOMER"
+        ? payment.customer?.name ?? undefined
+        : payment.supplier?.name ?? undefined,
     amount: parseDecimal(payment.amount),
     method: titleCase<Payment["method"]>(payment.method),
     saleId: payment.saleId ?? undefined,
+    purchaseId: payment.purchaseId ?? undefined,
     note: payment.note ?? undefined,
     allocations: payment.allocations?.map((a) => ({
-      saleId: a.saleId,
+      saleId: a.saleId ?? undefined,
+      purchaseId: a.purchaseId ?? undefined,
       amount: parseDecimal(a.amount),
     })),
   }));
 
   purchases = hydratePurchasePaymentHistories(purchases, payments);
 
-  const expenses: Expense[] = raw.expenses.map((expense) => ({
+  const expenses: Expense[] = (raw.expenses ?? []).map((expense) => ({
     ...expense,
     date: dateOnly(expense.date),
     amount: parseDecimal(expense.amount),

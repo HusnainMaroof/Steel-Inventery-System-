@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { BusinessLink } from "@/components/BusinessLink";
 import { useStore } from "@/lib/store";
 import { BusyButton, CustomSelect, EmptyState, ErrorState, Modal, Page } from "@/components/ui";
+import { DateRangePicker, formatRangeLabel } from "@/components/ui/date-range-picker";
 import { ReportsSkeleton } from "@/components/skeletons";
 import { fmtDate, qtyUnitLabel } from "@/lib/format";
+import { userFacingError } from "@/lib/user-error";
 import {
   StockSummary,
   ProfitLoss,
@@ -19,7 +21,6 @@ import { ExportMenu } from "@/components/reports/shared";
 import { downloadReportCsv, printReportPdf } from "@/lib/reports";
 import {
   buildProfitReport,
-  yearOptions,
   type ReportMode,
 } from "@/lib/profitReport";
 import { readCache, writeCache } from "@/lib/query-cache";
@@ -57,9 +58,17 @@ export default function ReportsPage() {
 
   const now = useMemo(() => new Date(), []);
   const [tab, setTab] = useState<ReportTab>("profit");
-  const [year, setYear] = useState(() => String(now.getFullYear()));
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  /* default scope: the current month */
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [toDate, setToDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(),
+    ).padStart(2, "0")}`;
+  });
   const [productId, setProductId] = useState("");
   const [checkProductId, setCheckProductId] = useState("");
   const [checkQty, setCheckQty] = useState("");
@@ -71,8 +80,8 @@ export default function ReportsPage() {
     ReturnType<typeof fetchServerProfitReport>
   > | null>(null);
 
-  const mode: ReportMode = fromDate || toDate ? "range" : !year ? "all" : "year";
-  const yearNum = year ? Number(year) : now.getFullYear();
+  const mode: ReportMode = fromDate || toDate ? "range" : "all";
+  const yearNum = now.getFullYear();
 
   const productOptions = useMemo(
     () => [
@@ -165,7 +174,7 @@ export default function ReportsPage() {
         if (!cancelled) {
           setServerReport(null);
           setReportError(
-            reason instanceof Error ? reason.message : "Could not load report from server",
+            userFacingError(reason, "Could not load report from server"),
           );
         }
       })
@@ -217,17 +226,10 @@ export default function ReportsPage() {
   };
 
   const hasAny = purchases.length > 0 || sales.length > 0;
-  const selectCls = "min-w-[10.5rem] [&_button]:min-h-[44px]";
   const headerLabel =
     mode === "range"
-      ? fromDate && toDate
-        ? `${fmtDate(fromDate)} → ${fmtDate(toDate)}`
-        : fromDate
-          ? `From ${fmtDate(fromDate)}`
-          : `Until ${fmtDate(toDate)}`
-      : mode === "all"
-        ? "All time"
-        : year;
+      ? formatRangeLabel(fromDate || null, toDate || null, "All time")
+      : "All time";
 
   return (
     <Page>
@@ -243,52 +245,22 @@ export default function ReportsPage() {
       <div className="flex flex-wrap items-center gap-2 mb-8">
         <CustomSelect
           compact
-          className={selectCls}
-          ariaLabel="Year"
-          value={year}
-          onChange={setYear}
-          options={[{ value: "", label: "All years" }, ...yearOptions(now)]}
-        />
-        <CustomSelect
-          compact
           className="min-w-[12rem] [&_button]:min-h-[44px]"
           ariaLabel="Product"
           value={productId}
           onChange={setProductId}
           options={productOptions}
         />
-        <label className="flex items-center gap-2 min-h-[44px]">
-          <span className="text-[10px] uppercase tracking-widest font-medium text-[#171717]/70">From</span>
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            aria-label="From date"
-            className="!w-auto !py-2 text-xs min-h-[44px]"
-          />
-        </label>
-        <label className="flex items-center gap-2 min-h-[44px]">
-          <span className="text-[10px] uppercase tracking-widest font-medium text-[#171717]/70">To</span>
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            aria-label="To date"
-            className="!w-auto !py-2 text-xs min-h-[44px]"
-          />
-        </label>
-        {fromDate || toDate ? (
-          <button
-            type="button"
-            onClick={() => {
-              setFromDate("");
-              setToDate("");
-            }}
-            className="btn-ghost !py-2 !px-3 !text-xs min-h-[44px]"
-          >
-            Clear dates
-          </button>
-        ) : null}
+        <DateRangePicker
+          from={fromDate}
+          to={toDate}
+          onChange={(r) => {
+            setFromDate(r.from ?? "");
+            setToDate(r.to ?? "");
+          }}
+          placeholder="All dates"
+          ariaLabel="Filter report by date range"
+        />
         <div className="ml-auto shrink-0">
         <ExportMenu
           onExcel={() => downloadReportCsv(report)}
@@ -296,12 +268,6 @@ export default function ReportsPage() {
         />
         </div>
       </div>
-
-      {reportError && !reportLoading && hasAny ? (
-        <p role="alert" className="text-sm text-[#a12b1f] mb-4">
-          {reportError} — showing local figures until the server responds.
-        </p>
-      ) : null}
 
       {reportLoading ? <ReportsSkeleton /> : null}
 
@@ -323,7 +289,7 @@ export default function ReportsPage() {
               .catch((reason: unknown) => {
                 setServerReport(null);
                 setReportError(
-                  reason instanceof Error ? reason.message : "Could not load report from server",
+                  userFacingError(reason, "Could not load report from server"),
                 );
               })
               .finally(() => setReportLoading(false));

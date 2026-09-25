@@ -51,10 +51,7 @@ export function OfflineClient() {
           transition={{ duration: 0.45, delay: 0.05, ease }}
           className="mb-8"
         >
-          <div className="text-xl font-semibold tracking-tight">Tradex</div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-[#171717]/70 mt-1.5">
-            Business Ledger
-          </div>
+          <Link href="/" className="text-xl font-semibold tracking-tight">Tijaratt</Link>
         </motion.div>
 
         <motion.div
@@ -86,7 +83,7 @@ export function OfflineClient() {
 
           <h1 className="text-[20px] font-semibold tracking-tight">Server not responding</h1>
           <p className="text-[13px] leading-relaxed text-[#171717]/70 mt-3 mb-7">
-            Tradex cannot reach the business server right now. Your data is safe — the app will
+            Tijaratt cannot reach the business server right now. Your data is safe. The app will
             reconnect automatically when the server is back online.
           </p>
 
@@ -105,7 +102,7 @@ export function OfflineClient() {
           </div>
 
           <p className="text-[11px] text-neutral-400 mt-6">
-            If you run Tradex locally, start the server with{" "}
+            If you run Tijaratt locally, start the server with{" "}
             <code className="font-mono text-[10px] bg-neutral-100 px-1.5 py-0.5 rounded">
               npm run start:dev
             </code>{" "}

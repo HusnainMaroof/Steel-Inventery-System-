@@ -4,7 +4,7 @@ import {
   assertSameOrigin,
   PRIVATE_API_HEADERS,
 } from "@/lib/bff-security";
-import { tradexFetch } from "@/lib/server/tradex";
+import { tijarattFetch } from "@/lib/server/tijaratt";
 
 type RouteContext = { params: Promise<{ path: string[] }> };
 
@@ -26,7 +26,7 @@ async function forward(request: Request, context: RouteContext) {
   const body = method === "GET" || method === "HEAD"
     ? undefined
     : await request.text();
-  const result = await tradexFetch<unknown>(apiPath, { method, body });
+  const result = await tijarattFetch<unknown>(apiPath, { method, body });
   if (!result.ok) {
     return NextResponse.json(
       { message: result.message },

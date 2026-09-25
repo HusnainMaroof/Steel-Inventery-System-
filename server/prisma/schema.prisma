@@ -352,6 +352,8 @@ model Purchase {
   supplier Supplier        @relation(fields: [supplierId], references: [id])
   lines    PurchaseLine[]
   sourcedSaleLines SaleLine[] @relation("SourcePurchase")
+  payments Payment[]
+  paymentAllocations PaymentAllocation[]
 
   @@index([businessId, date])
   @@index([businessId, supplierId, date])
@@ -474,6 +476,7 @@ model Payment {
   amount     Decimal      @db.Decimal(14, 2)
   method     PaymentMethod @default(CASH)
   saleId     String? // the specific invoice this payment settles
+  purchaseId String? // the specific purchase this payment settles (supplier)
   note       String?
   createdAt  DateTime     @default(now())
 
@@ -481,6 +484,7 @@ model Payment {
   customer    Customer?           @relation(fields: [customerId], references: [id])
   supplier    Supplier?           @relation(fields: [supplierId], references: [id])
   sale        Sale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  purchase    Purchase?           @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
   allocations PaymentAllocation[]
 
   @@index([businessId, date])
@@ -488,21 +492,25 @@ model Payment {
   @@index([customerId])
   @@index([supplierId])
   @@index([saleId])
+  @@index([purchaseId])
 }
 
 model PaymentAllocation {
   id         String  @id @default(cuid())
   businessId String
   paymentId  String
-  saleId     String
+  saleId     String?
+  purchaseId String?
   amount     Decimal @db.Decimal(14, 2)
 
   business Business @relation(fields: [businessId], references: [id])
   payment  Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  sale     Sale     @relation(fields: [saleId], references: [id])
+  sale     Sale?    @relation(fields: [saleId], references: [id])
+  purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
 
   @@index([paymentId])
   @@index([saleId])
+  @@index([purchaseId])
   @@index([businessId])
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { fmtQtyWithUnit, fmtRateWithUnit, qtyUnitLabel } from "@/lib/format";
+import { fmtQtyWithUnit, perUnitLabel, qtyUnitLabel } from "@/lib/format";
 import { OptionalSection } from "@/components/ui";
 import { AttributeFields } from "@/components/catalogue/AttributeFields";
 import type { SaleDraftApi } from "./useSaleDraft";
@@ -17,14 +17,26 @@ export default function AddItemBar({
   onAdd: () => void;
   showOptionalDetails?: boolean;
 }) {
-  const { pick, setPick } = api;
+  const { pick, setPick, lines, pickVariant, pickUsesCats, variantRowsOf, draftAvail, draftUnit } = api;
   const [lotExpanded, setLotExpanded] = useState(false);
   const showLot = showOptionalDetails || lotExpanded;
   const items = api.categoriesOfProduct(pick.productId);
   const lots = api.pickVariant ? api.lotsOf(api.pickVariant.id) : [];
-  const v = api.pickVariant;
   const productName = api.prodById.get(pick.productId)?.name;
   const itemName = api.pickUsesCats ? api.catById.get(pick.categoryId)?.name : undefined;
+
+  const scopeRows = pick.productId
+    ? variantRowsOf(pick.productId, pickUsesCats ? pick.categoryId || undefined : undefined)
+    : [];
+  const scopeUnit = draftUnit || scopeRows[0]?.unit || "";
+  const scopeStockGross = scopeRows.reduce((a, r) => a + r.stockQty, 0);
+  const scopeVariantIds = new Set(scopeRows.map((r) => r.variantId));
+  const onInvoiceInScope = lines
+    .filter((l) => scopeVariantIds.has(l.variantId))
+    .reduce((a, l) => a + (Number(l.qty) || 0), 0);
+  const stockOnHand = pickVariant ? draftAvail : Math.max(0, scopeStockGross - onInvoiceInScope);
+
+  const maxQtyLabel = scopeUnit ? fmtQtyWithUnit(stockOnHand, scopeUnit) : "";
 
   return (
     <div className="border border-neutral-200 rounded-xl overflow-hidden">
@@ -33,7 +45,7 @@ export default function AddItemBar({
         {!api.hasStock ? (
           <span className="text-[12px] text-neutral-400">No stock — record a purchase first</span>
         ) : (
-          <span className="text-[12px] text-neutral-400">Rate from stock lot</span>
+          <span className="text-[12px] text-neutral-400">Price prefilled from stock — edit before adding</span>
         )}
       </div>
 
@@ -81,41 +93,31 @@ export default function AddItemBar({
               open={showLot}
               onToggle={() => setLotExpanded((expanded) => !expanded)}
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                <div>
-                  <label className="!mb-1">Lot</label>
-                  <select value={pick.lotId} onChange={(e) => setPick({ lotId: e.target.value })}>
-                    <option value="">Any lot — FIFO (oldest first)</option>
-                    {lots.map((l) => (
-                      <option key={l.purchaseId} value={l.purchaseId}>
-                        {l.label} — {fmtQtyWithUnit(l.remaining, l.unit)} left
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <p className="text-[13px] text-neutral-500 sm:pb-2">
-                  Available:{" "}
-                  <span className="font-semibold text-neutral-800 tabular-nums">
-                    {fmtQtyWithUnit(api.draftAvail, api.draftUnit)}
-                  </span>
-                </p>
+              <div>
+                <label className="!mb-1">Lot</label>
+                <select value={pick.lotId} onChange={(e) => setPick({ lotId: e.target.value })} className="w-full">
+                  <option value="">Any lot — FIFO (oldest first)</option>
+                  {lots.map((l) => (
+                    <option key={l.purchaseId} value={l.purchaseId}>
+                      {l.label} — {fmtQtyWithUnit(l.remaining, l.unit)} left
+                    </option>
+                  ))}
+                </select>
               </div>
             </OptionalSection>
           )}
 
-          <div className="pt-4 border-t border-neutral-100 flex flex-wrap items-end justify-between gap-4">
+          <div className="pt-4 border-t border-neutral-100 flex flex-col sm:flex-row sm:flex-wrap sm:items-end sm:justify-between gap-4">
             <div className="text-[13px] text-neutral-500 min-w-0 flex-1">
-              {v && api.canAdd ? (
+              {pick.productId && scopeRows.length > 0 ? (
                 <>
                   <span className="font-medium text-neutral-800">{productName}</span>
                   {itemName ? ` · ${itemName}` : ""}
-                  {api.draftPrice ? (
-                    <span className="ml-2 text-neutral-600 tabular-nums">
-                      @ {fmtRateWithUnit(api.draftPrice ?? 0, api.draftUnit)}
-                    </span>
-                  ) : (
-                    <span className="ml-2 text-neutral-400">no sell price — using cost + 15%</span>
-                  )}
+                  {api.noStockForCombo ? (
+                    <span className="block sm:inline sm:ml-2 text-neutral-500">This combination is not in stock.</span>
+                  ) : api.notInStock ? (
+                    <span className="block sm:inline sm:ml-2 text-neutral-500">Fill attributes to match stock.</span>
+                  ) : null}
                 </>
               ) : api.noStockForCombo ? (
                 "This combination is not in stock."
@@ -125,28 +127,65 @@ export default function AddItemBar({
                 "Pick a product"
               )}
             </div>
-            <div className="flex items-end gap-3 shrink-0">
-              <div>
-                <label className="!mb-1">Qty ({qtyUnitLabel(api.draftUnit)})</label>
-                <input
-                  type="number"
-                  min="0"
-                  max={api.draftAvail || undefined}
-                  step="any"
-                  className={`!w-28 ${api.draftOver ? "!border-red-600" : ""}`}
-                  value={numVal(pick.qty)}
-                  onChange={(e) => setPick({ qty: Number(e.target.value) })}
-                />
+            <div className="flex flex-wrap items-end gap-3 shrink-0 w-full sm:w-auto">
+              {pickVariant && pick.productId && scopeRows.length > 0 ? (
+                <div className="flex flex-col min-w-0">
+                  <label className="!mb-1">
+                    Selling price
+                    <span className="font-normal text-neutral-400">{perUnitLabel(scopeUnit || api.draftUnit)}</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    className="!w-32 tabular-nums"
+                    value={numVal(pick.rate)}
+                    onChange={(e) => setPick({ rate: Number(e.target.value) })}
+                    disabled={!pickVariant}
+                    title={
+                      api.suggestedSellRate > 0 && pick.rate !== api.suggestedSellRate
+                        ? `Stock list price: ${api.suggestedSellRate}`
+                        : undefined
+                    }
+                  />
+                </div>
+              ) : null}
+              <div className="flex flex-col min-w-0 flex-1 sm:flex-initial">
+                <label className="!mb-1">Qty ({qtyUnitLabel(scopeUnit || api.draftUnit)})</label>
+                <div className="flex items-stretch gap-2">
+                  {scopeUnit && pick.productId && scopeRows.length > 0 ? (
+                    <span
+                      className="inline-flex items-center rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-2 text-[13px] font-semibold tabular-nums text-neutral-900 whitespace-nowrap"
+                      title="Maximum you can add for this item"
+                    >
+                      Max {maxQtyLabel}
+                    </span>
+                  ) : null}
+                  <input
+                    type="number"
+                    min="0"
+                    max={stockOnHand || api.draftAvail || undefined}
+                    step="any"
+                    className={`!w-28 shrink-0 ${api.draftOver ? "!border-red-600" : ""}`}
+                    value={numVal(pick.qty)}
+                    onChange={(e) => setPick({ qty: Number(e.target.value) })}
+                  />
+                </div>
               </div>
-              <button type="button" className="btn-primary !py-2.5 !px-5 text-[13px]" onClick={onAdd} disabled={!api.canAdd}>
+              <button
+                type="button"
+                className="btn-primary !py-2.5 !px-5 text-[13px] w-full sm:w-auto"
+                onClick={onAdd}
+                disabled={!api.canAdd}
+              >
                 Add item
               </button>
             </div>
           </div>
 
-          {api.draftOver && (
+          {(api.draftOver || (Number(pick.qty) || 0) > stockOnHand) && scopeUnit && (
             <p className="text-[12px] text-red-600">
-              Only {fmtQtyWithUnit(api.draftAvail, api.draftUnit)} available for this item.
+              Only {fmtQtyWithUnit(stockOnHand, scopeUnit)} remaining for this item.
             </p>
           )}
         </div>

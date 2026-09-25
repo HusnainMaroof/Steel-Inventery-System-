@@ -6,6 +6,7 @@ import {
   type CatalogTemplateAttribute,
   type ProductTemplateFull,
 } from "@/app/actions/platform";
+import { builtinTemplateMeta, catalogStructureLabel } from "@/lib/admin-platform-meta";
 import { BusyButton, Modal } from "@/components/ui";
 
 const UNIT_OPTIONS = [
@@ -53,27 +54,47 @@ export function TemplateCatalogCard({
   onToggle: () => void;
 }) {
   const isCustom = template.id.startsWith("custom_");
+  const meta = builtinTemplateMeta(template.id);
+  const attrCount = template.usesCategories
+    ? (template.categories ?? []).reduce((n, c) => n + c.attributes.length, 0)
+    : (template.attributes ?? []).length;
+  const categoryCount = template.categories?.length ?? 0;
 
   return (
-    <article className="panel overflow-hidden">
+    <article
+      className={`panel overflow-hidden border-l-4 ${meta?.accentClass ?? "border-l-neutral-200"}`}
+    >
       <button
         type="button"
         onClick={onToggle}
-        className="w-full text-left px-4 py-3 flex items-start justify-between gap-3 hover:bg-neutral-50/80 transition-colors"
+        className="w-full text-left px-4 py-3.5 flex items-start justify-between gap-3 hover:bg-neutral-50/80 transition-colors"
       >
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-semibold text-neutral-900">{template.label}</span>
-            {isCustom ? (
+            <span className="text-[14px] font-semibold text-neutral-900">{template.label}</span>
+            {meta ? (
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+                {meta.trade}
+              </span>
+            ) : isCustom ? (
               <span className="text-[10px] uppercase tracking-widest text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
                 Custom
               </span>
             ) : null}
+            <span className="text-[10px] text-neutral-400">
+              {catalogStructureLabel(template.usesCategories)}
+            </span>
           </span>
-          <span className="block text-[11px] text-neutral-500 mt-1">
+          <span className="block text-[11px] text-neutral-600 mt-1">
             {template.product.name} · {template.product.unit}
-            {template.usesCategories ? " · uses categories" : " · flat attributes"}
+            {template.usesCategories && categoryCount
+              ? ` · ${categoryCount} categor${categoryCount === 1 ? "y" : "ies"}`
+              : ""}
+            {attrCount ? ` · ${attrCount} attribute${attrCount === 1 ? "" : "s"}` : ""}
           </span>
+          {meta ? (
+            <span className="block text-[11px] text-neutral-500 mt-1 leading-snug">{meta.hint}</span>
+          ) : null}
         </span>
         <span className="text-neutral-400 text-xs shrink-0 pt-0.5">{expanded ? "▲" : "▼"}</span>
       </button>

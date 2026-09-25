@@ -11,10 +11,7 @@
     "test:watch": "jest --watch",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "perf:seed": "node scripts/performance-seed.mjs",
-    "db:explain": "node scripts/explain-audit.mjs",
-    "perf:audit": "node scripts/final-performance-audit.mjs"
+    "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@fastify/helmet": "^13.1.1",

@@ -25,6 +25,7 @@ Items that cannot be verified from the repository alone. Complete in your deploy
 
 - [ ] Single-instance vs multi-instance documented
 - [ ] If multi-instance: shared rate-limit store required (Redis or similar)
+- [ ] `TIJARATT_API_URL` set on Next.js (server-only); `CLIENT_ORIGIN=https://tijaratt.com` on both Next and Nest in production
 - [ ] `TRUST_PROXY=1` only when behind known reverse proxy
 - [ ] `JWT_SECRET` rotated from development default
 - [ ] `DATABASE_URL` uses SSL in production

@@ -35,7 +35,7 @@ export default function AdminBusinessesPage() {
             All registered businesses — open a row to manage subscription, templates, and login.
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setAddOpen(true)}>
+        <button className="btn-primary w-full sm:w-auto shrink-0" onClick={() => setAddOpen(true)}>
           + Register business owner
         </button>
       </div>

@@ -13,19 +13,70 @@ import {
   panelPageLabel,
   planPagesSummary,
 } from "@/lib/staff-access";
+import {
+  BILLING_CYCLES,
+  BILLING_CYCLE_META,
+  billingCycleMeta,
+} from "@/lib/admin-platform-meta";
 import { BusyButton, Modal } from "@/components/ui";
-
-const BILLING_OPTIONS: { value: BillingCycle; label: string }[] = [
-  { value: "MONTHLY", label: "Monthly" },
-  { value: "YEARLY", label: "Yearly" },
-  { value: "LIFETIME", label: "Lifetime (no expiry)" },
-  { value: "CUSTOM_DAYS", label: "Custom number of days" },
-];
 
 const DEFAULT_PAGES = allBusinessPanelPages();
 
 export function billingCycleLabel(cycle: BillingCycle) {
-  return BILLING_OPTIONS.find((option) => option.value === cycle)?.label ?? cycle;
+  return billingCycleMeta(cycle).label;
+}
+
+export function BillingCycleBadge({
+  cycle,
+  durationDays,
+}: {
+  cycle: BillingCycle;
+  durationDays?: number | null;
+}) {
+  const meta = billingCycleMeta(cycle);
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.badgeClass}`}
+    >
+      {meta.short}
+      {cycle === "CUSTOM_DAYS" && durationDays ? ` · ${durationDays}d` : ""}
+    </span>
+  );
+}
+
+function BillingCyclePicker({
+  value,
+  onChange,
+}: {
+  value: BillingCycle;
+  onChange: (cycle: BillingCycle) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {BILLING_CYCLES.map((cycle) => {
+        const meta = BILLING_CYCLE_META[cycle];
+        const active = value === cycle;
+        return (
+          <button
+            key={cycle}
+            type="button"
+            onClick={() => onChange(cycle)}
+            className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+              active
+                ? "border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900/10"
+                : "border-neutral-200 bg-white hover:border-neutral-400"
+            }`}
+          >
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-[13px] font-semibold text-neutral-900">{meta.label}</span>
+              <BillingCycleBadge cycle={cycle} />
+            </span>
+            <span className="block text-[11px] text-neutral-500 mt-1.5 leading-snug">{meta.hint}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function SubscriptionPlanTable({
@@ -36,9 +87,57 @@ export function SubscriptionPlanTable({
   onEdit: (plan: SubscriptionPlanOption) => void;
 }) {
   return (
-    <div className="panel overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] text-left">
+    <>
+      <ul className="md:hidden space-y-3">
+        {plans.map((plan) => (
+          <li key={plan.id} className={`panel p-4 ${plan.active ? "" : "opacity-70"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold text-neutral-900">{plan.label}</p>
+                {plan.description ? (
+                  <p className="text-[12px] text-neutral-500 mt-1 leading-snug">{plan.description}</p>
+                ) : null}
+              </div>
+              <span
+                className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  plan.active ? "bg-emerald-50 text-emerald-800" : "bg-neutral-100 text-neutral-600"
+                }`}
+              >
+                {plan.active ? "Active" : "Hidden"}
+              </span>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px]">
+              <div>
+                <dt className="text-[10px] uppercase tracking-wider text-neutral-400">Billing</dt>
+                <dd className="mt-1">
+                  <BillingCycleBadge cycle={plan.billingCycle} durationDays={plan.durationDays} />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wider text-neutral-400">Price</dt>
+                <dd className="text-neutral-800 mt-0.5 tabular-nums">
+                  {plan.price != null && plan.price !== "" ? plan.price : "—"}
+                </dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-[10px] uppercase tracking-wider text-neutral-400">Modules</dt>
+                <dd className="text-neutral-700 mt-0.5 leading-snug">{planPagesSummary(plan.allowedPages)}</dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              className="btn-ghost !py-1.5 !px-3 text-[12px] mt-4 w-full sm:w-auto"
+              onClick={() => onEdit(plan)}
+            >
+              Edit plan
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden md:block panel overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left">
           <thead>
             <tr className="border-b border-neutral-100 bg-neutral-50/80">
               <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">Plan</th>
@@ -58,11 +157,8 @@ export function SubscriptionPlanTable({
                     <p className="text-[11px] text-neutral-500 mt-0.5">{plan.description}</p>
                   ) : null}
                 </td>
-                <td className="px-4 py-3 text-[12px] text-neutral-700">
-                  {billingCycleLabel(plan.billingCycle)}
-                  {plan.billingCycle === "CUSTOM_DAYS" && plan.durationDays
-                    ? ` · ${plan.durationDays} days`
-                    : ""}
+                <td className="px-4 py-3">
+                  <BillingCycleBadge cycle={plan.billingCycle} durationDays={plan.durationDays} />
                 </td>
                 <td className="px-4 py-3 text-[11px] text-neutral-600 max-w-xs">
                   {planPagesSummary(plan.allowedPages)}
@@ -88,8 +184,9 @@ export function SubscriptionPlanTable({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -179,16 +276,11 @@ export function SubscriptionPlanModal({
           <input id="plan-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Quarterly" />
         </div>
         <div>
-          <label htmlFor="plan-billing">Billing cycle</label>
-          <select
-            id="plan-billing"
-            value={billingCycle}
-            onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}
-          >
-            {BILLING_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          <p className="text-sm font-medium mb-1">Billing type</p>
+          <p className="text-[11px] text-neutral-500 mb-3">
+            One of four cycles — monthly, yearly, lifetime, or custom days.
+          </p>
+          <BillingCyclePicker value={billingCycle} onChange={setBillingCycle} />
         </div>
         {billingCycle === "CUSTOM_DAYS" && (
           <div>

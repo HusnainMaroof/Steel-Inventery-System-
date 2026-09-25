@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
 import {
   groupPurchasesByParent,
@@ -20,7 +20,7 @@ type DateGroup = {
 };
 
 export default function SuppliersPage() {
-  const { suppliers, purchases, sales, products, attributeDefs, addSupplier, deleteSupplier, isPending } = useStore();
+  const { suppliers, purchases, sales, products, attributeDefs, addSupplier, deleteSupplier, isPending, payments } = useStore();
   const activeSuppliers = suppliers.filter((supplier) => supplier.active !== false);
   const { open, onOpen, onClose } = useToggle();
   const [form, setForm] = useState({ name: "", mill: "", phone: "" });
@@ -32,6 +32,15 @@ export default function SuppliersPage() {
 
   const [viewSupplierId, setViewSupplierId] = useState<string | null>(null);
   const viewSupplier = suppliers.find((s) => s.id === viewSupplierId);
+  const viewSupplierName =
+    viewSupplier?.name ??
+    payments.find((p) => p.type === "supplier" && p.partyId === viewSupplierId)?.partyName ??
+    "Supplier";
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("view");
+    if (id) setViewSupplierId(id);
+  }, []);
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
 
   const confirmDeleteSupplier = async () => {
@@ -251,18 +260,18 @@ export default function SuppliersPage() {
       </Modal>
 
       {/* View History Modal */}
-      <Modal open={!!viewSupplierId} onClose={() => setViewSupplierId(null)} title={viewSupplier ? `History — ${viewSupplier.name}` : "History"} size="4xl">
-        {viewSupplier && (
+      <Modal open={!!viewSupplierId} onClose={() => setViewSupplierId(null)} title={`History — ${viewSupplierName}`} size="4xl">
+        {viewSupplierId && (
           <div className="max-h-[70vh] overflow-y-auto -mx-5 sm:-mx-7 px-5 sm:px-7">
             {/* Supplier Info */}
             <div className="bg-neutral-50 border border-neutral-200 p-4 mb-5">
               <div className="flex items-center gap-3">
                 <span className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-sm font-bold text-white shrink-0">
-                  {viewSupplier.name.charAt(0).toUpperCase()}
+                  {viewSupplierName.charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0">
-                  <span className="block font-bold text-base text-neutral-900">{viewSupplier.name}</span>
-                  <span className="block text-[11px] text-neutral-400">{[viewSupplier.mill, viewSupplier.phone].filter(Boolean).join(" · ")}</span>
+                  <span className="block font-bold text-base text-neutral-900">{viewSupplierName}</span>
+                  <span className="block text-[11px] text-neutral-400">{viewSupplier ? [viewSupplier.mill, viewSupplier.phone].filter(Boolean).join(" · ") : "Not in active supplier list"}</span>
                 </div>
               </div>
             </div>

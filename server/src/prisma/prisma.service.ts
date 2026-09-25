@@ -21,6 +21,17 @@ export class PrismaService
         { emit: "event", level: "error" },
         { emit: "event", level: "warn" },
       ],
+      // Interactive-transaction defaults. The stock-write paths (sales,
+      // purchases, payments) serialize on per-product advisory locks and pay
+      // WAN latency to the remote database on every query inside the tx, so
+      // the 5s default timed out under as few as 5 concurrent writers
+      // (Prisma error P2028 → the whole write fails and must be retried). 15s covers the observed
+      // worst case (~5.1s at 5 VUs) with headroom; maxWait raised so the
+      // pool doesn't reject queued transactions while others commit.
+      transactionOptions: {
+        maxWait: 10_000,
+        timeout: 15_000,
+      },
     });
 
     this.$on("error", (event) => {

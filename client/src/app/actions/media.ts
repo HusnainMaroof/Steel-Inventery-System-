@@ -1,10 +1,7 @@
 "use server";
 
 import { getSessionToken } from "@/lib/server/session";
-
-function apiBase(): string {
-  return (process.env.TRADEX_API_URL ?? "http://127.0.0.1:4000").replace(/\/$/, "");
-}
+import { getTijarattApiBase } from "@/lib/server/tijaratt-api-base";
 
 export async function uploadBusinessLogoAction(
   formData: FormData,
@@ -17,14 +14,14 @@ export async function uploadBusinessLogoAction(
 
   let res: Response;
   try {
-    res = await fetch(`${apiBase()}/api/v1/media/business-logo`, {
+    res = await fetch(`${getTijarattApiBase()}/api/v1/media/business-logo`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
       cache: "no-store",
     });
   } catch {
-    return { ok: false, error: "Cannot reach the Tradex server. Is it running?" };
+    return { ok: false, error: "Cannot reach the Tijaratt API. Is it running?" };
   }
 
   const text = await res.text();

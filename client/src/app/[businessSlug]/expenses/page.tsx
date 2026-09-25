@@ -3,39 +3,28 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useStore } from "@/lib/store";
 import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { dateInIsoRange } from "@/lib/date-range-filter";
+import { DatePicker } from "@/components/ui/date-picker";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import type { Expense } from "@/lib/types";
-
-const MONTHS = [
-  "01",
-  "02",
-  "03",
-  "04",
-  "05",
-  "06",
-  "07",
-  "08",
-  "09",
-  "10",
-  "11",
-  "12",
-];
 
 type DraftLine = { name: string; amount: string };
 
 const emptyLine = (): DraftLine => ({ name: "", amount: "" });
 
 function expenseName(e: Expense) {
-  return e.label.trim() || e.category;
+  return (e.label ?? "").trim() || e.category;
 }
 
 export default function ExpensesPage() {
   const { expenses, addExpense, deleteExpense, isPending } = useStore();
   const now = new Date();
   const [query, setQuery] = useState("");
-  const [filterMonth, setFilterMonth] = useState("all");
-  const [filterYear, setFilterYear] = useState("all");
-  const [filterDate, setFilterDate] = useState("");
+  const [dateRange, setDateRange] = useState<{ from: string | null; to: string | null }>({
+    from: null,
+    to: null,
+  });
   const [addOpen, setAddOpen] = useState(false);
   const [date, setDate] = useState(() => now.toISOString().slice(0, 10));
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
@@ -43,27 +32,14 @@ export default function ExpensesPage() {
   const [view, setView] = useState<Expense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
 
-  const years = useMemo(() => {
-    const current = new Date().getFullYear();
-    const set = new Set<number>();
-    for (let y = 2024; y <= current; y++) set.add(y);
-    for (const e of expenses) {
-      const y = Number(e.date.slice(0, 4));
-      if (Number.isFinite(y)) set.add(y);
-    }
-    return [...set].sort((a, b) => b - a);
-  }, [expenses]);
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return expenses.filter((e) => {
       if (q && !expenseName(e).toLowerCase().includes(q)) return false;
-      if (filterDate && e.date !== filterDate) return false;
-      if (filterMonth !== "all" && e.date.slice(5, 7) !== filterMonth) return false;
-      if (filterYear !== "all" && e.date.slice(0, 4) !== filterYear) return false;
+      if (!dateInIsoRange(e.date, dateRange)) return false;
       return true;
     });
-  }, [expenses, query, filterMonth, filterYear, filterDate]);
+  }, [expenses, query, dateRange]);
 
   const groups = useMemo(() => {
     const map = new Map<string, Expense[]>();
@@ -78,11 +54,7 @@ export default function ExpensesPage() {
   }, [filtered]);
 
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
-  const hasFilters =
-    query.trim() !== "" ||
-    filterMonth !== "all" ||
-    filterYear !== "all" ||
-    filterDate !== "";
+  const hasFilters = query.trim() !== "" || !!(dateRange.from || dateRange.to);
 
   const openAdd = () => {
     setDate(now.toISOString().slice(0, 10));
@@ -151,38 +123,12 @@ export default function ExpensesPage() {
           className="flex-1 min-w-[200px]"
           aria-label="Search expenses"
         />
-        <select
-          value={filterMonth}
-          onChange={(e) => setFilterMonth(e.target.value)}
-          className="!w-auto"
-          aria-label="Filter by month"
-        >
-          <option value="all">All months</option>
-          {MONTHS.map((m, i) => (
-            <option key={m} value={m}>
-              {new Date(2000, i, 1).toLocaleDateString("en-GB", { month: "long" })}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterYear}
-          onChange={(e) => setFilterYear(e.target.value)}
-          className="!w-auto"
-          aria-label="Filter by year"
-        >
-          <option value="all">All years</option>
-          {years.map((y) => (
-            <option key={y} value={String(y)}>
-              {y}
-            </option>
-          ))}
-        </select>
-        <input
-          type="date"
-          value={filterDate}
-          onChange={(e) => setFilterDate(e.target.value)}
-          aria-label="Filter by date"
-          className="!w-auto"
+        <DateRangePicker
+          from={dateRange.from}
+          to={dateRange.to}
+          onChange={setDateRange}
+          placeholder="All dates"
+          ariaLabel="Filter expenses by date range"
         />
         <button type="button" className="btn-primary shrink-0" onClick={openAdd}>
           + Add expense
@@ -195,9 +141,7 @@ export default function ExpensesPage() {
           className="text-xs font-medium text-[#171717] underline-offset-2 hover:underline mb-4"
           onClick={() => {
             setQuery("");
-            setFilterMonth("all");
-            setFilterYear("all");
-            setFilterDate("");
+            setDateRange({ from: null, to: null });
           }}
         >
           Clear filters
@@ -322,11 +266,11 @@ export default function ExpensesPage() {
           ) : null}
           <div>
             <label htmlFor="expense-date">Date</label>
-            <input
-              id="expense-date"
-              type="date"
+            <DatePicker
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
+              ariaLabel="Expense date"
+              disableFuture
             />
           </div>
           <div>

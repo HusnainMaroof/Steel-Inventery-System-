@@ -77,14 +77,14 @@ export class AuthService implements OnModuleInit {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const slug = slugifyName("Tradex");
+    const slug = slugifyName("Tijaratt");
     const user = await this.prisma.user.create({
       data: {
         email,
         passwordHash,
         name: "Super Admin",
         role: "SUPERADMIN",
-        business: { create: { name: "Tradex", slug } },
+        business: { create: { name: "Tijaratt", slug } },
       },
     });
     this.logger.log(`super admin created email=${user.email}`);

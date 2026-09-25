@@ -1,6 +1,6 @@
-# Tradex Server
+# Tijaratt Server
 
-NestJS + Fastify + Prisma backend (modular monolith) for the Tradex depot
+NestJS + Fastify + Prisma backend (modular monolith) for the Tijaratt
 system. PostgreSQL is hosted on Neon and accessed only through Prisma.
 
 ## Stack
@@ -17,7 +17,7 @@ PostgreSQL (Neon) · REST `/api/v1`
    # DATABASE_URL=postgresql://...   (Neon pooled connection)
    # DIRECT_URL=postgresql://...     (Neon direct connection, for migrations)
    # JWT_SECRET=<long random string>
-   # ADMIN_EMAIL=admin@tradex.app
+   # ADMIN_EMAIL=admin@tijaratt.com
    # ADMIN_PASSWORD=<at least 8 characters>
    ```
 
@@ -44,7 +44,7 @@ Every route except `GET /health` is versioned under `/api/v1`. Except
 `Authorization: Bearer <token>`.
 
 The Next.js app never sends that header from the browser. It stores the
-JWT in an httpOnly cookie and proxies through `/api/tradex/*`.
+JWT in an httpOnly cookie and proxies through `/api/tijaratt/*`.
 
 **Auth / platform:** `auth`, `owners` (SUPERADMIN), `users` (staff),
 `platform` (overview, templates, subscription plans), `media` (logo).

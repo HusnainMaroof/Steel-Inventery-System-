@@ -17,7 +17,7 @@ export interface BusinessProfile {
 }
 
 const DEFAULT_PROFILE: BusinessProfile = {
-  businessName: "Tradex Business",
+  businessName: "Your business",
   ownerName: "",
   address: "",
   city: "",

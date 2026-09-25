@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-
-function apiBase(): string {
-  return (process.env.TRADEX_API_URL ?? "http://127.0.0.1:4000").replace(/\/$/, "");
-}
+import { getTijarattApiBase } from "@/lib/server/tijaratt-api-base";
 
 export async function GET() {
   try {
-    const res = await fetch(`${apiBase()}/health`, {
+    const res = await fetch(`${getTijarattApiBase()}/health`, {
       cache: "no-store",
       signal: AbortSignal.timeout(6_000),
     });

@@ -1,7 +1,8 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { BusyButton, Modal } from "@/components/ui";
+import { BusyButton, Modal, InlineFormError } from "@/components/ui";
+import { DatePicker } from "@/components/ui/date-picker";
 import AddItemBar from "./AddItemBar";
 import LineItemsTable from "./LineItemsTable";
 import SaleSummaryPanel from "./SaleSummaryPanel";
@@ -22,6 +23,7 @@ export default function NewSaleModal({
   itemsCount,
   showOptionalDetails = false,
   submitting = false,
+  submitError,
 }: {
   open: boolean;
   onClose: () => void;
@@ -59,6 +61,7 @@ export default function NewSaleModal({
   itemsCount: number;
   showOptionalDetails?: boolean;
   submitting?: boolean;
+  submitError?: string | null;
 }) {
   return (
     <Modal
@@ -80,13 +83,23 @@ export default function NewSaleModal({
       }
     >
       <form id="new-sale-form" onSubmit={onSubmit}>
+        {submitError ? (
+          <div className="mb-4">
+            <InlineFormError message={submitError} />
+          </div>
+        ) : null}
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 xl:gap-8 items-start">
           {/* left: customer + items */}
           <div className="min-w-0 space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
               <div>
                 <label>Date</label>
-                <input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} required />
+                <DatePicker
+                  value={saleDate}
+                  onChange={setSaleDate}
+                  ariaLabel="Sale date"
+                  disableFuture
+                />
               </div>
               <div>
                 <div className="flex justify-between items-center mb-1">

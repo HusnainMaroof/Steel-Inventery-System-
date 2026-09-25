@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { BusyButton, Page, PageTitle } from "@/components/ui";
+import { BusyButton, Page, PageTitle, InlineFormError } from "@/components/ui";
+import { userFacingError } from "@/lib/user-error";
 import { useAuth, type BusinessProfile } from "@/lib/auth";
 import { displayName, roleLabel } from "@/lib/auth-types";
 import { useUiPreferences } from "@/lib/preferences";
@@ -24,6 +25,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoError, setLogoError] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   const shopName =
     invoiceName.trim() || user?.businessName?.trim() || "Your factory";
@@ -44,6 +46,7 @@ export default function SettingsPage() {
     e.preventDefault();
     if (saving) return;
     setSaving(true);
+    setSaveError("");
     try {
       await patchPrefs({
         invoiceName: invoiceName.trim(),
@@ -54,8 +57,9 @@ export default function SettingsPage() {
         invoiceNote: invoiceNote.trim(),
       });
       setSaved(true);
-    } catch {
+    } catch (reason) {
       setSaved(false);
+      setSaveError(userFacingError(reason, "Could not save shop details."));
     } finally {
       setSaving(false);
     }
@@ -102,7 +106,7 @@ export default function SettingsPage() {
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
-                <p className="text-[12px] text-[#171717]/70 text-center px-2">No logo yet</p>
+                <p className="text-[12px] text-[#171717]/70 text-center px-2">Your logo</p>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -218,6 +222,7 @@ export default function SettingsPage() {
             <BusyButton type="submit" loading={saving}>
               Save bill details
             </BusyButton>
+            {saveError ? <InlineFormError message={saveError} /> : null}
             {saved ? <p className="text-[13px] text-[#171717]">Saved.</p> : null}
           </div>
         </form>

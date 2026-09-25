@@ -47,55 +47,83 @@ export function duePurchaseParentIds(purchases: Purchase[]): string[] {
   return ids;
 }
 
-/** Reconstruct per-purchase payment journals from supplier payments (FIFO, same as server). */
+type HistoryEntry = { date: string; amount: number };
+
+function pushHistory(map: Map<string, HistoryEntry[]>, purchaseId: string, entry: HistoryEntry) {
+  const list = map.get(purchaseId) ?? [];
+  list.push(entry);
+  map.set(purchaseId, list);
+}
+
+/** Build per-purchase payment journals from server allocations + targeted payments. */
 export function hydratePurchasePaymentHistories(
   purchases: Purchase[],
   payments: Payment[],
 ): Purchase[] {
   const byParent = groupPurchasesByParent(purchases);
-  const meta = new Map<
-    string,
-    {
-      supplierId: string;
-      date: string;
-      goods: number;
-      paid: number;
-      history: { date: string; amount: number }[];
-      allocated: number;
-    }
-  >();
-
-  for (const [pid, lines] of byParent) {
-    const goods = round2(lines.reduce((s, l) => s + steelAmount(l), 0));
-    meta.set(pid, {
-      supplierId: lines[0]!.supplierId,
-      date: lines[0]!.date,
-      goods,
-      paid: lines[0]?.paid ?? 0,
-      history: [],
-      allocated: 0,
-    });
-  }
+  const historyByPurchase = new Map<string, HistoryEntry[]>();
+  const allocatedPaymentIds = new Set<string>();
 
   const supplierPayments = payments
     .filter((p) => p.type === "supplier")
-    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    .sort(
+      (a, b) =>
+        (a.createdAt ?? a.date).localeCompare(b.createdAt ?? b.date) || a.id.localeCompare(b.id),
+    );
 
   for (const pmt of supplierPayments) {
+    const recordedAt = pmt.createdAt ?? `${pmt.date}T12:00:00.000Z`;
+    let hadExplicit = false;
+
+    for (const alloc of pmt.allocations ?? []) {
+      if (alloc.purchaseId) {
+        hadExplicit = true;
+        allocatedPaymentIds.add(pmt.id);
+        pushHistory(historyByPurchase, alloc.purchaseId, {
+          date: recordedAt,
+          amount: round2(alloc.amount),
+        });
+      }
+    }
+
+    if (pmt.purchaseId && !hadExplicit) {
+      pushHistory(historyByPurchase, pmt.purchaseId, {
+        date: recordedAt,
+        amount: round2(pmt.amount),
+      });
+    }
+  }
+
+  // Legacy payments (before purchase allocations): FIFO simulation.
+  const meta = new Map<
+    string,
+    { supplierId: string; date: string; goods: number; paid: number; allocated: number }
+  >();
+  for (const [pid, lines] of byParent) {
+    meta.set(pid, {
+      supplierId: lines[0]!.supplierId,
+      date: lines[0]!.date,
+      goods: round2(lines.reduce((s, l) => s + steelAmount(l), 0)),
+      paid: lines[0]?.paid ?? 0,
+      allocated: round2(
+        (historyByPurchase.get(pid) ?? []).reduce((s, h) => s + h.amount, 0),
+      ),
+    });
+  }
+
+  for (const pmt of supplierPayments) {
+    if (allocatedPaymentIds.has(pmt.id) || pmt.purchaseId) continue;
     const open = [...meta.entries()]
       .filter(([, m]) => m.supplierId === pmt.partyId)
-      .sort(
-        (a, b) =>
-          a[1].date.localeCompare(b[1].date) || a[0].localeCompare(b[0]),
-      );
-
+      .sort((a, b) => a[1].date.localeCompare(b[1].date) || a[0].localeCompare(b[0]));
     let left = pmt.amount;
+    const recordedAt = pmt.createdAt ?? `${pmt.date}T12:00:00.000Z`;
     for (const [pid, m] of open) {
       if (left <= 0.005) break;
       const due = Math.max(0, m.goods - m.allocated);
       const take = Math.min(due, left);
       if (take > 0.005) {
-        m.history.push({ date: pmt.date, amount: round2(take) });
+        pushHistory(historyByPurchase, pid, { date: recordedAt, amount: round2(take) });
         m.allocated = round2(m.allocated + take);
         left = round2(left - take);
       }
@@ -103,13 +131,15 @@ export function hydratePurchasePaymentHistories(
   }
 
   return purchases.map((p) => {
-    const m = meta.get(purchaseParentId(p));
-    if (!m) return p;
-    const last = m.history[m.history.length - 1];
+    const pid = purchaseParentId(p);
+    const history = historyByPurchase.get(pid) ?? [];
+    const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+    const last = sorted[sorted.length - 1];
+    const lines = byParent.get(pid);
     return {
       ...p,
-      paid: m.paid,
-      paymentHistory: m.history.length ? m.history : p.paymentHistory,
+      paid: lines?.[0]?.paid ?? p.paid,
+      paymentHistory: sorted.length ? sorted : p.paymentHistory,
       lastPaidAt: last?.date ?? p.lastPaidAt,
       lastPaidAmount: last?.amount ?? p.lastPaidAmount,
     };

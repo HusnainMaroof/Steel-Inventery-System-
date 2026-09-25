@@ -10,6 +10,7 @@ import { AdminProductsSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/lib/auth";
 import { EmptyState, Page } from "@/components/ui";
 import { invalidateAdminCache } from "@/lib/admin-cache";
+import { BUILTIN_TEMPLATE_META } from "@/lib/admin-platform-meta";
 
 type TemplatesFullResult = Awaited<ReturnType<typeof listProductTemplatesFullAction>>;
 
@@ -65,16 +66,20 @@ export default function AdminProductsPage() {
   if (ready && user?.role !== "SUPERADMIN") return null;
   if (!ready || loading) return <AdminProductsSkeleton />;
 
+  const builtinIds = new Set(Object.keys(BUILTIN_TEMPLATE_META));
+  const builtIn = templates.filter((t) => builtinIds.has(t.id));
+  const custom = templates.filter((t) => !builtinIds.has(t.id));
+
   return (
     <Page>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Product templates</h1>
-          <p className="text-[#171717]/70 text-xs mt-1">
-            Catalogue blueprints for new businesses — steel, cement, wire, or your own custom variants.
+          <p className="text-[#171717]/70 text-xs mt-1 max-w-xl">
+            Trade catalogue blueprints for new businesses — steel, cement, wire, paint, and tiles, plus any custom templates you add.
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setAddOpen(true)}>
+        <button className="btn-primary w-full sm:w-auto" onClick={() => setAddOpen(true)}>
           + New template
         </button>
       </div>
@@ -91,15 +96,41 @@ export default function AdminProductsPage() {
           />
         </div>
       ) : (
-        <div className="space-y-3">
-          {templates.map((template) => (
-            <TemplateCatalogCard
-              key={template.id}
-              template={template}
-              expanded={expandedId === template.id}
-              onToggle={() => setExpandedId((current) => (current === template.id ? null : template.id))}
-            />
-          ))}
+        <div className="space-y-8">
+          {builtIn.length > 0 ? (
+            <section>
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500 mb-3">
+                Built-in trade types
+              </h2>
+              <div className="space-y-3">
+                {builtIn.map((template) => (
+                  <TemplateCatalogCard
+                    key={template.id}
+                    template={template}
+                    expanded={expandedId === template.id}
+                    onToggle={() => setExpandedId((current) => (current === template.id ? null : template.id))}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+          {custom.length > 0 ? (
+            <section>
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500 mb-3">
+                Custom templates
+              </h2>
+              <div className="space-y-3">
+                {custom.map((template) => (
+                  <TemplateCatalogCard
+                    key={template.id}
+                    template={template}
+                    expanded={expandedId === template.id}
+                    onToggle={() => setExpandedId((current) => (current === template.id ? null : template.id))}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
       )}
 

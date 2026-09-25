@@ -40,7 +40,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message: "This action references a record that no longer exists.",
           error: "Bad Request",
         };
+      // Availability errors — the server is overloaded or the database is
+      // unreachable. These must NOT be reported as client mistakes (400);
+      // return 503 so clients and load balancers know to back off and retry.
+      case "P2028": // interactive transaction exceeded its timeout
+      case "P2024": // connection pool timeout
+      case "P1001": // database unreachable
+      case "P1017": // database connection closed
+        return {
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+          message: "The server is busy. Please try again.",
+          error: "Service Unavailable",
+        };
       default:
+        this.logger.warn(
+          `unmapped prisma error ${err.code} meta=${JSON.stringify(err.meta ?? {})}`,
+        );
         return {
           status: HttpStatus.BAD_REQUEST,
           message: "The request could not be completed. Check your data and try again.",

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { uploadBusinessLogoAction } from "@/app/actions/media";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   applyOwnerTemplatesAction,
   createOwnerAction,
@@ -15,6 +15,8 @@ import type {
   SubscriptionPlanOption,
   SubscriptionStatus,
 } from "@/app/actions/platform";
+import { AdminTemplatePickCard } from "@/components/admin/template-pick-card";
+import { BillingCycleBadge } from "@/components/admin/subscription-plans-ui";
 import { BusyButton, Modal } from "@/components/ui";
 
 export function fmtDate(value?: string | null) {
@@ -71,13 +73,13 @@ export function StatCard({ label, value, hint }: { label: string; value: number;
   return (
     <div className="panel p-4">
       <p className="text-[11px] uppercase tracking-[0.12em] text-[#171717]/70">{label}</p>
-      <p className="text-3xl font-semibold mt-2 tabular-nums">{value}</p>
+      <p className="text-2xl sm:text-3xl font-semibold mt-2 tabular-nums">{value}</p>
       {hint && <p className="text-[11px] text-neutral-500 mt-1">{hint}</p>}
     </div>
   );
 }
 
-function ActionMenu({
+export function ActionMenu({
   items,
 }: {
   items: {
@@ -88,15 +90,40 @@ function ActionMenu({
   }[];
 }) {
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const menuW = 168;
+
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const menuH = Math.max(44, items.length * 36 + 8);
+    let top = rect.bottom + 4;
+    let left = rect.right - menuW;
+    left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
+    if (top + menuH > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - menuH - 4);
+    }
+    setMenuPos({ top, left });
+  }, [open, items.length]);
 
   return (
-    <span className="relative inline-block text-left shrink-0" onClick={(e) => e.stopPropagation()}>
+    <span
+      className="relative inline-block shrink-0 text-left"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       <button
+        ref={btnRef}
         type="button"
         aria-label="More actions"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="btn-ghost !py-1 !px-2.5 text-[11px] inline-flex items-center gap-1 min-h-0"
+        aria-haspopup="menu"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className="btn-ghost !py-1 !px-2.5 text-[11px] inline-flex min-h-0 items-center gap-1"
       >
         More
         <svg
@@ -109,30 +136,39 @@ function ActionMenu({
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-30 min-w-[10.5rem] bg-white border border-neutral-200 rounded-lg shadow-lg py-1">
-            {items.map((item, i) => (
-              <button
-                key={item.label}
-                type="button"
-                disabled={item.disabled}
-                onClick={() => {
-                  if (item.disabled) return;
-                  setOpen(false);
-                  item.onClick();
-                }}
-                className={`w-full text-left px-3 py-2 text-[12px] transition-colors disabled:opacity-50 ${
-                  item.danger ? "text-[#a12b1f] hover:bg-[#faf5f2]" : "text-black hover:bg-neutral-50"
-                } ${i > 0 ? "border-t border-neutral-100" : ""}`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[200]" onClick={() => setOpen(false)} aria-hidden />
+            <div
+              role="menu"
+              className="fixed z-[201] min-w-[10.5rem] rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+              style={{ top: menuPos.top, left: menuPos.left }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {items.map((item, i) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  disabled={item.disabled}
+                  onClick={() => {
+                    if (item.disabled) return;
+                    setOpen(false);
+                    item.onClick();
+                  }}
+                  className={`w-full px-3 py-2 text-left text-[12px] transition-colors disabled:opacity-50 ${
+                    item.danger ? "text-[#a12b1f] hover:bg-[#faf5f2]" : "text-black hover:bg-neutral-50"
+                  } ${i > 0 ? "border-t border-neutral-100" : ""}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
     </span>
   );
 }
@@ -175,9 +211,39 @@ export function BusinessListTable({
   planFor: (owner: OwnerAccount) => string;
 }) {
   return (
-    <div className="panel overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left">
+    <>
+      <ul className="md:hidden space-y-3">
+        {owners.map((owner) => (
+          <li key={owner.id}>
+            <Link
+              href={`/admin/businesses/${owner.id}`}
+              className={`panel block p-4 transition-colors hover:bg-neutral-50/80 active:bg-neutral-50 ${owner.active ? "" : "opacity-75"}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[15px] font-semibold text-neutral-900 truncate">{owner.business.name}</p>
+                  <p className="text-[11px] text-neutral-400 mt-0.5 font-mono truncate">/{owner.business.slug}</p>
+                  <p className="text-[12px] text-neutral-600 mt-2 truncate">{owner.name}</p>
+                  <p className="font-mono text-[11px] text-neutral-500 truncate">{owner.email}</p>
+                </div>
+                <span className="shrink-0 text-[11px] font-medium text-neutral-500">View →</span>
+              </div>
+              <div className="mt-3 pt-3 border-t border-neutral-100 flex flex-wrap items-center gap-2">
+                <span className="text-[12px] font-medium text-neutral-800">{planFor(owner)}</span>
+                <StatusBadge active={owner.active} />
+                <SubBadge
+                  active={owner.business.subscriptionStatus === "ACTIVE"}
+                  status={owner.business.subscriptionStatus}
+                />
+              </div>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden md:block panel overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left">
           <thead>
             <tr className="border-b border-neutral-100 bg-neutral-50/80">
               <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">
@@ -223,8 +289,9 @@ export function BusinessListTable({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -232,7 +299,7 @@ export function DetailRow({ label, children }: { label: string; children: ReactN
   return (
     <div className="py-3 border-b border-neutral-100 last:border-b-0">
       <p className="text-[10px] uppercase tracking-[0.1em] text-neutral-400 mb-1">{label}</p>
-      <div className="text-[13px] text-neutral-800">{children}</div>
+      <div className="text-[13px] text-neutral-800 break-words">{children}</div>
     </div>
   );
 }
@@ -365,6 +432,35 @@ export function BusinessAccountCard({
   );
 }
 
+function AdminFormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-neutral-50/40 p-4 sm:p-5">
+      <div className="mb-4">
+        <h3 className="text-[13px] font-semibold text-neutral-900">{title}</h3>
+        {description ? <p className="text-[12px] text-neutral-500 mt-1 leading-relaxed">{description}</p> : null}
+      </div>
+      <div className="flex flex-col gap-4">{children}</div>
+    </section>
+  );
+}
+
+function randomPassword(length = 12) {
+  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$";
+  let out = "";
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  for (let i = 0; i < length; i++) out += chars[bytes[i]! % chars.length];
+  return out;
+}
+
 export function AddOwnerModal({
   open,
   templates,
@@ -379,7 +475,6 @@ export function AddOwnerModal({
   onCreated: () => Promise<void>;
 }) {
   const defaultPlanId = activeSubscriptionPlans(subscriptionPlans)[0]?.id ?? "sub_monthly";
-  const logoInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     businessName: "",
     name: "",
@@ -388,16 +483,8 @@ export function AddOwnerModal({
     subscriptionPlanId: defaultPlanId,
     templateIds: [] as string[],
   });
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-
-  const clearLogo = () => {
-    setLogoFile(null);
-    setLogoPreview(null);
-    if (logoInputRef.current) logoInputRef.current.value = "";
-  };
 
   const close = () => {
     setForm({
@@ -408,7 +495,6 @@ export function AddOwnerModal({
       subscriptionPlanId: defaultPlanId,
       templateIds: [],
     });
-    clearLogo();
     setError(null);
     onClose();
   };
@@ -422,42 +508,13 @@ export function AddOwnerModal({
     }));
   };
 
-  const onPickLogo = (file: File | undefined) => {
-    if (!file) return;
-    const type = file.type;
-    if (type !== "image/png" && type !== "image/jpeg" && type !== "image/webp") {
-      setError("Use a PNG, JPG, or WebP image for the logo.");
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      setError("Logo image must be under 8 MB.");
-      return;
-    }
-    setError(null);
-    setLogoFile(file);
-    setLogoPreview(URL.createObjectURL(file));
-  };
-
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (pending) return;
     setPending(true);
     setError(null);
 
-    let logoUrl: string | undefined;
-    if (logoFile) {
-      const payload = new FormData();
-      payload.append("logo", logoFile);
-      const upload = await uploadBusinessLogoAction(payload);
-      if (!upload.ok) {
-        setPending(false);
-        setError(upload.error);
-        return;
-      }
-      logoUrl = upload.url;
-    }
-
-    const result = await createOwnerAction({ ...form, logoUrl });
+    const result = await createOwnerAction({ ...form });
     setPending(false);
     if (!result.ok) return setError(result.error);
     await onCreated();
@@ -465,111 +522,151 @@ export function AddOwnerModal({
   };
 
   return (
-    <Modal open={open} onClose={close} title="Register business owner" size="lg">
-      {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
-      <form className="flex flex-col gap-4" onSubmit={submit}>
-        {([
-          ["businessName", "Business name", "Their shop or factory"],
-          ["name", "Owner name", "Owner name"],
-          ["email", "Email", "owner@example.com"],
-          ["password", "Password", "At least 8 characters"],
-        ] as const).map(([key, label, placeholder]) => (
-          <div key={key}>
-            <label htmlFor={`owner-${key}`}>{label}</label>
-            <input
-              id={`owner-${key}`}
-              type={key === "password" ? "password" : key === "email" ? "email" : "text"}
-              value={form[key]}
-              placeholder={placeholder}
-              onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
-            />
-          </div>
-        ))}
-
-        <div>
-          <p className="text-sm font-medium mb-2">Business logo (optional)</p>
-          <p className="text-xs text-neutral-500 mb-3">
-            Uploaded to Cloudinary, compressed on the server, and shown in the owner&apos;s menu and bills.
-          </p>
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="h-20 w-36 border border-neutral-200 rounded-md bg-white flex items-center justify-center p-2">
-              {logoPreview ? (
-                <img src={logoPreview} alt="Logo preview" className="max-h-full max-w-full object-contain" />
-              ) : (
-                <span className="text-[11px] text-neutral-400">No logo</span>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="sr-only"
-                onChange={(event) => onPickLogo(event.target.files?.[0])}
-              />
-              <button
-                type="button"
-                className="btn-ghost !text-[12px]"
-                onClick={() => logoInputRef.current?.click()}
-              >
-                {logoPreview ? "Change logo" : "Upload logo"}
-              </button>
-              {logoPreview ? (
-                <button type="button" className="btn-ghost !text-[12px]" onClick={clearLogo}>
-                  Remove
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <label htmlFor="owner-plan">Subscription plan</label>
-          <select
-            id="owner-plan"
-            value={form.subscriptionPlanId}
-            onChange={(e) => setForm((f) => ({ ...f, subscriptionPlanId: e.target.value }))}
-          >
-            {activeSubscriptionPlans(subscriptionPlans).map((plan) => (
-              <option key={plan.id} value={plan.id}>{plan.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <p className="text-sm font-medium mb-2">Product templates (optional)</p>
-          <p className="text-xs text-neutral-500 mb-3">
-            Pre-build the catalogue when the owner first logs in — steel, cement, wire, paint, or tiles.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {templates.map((t) => (
-              <label
-                key={t.id}
-                className={`flex items-start gap-2 border rounded-md p-3 cursor-pointer ${
-                  form.templateIds.includes(t.id) ? "border-black bg-neutral-50" : "border-neutral-200"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={form.templateIds.includes(t.id)}
-                  onChange={() => toggleTemplate(t.id)}
-                />
-                <span>
-                  <span className="block text-sm font-medium">{t.label}</span>
-                  <span className="block text-xs text-neutral-500">{t.productName} · {t.productUnit}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3">
-          <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
-          <BusyButton type="submit" loading={pending}>
-            Create owner
+    <Modal
+      open={open}
+      onClose={close}
+      title="Register business owner"
+      subtitle="Set up login, subscription, and optional catalogue templates. The owner adds their logo later in Settings."
+      size="lg"
+      footer={
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+          <button type="button" className="btn-ghost w-full sm:w-auto" onClick={close}>
+            Cancel
+          </button>
+          <BusyButton type="submit" form="register-owner-form" loading={pending} className="w-full sm:w-auto">
+            Create owner account
           </BusyButton>
         </div>
+      }
+    >
+      {error && (
+        <p role="alert" className="text-sm text-[#a12b1f] mb-4 rounded-md border border-[#f0d2cc] bg-[#fdf1ef] px-3 py-2">
+          {error}
+        </p>
+      )}
+      <form id="register-owner-form" className="flex flex-col gap-5" onSubmit={submit}>
+        <AdminFormSection
+          title="Business"
+          description="Shop or factory name shown across the owner panel and on bills."
+        >
+          <div>
+            <label htmlFor="owner-businessName">Business name</label>
+            <input
+              id="owner-businessName"
+              type="text"
+              value={form.businessName}
+              placeholder="e.g. Al-Noor Steel Traders"
+              autoComplete="organization"
+              onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))}
+            />
+          </div>
+        </AdminFormSection>
+
+        <AdminFormSection
+          title="Owner login"
+          description="Share these credentials with the business owner. Password is stored securely (hashed)."
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="owner-name">Owner name</label>
+              <input
+                id="owner-name"
+                type="text"
+                value={form.name}
+                placeholder="Full name"
+                autoComplete="name"
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              />
+            </div>
+            <div>
+              <label htmlFor="owner-email">Email</label>
+              <input
+                id="owner-email"
+                type="email"
+                value={form.email}
+                placeholder="owner@example.com"
+                autoComplete="email"
+                onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+              />
+            </div>
+          </div>
+          <div>
+            <div className="flex flex-wrap items-end justify-between gap-2 mb-1.5">
+              <label htmlFor="owner-password" className="!mb-0">
+                Password
+              </label>
+              <button
+                type="button"
+                className="text-[11px] font-medium text-neutral-600 hover:text-black underline underline-offset-2"
+                onClick={() => setForm((f) => ({ ...f, password: randomPassword() }))}
+              >
+                Generate secure password
+              </button>
+            </div>
+            <input
+              id="owner-password"
+              type="text"
+              value={form.password}
+              placeholder="At least 8 characters"
+              autoComplete="new-password"
+              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+            />
+            <p className="text-[11px] text-neutral-500 mt-1.5">Copy this before creating — it cannot be retrieved later.</p>
+          </div>
+        </AdminFormSection>
+
+        <AdminFormSection title="Subscription & catalogue">
+          <div>
+            <label htmlFor="owner-plan">Subscription plan</label>
+            <select
+              id="owner-plan"
+              value={form.subscriptionPlanId}
+              onChange={(e) => setForm((f) => ({ ...f, subscriptionPlanId: e.target.value }))}
+            >
+              {activeSubscriptionPlans(subscriptionPlans).map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.label}
+                </option>
+              ))}
+            </select>
+            {(() => {
+              const plan = subscriptionPlans.find((p) => p.id === form.subscriptionPlanId);
+              if (!plan) return null;
+              return (
+                <p className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-600 mt-2">
+                  <span>Billing type:</span>
+                  <BillingCycleBadge cycle={plan.billingCycle} durationDays={plan.durationDays} />
+                </p>
+              );
+            })()}
+          </div>
+          <div>
+            <p className="text-sm font-medium mb-1">Product templates (optional)</p>
+            <p className="text-[11px] text-neutral-500 mb-3">
+              Pre-build catalogue on first login — steel, cement, wire, paint, tiles, etc.
+            </p>
+            {templates.length === 0 ? (
+              <p className="text-[12px] text-neutral-400 rounded-md border border-dashed border-neutral-200 px-3 py-4 text-center">
+                No templates yet. You can assign them later from the business detail page.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {templates.map((t) => (
+                  <AdminTemplatePickCard
+                    key={t.id}
+                    id={t.id}
+                    label={t.label}
+                    productName={t.productName}
+                    productUnit={t.productUnit}
+                    usesCategories={t.usesCategories}
+                    selected={form.templateIds.includes(t.id)}
+                    onChange={() => toggleTemplate(t.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </AdminFormSection>
       </form>
     </Modal>
   );
@@ -722,31 +819,21 @@ export function TemplatesModal({
         {assigned.length ? ` Last applied ${fmtDate(owner?.business.templatesAppliedAt)}.` : ""}
       </p>
       <form className="flex flex-col gap-4" onSubmit={submit}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2">
           {templates.map((t) => {
             const wasAssigned = assigned.includes(t.id);
-            const checked = selected.includes(t.id);
             return (
-              <label
+              <AdminTemplatePickCard
                 key={t.id}
-                className={`flex items-start gap-2 border rounded-md p-3 cursor-pointer ${
-                  checked ? "border-black bg-neutral-50" : "border-neutral-200"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={checked}
-                  onChange={() => toggle(t.id)}
-                />
-                <span>
-                  <span className="block text-sm font-medium">{t.label}</span>
-                  <span className="block text-xs text-neutral-500">{t.productName} · {t.productUnit}</span>
-                  {wasAssigned && (
-                    <span className="block text-[11px] text-emerald-700 mt-0.5">Already assigned</span>
-                  )}
-                </span>
-              </label>
+                id={t.id}
+                label={t.label}
+                productName={t.productName}
+                productUnit={t.productUnit}
+                usesCategories={t.usesCategories}
+                selected={selected.includes(t.id)}
+                onChange={() => toggle(t.id)}
+                assigned={wasAssigned}
+              />
             );
           })}
         </div>

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { tradexFetch } from "@/lib/server/tradex";
+import { tijarattFetch } from "@/lib/server/tijaratt";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const result = await tradexFetch<{ registrationOpen: boolean }>(
+  const result = await tijarattFetch<{ registrationOpen: boolean }>(
     "/api/v1/auth/status",
   );
   if (!result.ok) {

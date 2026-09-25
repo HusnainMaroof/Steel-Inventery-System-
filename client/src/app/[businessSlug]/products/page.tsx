@@ -5,7 +5,7 @@ import { useStore } from "@/lib/store";
 import type { AttributeDef, AttributeOption, Product, ProductCategory, Variant } from "@/lib/types";
 import { attrsValuesLine, scopedDefs } from "@/lib/catalogue";
 import { PRODUCT_TEMPLATES, type ProductTemplate } from "@/lib/templates";
-import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
+import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle, RowActionsMenu } from "@/components/ui";
 
 const UNIT_OPTIONS: { value: string; label: string }[] = [
   { value: "kg", label: "KG" },
@@ -121,41 +121,6 @@ function StatusPill({ active }: { active: boolean }) {
     <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${active ? "text-neutral-600" : "text-neutral-400"}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-600" : "bg-neutral-300"}`} />
       {active ? "Active" : "Inactive"}
-    </span>
-  );
-}
-
-function RowMenu({ items }: { items: { label: string; onClick: () => void; danger?: boolean }[] }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span className="relative inline-block shrink-0" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        aria-label="Actions"
-        onClick={() => setOpen((o) => !o)}
-        className="w-8 h-8 flex items-center justify-center rounded-md text-neutral-400 hover:text-black hover:bg-neutral-100"
-      >
-        {I.dots}
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-9 z-30 w-40 bg-white border border-neutral-200 rounded-lg shadow-lg py-1">
-            {items.map((it, i) => (
-              <button
-                key={it.label}
-                type="button"
-                onClick={() => { setOpen(false); it.onClick(); }}
-                className={`w-full text-left px-3.5 py-2 text-[13px] hover:bg-neutral-100 ${
-                  it.danger ? "text-[#a12b1f]" : "text-black"
-                } ${i > 0 ? "border-t border-neutral-100" : ""}`}
-              >
-                {it.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </span>
   );
 }
@@ -716,7 +681,7 @@ function ProductCategoriesView({
                     </span>
                   </button>
                   <StatusPill active={c.active} />
-                  <RowMenu
+                  <RowActionsMenu
                     items={[
                       { label: "Configure", onClick: () => onOpenCategory(c.id) },
                       { label: "Rename", onClick: () => onRenameCategory(c) },

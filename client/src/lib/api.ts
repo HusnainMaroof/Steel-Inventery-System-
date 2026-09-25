@@ -7,6 +7,7 @@ import {
 } from "./server-offline";
 import { redirectToNotFoundPage } from "./not-found-route";
 import { fetchWithTimeout, isTimeoutError } from "./fetch-with-timeout";
+import { messageFromApiBody } from "./user-error";
 
 export class ApiError extends Error {
   constructor(
@@ -40,7 +41,7 @@ export async function apiFetch<T>(
   let response: Response;
   try {
     response = await fetchWithTimeout(
-      `/api/tradex${path}`,
+      `/api/tijaratt${path}`,
       { ...init, headers, cache: "no-store" },
       timeoutForPath(path),
     );
@@ -60,12 +61,12 @@ export async function apiFetch<T>(
     | T
     | null;
   if (!response.ok) {
-    const message =
-      body && typeof body === "object" && "message" in body && body.message
-        ? String(body.message)
-        : response.status === 504
-          ? "The server took too long to respond. Try again."
-          : "Request failed";
+    const message = messageFromApiBody(
+      body,
+      response.status === 504
+        ? "The server took too long to respond. Try again."
+        : "Request failed",
+    );
     if (isServerUnavailableStatus(response.status) || isServerUnavailableMessage(message)) {
       redirectToOfflinePage();
     }

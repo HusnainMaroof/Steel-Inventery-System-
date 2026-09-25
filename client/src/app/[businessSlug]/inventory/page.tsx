@@ -2,7 +2,9 @@
 import { BusinessLink } from "@/components/BusinessLink";
 import { useState, useMemo } from "react";
 import { useStore, type VariantStockRow } from "@/lib/store";
-import { Page, PageTitle, EmptyState, Modal } from "@/components/ui";
+import { Page, PageTitle, EmptyState, Modal, RowActionsMenu } from "@/components/ui";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { dateInIsoRange } from "@/lib/date-range-filter";
 import { fmtQtyWithUnit, fmtRateWithUnit, fmtMoney, fmtDate } from "@/lib/format";
 import { productUsesCategories, resolveDefs, attrsValuesLine } from "@/lib/catalogue";
 import { purchaseParentId } from "@/lib/purchase-utils";
@@ -30,47 +32,6 @@ const STATUS_LABEL: Record<StockStatus, string> = {
   out: "Out of stock",
 };
 
-/* three-dot row menu */
-function StockMenu({ items }: { items: { label: string; onClick: () => void }[] }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span
-      className="relative inline-block text-left shrink-0"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <button
-        type="button"
-        aria-label="Row actions"
-        onClick={() => setOpen((o) => !o)}
-        className="w-8 h-8 flex items-center justify-center rounded-md border border-transparent text-black hover:bg-neutral-100 hover:border-neutral-300 transition-colors"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="12" cy="5" r="1.8" />
-          <circle cx="12" cy="12" r="1.8" />
-          <circle cx="12" cy="19" r="1.8" />
-        </svg>
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-9 z-30 w-44 bg-white border border-neutral-200 rounded-lg shadow-lg py-1">
-            {items.map((it, i) => (
-              <button
-                key={it.label}
-                type="button"
-                onClick={() => { setOpen(false); it.onClick(); }}
-                className={`w-full text-left px-3.5 py-2 text-[13px] text-black hover:bg-neutral-100 transition-colors ${i > 0 ? "border-t border-neutral-100" : ""}`}
-              >
-                {it.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </span>
-  );
-}
-
 export default function InventoryPage() {
   const {
     products,
@@ -92,9 +53,10 @@ export default function InventoryPage() {
   const [tab, setTab] = useState<"stock" | "movements">("stock");
   const [movementVariant, setMovementVariant] = useState<string | null>(null);
   const [moveType, setMoveType] = useState<string>("all");
-  const [moveMonth, setMoveMonth] = useState<string>("all");
-  const [moveYear, setMoveYear] = useState<string>("all");
-  const [moveDate, setMoveDate] = useState<string>("");
+  const [moveRange, setMoveRange] = useState<{ from: string | null; to: string | null }>({
+    from: null,
+    to: null,
+  });
   const [detail, setDetail] = useState<VariantStockRow | null>(null);
 
   const defsFor = (opts: { productId?: string; categoryId?: string; snapshot?: Record<string, string> }) =>
@@ -177,9 +139,7 @@ export default function InventoryPage() {
     categoryFilter !== "all" ||
     statusFilter !== "all" ||
     moveType !== "all" ||
-    moveMonth !== "all" ||
-    moveYear !== "all" ||
-    moveDate !== "";
+    !!(moveRange.from || moveRange.to);
 
   const lotsOf = (variantId: string) =>
     stockLots
@@ -198,9 +158,9 @@ export default function InventoryPage() {
     if (movementVariant) return moves.filter((m) => m.variantId === movementVariant);
     if (productFilter !== "all") moves = moves.filter((m) => m.productId === productFilter);
     if (moveType !== "all") moves = moves.filter((m) => m.type === moveType);
-    if (moveDate) moves = moves.filter((m) => m.date === moveDate);
-    if (moveMonth !== "all") moves = moves.filter((m) => m.date.slice(5, 7) === moveMonth);
-    if (moveYear !== "all") moves = moves.filter((m) => m.date.slice(0, 4) === moveYear);
+    if (moveRange.from || moveRange.to) {
+      moves = moves.filter((m) => dateInIsoRange(m.date, moveRange));
+    }
     if (!q) return moves;
     return moves.filter((m) => {
       const prod = m.productId ? products.find((p) => p.id === m.productId)?.name : undefined;
@@ -216,7 +176,7 @@ export default function InventoryPage() {
       return text.toLowerCase().includes(q);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movesWithRunning, search, productFilter, moveType, moveMonth, moveYear, moveDate, movementVariant]);
+  }, [movesWithRunning, search, productFilter, moveType, moveRange, movementVariant]);
 
   /* movements grouped by date — each movement gets its own table */
   const moveDateGroups = useMemo(() => {
@@ -236,9 +196,7 @@ export default function InventoryPage() {
     setCategoryFilter("all");
     setStatusFilter("all");
     setMoveType("all");
-    setMoveMonth("all");
-    setMoveYear("all");
-    setMoveDate("");
+    setMoveRange({ from: null, to: null });
     setMovementVariant(null);
   };
 
@@ -329,36 +287,12 @@ export default function InventoryPage() {
               <option value="PURCHASE_RECEIPT">Purchase</option>
               <option value="SALE">Sale</option>
             </select>
-            <select
-              value={moveMonth}
-              onChange={(e) => setMoveMonth(e.target.value)}
-              className="!w-auto !text-xs"
-              aria-label="Filter by month"
-            >
-              <option value="all">All months</option>
-              {["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"].map((m, i) => (
-                <option key={m} value={m}>{new Date(2000, i, 1).toLocaleDateString("en-GB", { month: "long" })}</option>
-              ))}
-            </select>
-            <select
-              value={moveYear}
-              onChange={(e) => setMoveYear(e.target.value)}
-              className="!w-auto !text-xs"
-              aria-label="Filter by year"
-            >
-              <option value="all">All years</option>
-              {Array.from(new Set([...stockMovements.map((m) => m.date.slice(0, 4)), String(new Date().getFullYear())]))
-                .sort((a, b) => b.localeCompare(a))
-                .map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-            </select>
-            <input
-              type="date"
-              value={moveDate}
-              onChange={(e) => setMoveDate(e.target.value)}
-              className="!w-auto !text-xs"
-              aria-label="Filter by exact date"
+            <DateRangePicker
+              from={moveRange.from}
+              to={moveRange.to}
+              onChange={setMoveRange}
+              placeholder="All dates"
+              ariaLabel="Filter movements by date range"
             />
           </>
         )}
@@ -565,7 +499,7 @@ export default function InventoryPage() {
                       const st = statusOf(r);
                       const attrs = attrRows(r);
                       const menu = (
-                        <StockMenu
+                        <RowActionsMenu
                           items={[
                             { label: "View stock", onClick: () => setDetail(r) },
                             { label: "View lots", onClick: () => setDetail(r) },
@@ -580,9 +514,13 @@ export default function InventoryPage() {
                             onClick={() => setDetail(r)}
                             className="hidden sm:grid grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 px-3 md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors"
                           >
-                            {/* variant identity: category + every attribute, dynamic */}
+                            {/* variant identity: category header + every attribute, dynamic */}
                             <div className="min-w-0">
-                              <span className="block font-medium text-xs text-black truncate">{r.category || r.shortName}</span>
+                              {r.category ? (
+                                <span className="block font-medium text-xs text-black truncate">{r.category}</span>
+                              ) : attrs.length === 0 ? (
+                                <span className="block font-medium text-xs text-black truncate">{r.shortName}</span>
+                              ) : null}
                               {attrs.map((a, i) => (
                                 <span key={i} className="block text-[11px] text-black truncate">
                                   {a.label ? `${a.label}: ${a.value}` : a.value}
@@ -611,7 +549,11 @@ export default function InventoryPage() {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <span className="block font-medium text-xs text-black truncate">{r.category || r.shortName}</span>
+                                {r.category ? (
+                                  <span className="block font-medium text-xs text-black truncate">{r.category}</span>
+                                ) : attrs.length === 0 ? (
+                                  <span className="block font-medium text-xs text-black truncate">{r.shortName}</span>
+                                ) : null}
                                 {attrs.map((a, i) => (
                                   <span key={i} className="block text-[11px] text-black truncate">
                                     {a.label ? `${a.label}: ${a.value}` : a.value}

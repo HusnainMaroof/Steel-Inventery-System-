@@ -338,8 +338,8 @@ export class ReportsService {
       const from = input.from ? new Date(input.from) : new Date("2000-01-01");
       const to = input.to ? new Date(input.to) : now;
       const days = (to.getTime() - from.getTime()) / 86_400_000;
-      if (days > 731) {
-        throw new BadRequestException("Report date range cannot exceed two years");
+      if (days > 366) {
+        throw new BadRequestException("You can only check data for one year");
       }
       return {
         from,

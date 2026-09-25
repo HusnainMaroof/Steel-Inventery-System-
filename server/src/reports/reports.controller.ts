@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
+import { STAFF_PAGES } from "../common/staff-access";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
@@ -8,7 +9,7 @@ import { ProfitReportQueryDto } from "./dto/profit-report-query.dto";
 
 @Controller("reports")
 @UseGuards(JwtAuthGuard, StaffAccessGuard)
-@RequireStaffPage("reports")
+@RequireStaffPage(...STAFF_PAGES)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { tradexFetch } from "@/lib/server/tradex";
+import { tijarattFetch } from "@/lib/server/tijaratt";
 
 export type BillingCycle = "MONTHLY" | "YEARLY" | "LIFETIME" | "CUSTOM_DAYS";
 export type SubscriptionStatus = "PENDING" | "ACTIVE" | "EXPIRED" | "CANCELLED";
@@ -83,14 +83,16 @@ export type PlatformOverview = {
       count: number;
     }[];
   };
-  recentActivity: {
-    type: "sale" | "purchase";
-    at: string;
-    businessName: string;
-    businessSlug: string;
-    label: string;
-    party: string;
-  }[];
+  catalog: {
+    templates: number;
+    activePlans: number;
+    totalPlans: number;
+  };
+  attention: {
+    expiredSubscriptions: number;
+    revokedOwners: number;
+    expiringSoon: number;
+  };
   businesses: {
     ownerId: string;
     ownerActive: boolean;
@@ -116,7 +118,7 @@ export type PlatformOverview = {
 export async function getPlatformOverviewAction(): Promise<
   { ok: true; overview: PlatformOverview } | { ok: false; error: string }
 > {
-  const result = await tradexFetch<PlatformOverview>("/api/v1/platform/overview");
+  const result = await tijarattFetch<PlatformOverview>("/api/v1/platform/overview");
   if (!result.ok) return { ok: false, error: result.message };
   return { ok: true, overview: result.data };
 }
@@ -124,7 +126,7 @@ export async function getPlatformOverviewAction(): Promise<
 export async function listProductTemplatesAction(): Promise<
   { ok: true; templates: ProductTemplateOption[] } | { ok: false; error: string }
 > {
-  const result = await tradexFetch<ProductTemplateOption[]>("/api/v1/platform/templates");
+  const result = await tijarattFetch<ProductTemplateOption[]>("/api/v1/platform/templates");
   if (!result.ok) return { ok: false, error: result.message };
   return { ok: true, templates: result.data };
 }
@@ -132,7 +134,7 @@ export async function listProductTemplatesAction(): Promise<
 export async function listProductTemplatesFullAction(): Promise<
   { ok: true; templates: ProductTemplateFull[] } | { ok: false; error: string }
 > {
-  const result = await tradexFetch<ProductTemplateFull[]>("/api/v1/platform/templates/full");
+  const result = await tijarattFetch<ProductTemplateFull[]>("/api/v1/platform/templates/full");
   if (!result.ok) return { ok: false, error: result.message };
   return { ok: true, templates: result.data };
 }
@@ -153,7 +155,7 @@ export async function createCatalogTemplateAction(input: {
   if (!input.attributes.length) {
     return { ok: false, error: "Add at least one attribute." };
   }
-  const result = await tradexFetch<ProductTemplateFull>("/api/v1/platform/templates", {
+  const result = await tijarattFetch<ProductTemplateFull>("/api/v1/platform/templates", {
     method: "POST",
     body: JSON.stringify({
       label,
@@ -172,7 +174,7 @@ export async function listSubscriptionPlansAction(
   includeInactive = false,
 ): Promise<{ ok: true; plans: SubscriptionPlanOption[] } | { ok: false; error: string }> {
   const query = includeInactive ? "?all=1" : "";
-  const result = await tradexFetch<SubscriptionPlanOption[]>(
+  const result = await tijarattFetch<SubscriptionPlanOption[]>(
     `/api/v1/platform/subscription-plans${query}`,
   );
   if (!result.ok) return { ok: false, error: result.message };
@@ -191,7 +193,7 @@ export async function createSubscriptionPlanAction(input: {
   if (!input.allowedPages?.length) {
     return { ok: false, error: "Select at least one business panel module." };
   }
-  const result = await tradexFetch<SubscriptionPlanOption>("/api/v1/platform/subscription-plans", {
+  const result = await tijarattFetch<SubscriptionPlanOption>("/api/v1/platform/subscription-plans", {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -212,7 +214,7 @@ export async function updateSubscriptionPlanAction(
     allowedPages?: BusinessPanelPage[];
   },
 ): Promise<{ ok: true; plan: SubscriptionPlanOption } | { ok: false; error: string }> {
-  const result = await tradexFetch<SubscriptionPlanOption>(`/api/v1/platform/subscription-plans/${id}`, {
+  const result = await tijarattFetch<SubscriptionPlanOption>(`/api/v1/platform/subscription-plans/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   });

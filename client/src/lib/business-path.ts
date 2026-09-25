@@ -1,3 +1,24 @@
+const GLOBAL_PREFIXES = new Set(["admin", "login", "api", "images", "audit", "profit", "invoices"]);
+
+/** Top-level tenant paths (/expenses, /dashboard) — not a business slug. */
+const TENANT_PAGE_SEGMENTS = new Set([
+  "dashboard",
+  "purchases",
+  "products",
+  "inventory",
+  "sales",
+  "customers",
+  "suppliers",
+  "payments",
+  "expenses",
+  "reports",
+  "settings",
+  "staff",
+  "profit",
+  "invoices",
+  "audit",
+]);
+
 export function slugifyBusinessName(name: string): string {
   const base =
     name
@@ -5,7 +26,16 @@ export function slugifyBusinessName(name: string): string {
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "business";
-  const reserved = new Set(["admin", "login", "api", "audit", "profit", "invoices", "images"]);
+  const reserved = new Set([
+    "admin",
+    "login",
+    "api",
+    "audit",
+    "profit",
+    "invoices",
+    "images",
+    ...TENANT_PAGE_SEGMENTS,
+  ]);
   return reserved.has(base) ? `${base}-shop` : base;
 }
 
@@ -15,12 +45,12 @@ export function businessPath(slug: string, page = "dashboard"): string {
   return `/${slug}/${clean}`;
 }
 
-const GLOBAL_PREFIXES = new Set(["admin", "login", "api", "images", "audit", "profit", "invoices"]);
-
 export function businessSlugFromPath(pathname: string): string | null {
   const parts = pathname.split("/").filter(Boolean);
   if (parts.length === 0) return null;
   if (GLOBAL_PREFIXES.has(parts[0])) return null;
+  /* Legacy single-segment URLs must not be read as slug "expenses", etc. */
+  if (parts.length === 1 && TENANT_PAGE_SEGMENTS.has(parts[0])) return null;
   return parts[0];
 }
 

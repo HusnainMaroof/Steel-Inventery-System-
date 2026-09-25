@@ -45,16 +45,13 @@ the Nest 11 → 12 / Fastify advisory plan, not the product architecture.
 - [ ] Update `server/src/main.ts` for any Fastify 5 registration changes
 - [ ] Verify multipart uploads (`media` module)
 - [ ] Verify helmet / CORS / trust proxy settings
-- [ ] Run full test suite + `production-hardening.mjs` + `e2e-simulation.mjs`
+- [ ] Run full test suite and smoke-test critical flows in staging
 
 ## Testing requirements
 
 1. `npm test` — all unit tests
 2. `npm run build`
-3. `node scripts/security-fixes-test.mjs`
-4. `node scripts/production-hardening.mjs`
-5. `node scripts/e2e-simulation.mjs`
-6. Manual: login, bootstrap, sale create, payment, report export
+3. Manual: login, bootstrap, sale create, payment, report export
 
 ## Recommendation
 

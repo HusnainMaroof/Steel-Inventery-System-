@@ -250,6 +250,7 @@ td {
   border-bottom: 1px solid var(--line);
   color: #171717;
   font-weight: 500;
+  vertical-align: top;
 }
 tbody tr {
   transition: background 0.15s ease;
@@ -296,7 +297,8 @@ a {
   .dt-mobile > div + div { border-top: 1px solid var(--line); }
 }
 
-/* print — invoice only */
+/* Marketing visuals are implemented with component-scoped Tailwind classes. */
+
 @media print {
   body * {
     visibility: hidden;

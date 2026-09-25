@@ -52,7 +52,37 @@ import { attrsEqual, defaultShortName, identityKey, optionAppearsIn, scopedDefs,
 import type { ProductTemplate } from "./templates";
 import { useAuth } from "./auth";
 import { apiFetch, jsonBody } from "./api";
+import { userFacingError } from "./user-error";
 import { normalizeBootstrap, type ApiBootstrap } from "./backend-adapters";
+
+export type CreatePurchaseLineInput = {
+  productId: string;
+  variantId?: string;
+  categoryId?: string;
+  item: string;
+  attributeSnapshot?: Record<string, string>;
+  qty: number;
+  unit: string;
+  rate: number;
+  sellRate?: number;
+  productName?: string;
+  lotNumber?: string;
+  heatNumber?: string;
+  batchNumber?: string;
+  warehouseId?: string;
+  locationId?: string;
+};
+
+export type CreatePurchaseInput = {
+  date: string;
+  supplierId: string;
+  transport?: number;
+  loading?: number;
+  labour?: number;
+  otherCost?: number;
+  paid?: number;
+  lines: CreatePurchaseLineInput[];
+};
 
 export const purchaseTotal = (p: Purchase) =>
   p.qty * p.rate +
@@ -178,7 +208,9 @@ interface Store {
     input: { name?: string; title?: string; access?: StaffPage[]; password?: string },
   ) => Promise<void>;
   removeStaff: (id: string) => Promise<void>;
-  addPurchase: (p: Omit<Purchase, "id">) => Promise<void>;
+  addPurchase: (doc: CreatePurchaseInput) => Promise<void>;
+  /** Same date/supplier; one API purchase per doc (per-item charges & paid). */
+  addPurchaseBatch: (docs: CreatePurchaseInput[]) => Promise<void>;
   updatePurchase: (id: string, patch: Partial<Purchase>) => Promise<void>;
   deletePurchase: (id: string) => Promise<void>;
   addSale: (s: Omit<Sale, "id" | "invoiceNo" | "createdAt"> & { paidNow?: number }) => Promise<string>;
@@ -427,11 +459,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setDataVersion((v) => v + 1);
     void loadTransactions().catch((reason: unknown) => {
       setTransactionsReady(false);
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not load the ledger transactions",
-      );
+      setError(userFacingError(reason, "Could not load the ledger transactions"));
     });
   }, [applyBootstrap, loadTransactions]);
 
@@ -485,9 +513,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setReady(true);
         })
         .catch((reason: unknown) => {
-          const message =
-            reason instanceof Error ? reason.message : "Could not load the ledger";
-          setError(message);
+          setError(userFacingError(reason, "Could not load the ledger"));
           setReady(false);
         });
     }, 0);
@@ -515,15 +541,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const mutate = async <T,>(key: string, operation: () => Promise<T>): Promise<T> => {
     setPending(key);
-    setError(null);
     try {
       const result = await operation();
       await refresh();
       return result;
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "Request failed";
-      setError(message);
-      throw reason;
     } finally {
       setPending(null);
     }
@@ -952,13 +973,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const customerBalance = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const s of sales)
-      map[s.customerId] = (map[s.customerId] ?? 0) + saleGrandTotal(s);
-    for (const p of payments)
-      if (p.type === "customer")
-        map[p.partyId] = (map[p.partyId] ?? 0) - p.amount;
+    for (const s of sales) {
+      const paid = s.invoicePaid ?? salePaidMap[s.id] ?? 0;
+      const due = Math.max(0, saleGrandTotal(s) - paid);
+      map[s.customerId] = (map[s.customerId] ?? 0) + due;
+    }
     return (id: string) => map[id] ?? 0;
-  }, [sales, payments]);
+  }, [sales, salePaidMap]);
 
 
   const supplierBalance = useMemo(() => {
@@ -1089,41 +1110,86 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         apiFetch(`/users/${id}`, { method: "DELETE" }),
       );
     },
-    addPurchase: async (p) => {
-      const variant = p.variantId ? variants.find((item) => item.id === p.variantId) : undefined;
-      const product = products.find((item) => item.id === variant?.productId || item.name === p.product);
-      if (!product) throw new Error("Choose a valid product");
-      await mutate("purchase:create", () => apiFetch("/purchases", {
-        method: "POST",
-        ...jsonBody({
-          date: p.date,
-          supplierId: p.supplierId,
-          transport: p.transport,
-          loading: p.loadingCharges ?? 0,
-          labour: p.labourCharges ?? 0,
-          otherCost: p.otherCost,
-          paid: p.paid ?? 0,
-          lines: [{
-            productId: product.id,
-            variantId: p.variantId,
-            categoryId: p.categoryId,
-            item: p.item,
-            attributeSnapshot: p.attributeSnapshot,
-            qty: p.qty,
-            unit: p.unit,
-            rate: p.rate,
-            sellRate: p.sellRate,
-            productName: p.product,
-            spec: p.spec,
-            quality: p.quality,
-            lotNumber: p.lotNumber,
-            heatNumber: p.heatNumber,
-            batchNumber: p.batchNumber,
-            warehouseId: p.warehouseId,
-            locationId: p.locationId,
-          }],
+    addPurchase: async (doc) => {
+      if (!doc.lines.length) throw new Error("Add at least one purchase line");
+      for (const line of doc.lines) {
+        const product = products.find((item) => item.id === line.productId);
+        if (!product) throw new Error("Choose a valid product");
+      }
+      await mutate("purchase:create", () =>
+        apiFetch("/purchases", {
+          method: "POST",
+          ...jsonBody({
+            date: doc.date,
+            supplierId: doc.supplierId,
+            transport: doc.transport ?? 0,
+            loading: doc.loading ?? 0,
+            labour: doc.labour ?? 0,
+            otherCost: doc.otherCost ?? 0,
+            paid: doc.paid ?? 0,
+            lines: doc.lines.map((line) => ({
+              productId: line.productId,
+              variantId: line.variantId,
+              categoryId: line.categoryId,
+              item: line.item,
+              attributeSnapshot: line.attributeSnapshot,
+              qty: line.qty,
+              unit: line.unit,
+              rate: line.rate,
+              sellRate: line.sellRate,
+              productName: line.productName,
+              lotNumber: line.lotNumber,
+              heatNumber: line.heatNumber,
+              batchNumber: line.batchNumber,
+              warehouseId: line.warehouseId,
+              locationId: line.locationId,
+            })),
+          }),
         }),
-      }));
+      );
+    },
+    addPurchaseBatch: async (docs) => {
+      if (!docs.length) throw new Error("Add at least one purchase line");
+      for (const doc of docs) {
+        if (!doc.lines.length) throw new Error("Add at least one purchase line");
+        for (const line of doc.lines) {
+          const product = products.find((item) => item.id === line.productId);
+          if (!product) throw new Error("Choose a valid product");
+        }
+      }
+      await mutate("purchase:create", async () => {
+        for (const doc of docs) {
+          await apiFetch("/purchases", {
+            method: "POST",
+            ...jsonBody({
+              date: doc.date,
+              supplierId: doc.supplierId,
+              transport: doc.transport ?? 0,
+              loading: doc.loading ?? 0,
+              labour: doc.labour ?? 0,
+              otherCost: doc.otherCost ?? 0,
+              paid: doc.paid ?? 0,
+              lines: doc.lines.map((line) => ({
+                productId: line.productId,
+                variantId: line.variantId,
+                categoryId: line.categoryId,
+                item: line.item,
+                attributeSnapshot: line.attributeSnapshot,
+                qty: line.qty,
+                unit: line.unit,
+                rate: line.rate,
+                sellRate: line.sellRate,
+                productName: line.productName,
+                lotNumber: line.lotNumber,
+                heatNumber: line.heatNumber,
+                batchNumber: line.batchNumber,
+                warehouseId: line.warehouseId,
+                locationId: line.locationId,
+              })),
+            }),
+          });
+        }
+      });
     },
     updatePurchase: async (id, patch) => {
       const current = purchases.find((purchase) => purchase.id === id);
@@ -1196,6 +1262,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           amount: p.amount,
           method: p.method.toUpperCase(),
           saleId: p.saleId,
+          purchaseId: p.purchaseId,
           note: p.note,
         }),
       }));

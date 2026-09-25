@@ -6,6 +6,7 @@ const ADMIN_STATIC = new Set([
   "/admin/businesses",
   "/admin/products",
   "/admin/subscriptions",
+  "/admin/system",
 ]);
 
 const TENANT_TOP = new Set([

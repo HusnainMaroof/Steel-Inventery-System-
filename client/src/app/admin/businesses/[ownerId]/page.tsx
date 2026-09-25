@@ -25,6 +25,7 @@ import {
   SubBadge,
   SubscriptionModal,
   TemplatesModal,
+  ActionMenu,
 } from "@/components/admin/admin-ui";
 import { AdminBusinessDetailSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/lib/auth";
@@ -185,46 +186,75 @@ export default function AdminBusinessDetailPage() {
             <SubBadge active={subActive} status={owner.business.subscriptionStatus} />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-ghost !text-[12px]" onClick={() => setSubOpen(true)}>
-            Subscription
-          </button>
-          <button type="button" className="btn-ghost !text-[12px]" onClick={() => setTemplatesOpen(true)}>
-            Templates
-          </button>
-          <button type="button" className="btn-ghost !text-[12px]" onClick={() => setResetOpen(true)}>
-            Reset password
-          </button>
-          {owner.active ? (
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <div className="hidden sm:flex flex-wrap gap-2">
+            <button type="button" className="btn-ghost !text-[12px]" onClick={() => setSubOpen(true)}>
+              Subscription
+            </button>
+            <button type="button" className="btn-ghost !text-[12px]" onClick={() => setTemplatesOpen(true)}>
+              Templates
+            </button>
+            <button type="button" className="btn-ghost !text-[12px]" onClick={() => setResetOpen(true)}>
+              Reset password
+            </button>
+            {owner.active ? (
+              <BusyButton
+                type="button"
+                variant="ghost"
+                className="!text-[12px] text-[#a12b1f]"
+                onClick={() => void revoke()}
+                loading={revoking}
+              >
+                Revoke login
+              </BusyButton>
+            ) : (
+              <BusyButton
+                type="button"
+                variant="ghost"
+                className="!text-[12px]"
+                onClick={() => void reactivate()}
+                loading={reactivating}
+              >
+                Reactivate login
+              </BusyButton>
+            )}
             <BusyButton
               type="button"
               variant="ghost"
-              className="!text-[12px] text-[#a12b1f]"
-              onClick={() => void revoke()}
-              loading={revoking}
+              className="!text-[12px] !text-[#a12b1f]"
+              onClick={() => setDeleteOpen(true)}
+              loading={deleting}
             >
-              Revoke login
+              Delete business
             </BusyButton>
-          ) : (
-            <BusyButton
-              type="button"
-              variant="ghost"
-              className="!text-[12px]"
-              onClick={() => void reactivate()}
-              loading={reactivating}
-            >
-              Reactivate login
-            </BusyButton>
-          )}
-          <BusyButton
-            type="button"
-            variant="ghost"
-            className="!text-[12px] !text-[#a12b1f]"
-            onClick={() => setDeleteOpen(true)}
-            loading={deleting}
-          >
-            Delete business
-          </BusyButton>
+          </div>
+          <div className="sm:hidden w-full flex justify-end">
+            <ActionMenu
+              items={[
+                { label: "Subscription", onClick: () => setSubOpen(true) },
+                { label: "Templates", onClick: () => setTemplatesOpen(true) },
+                { label: "Reset password", onClick: () => setResetOpen(true) },
+                owner.active
+                  ? {
+                      label: revoking ? "Revoking…" : "Revoke login",
+                      onClick: () => void revoke(),
+                      danger: true,
+                      disabled: revoking,
+                    }
+                  : {
+                      label: reactivating ? "Reactivating…" : "Reactivate login",
+                      onClick: () => void reactivate(),
+                      disabled: reactivating,
+                    },
+                {
+                  label: "Delete business",
+                  onClick: () => setDeleteOpen(true),
+                  danger: true,
+                  disabled: deleting,
+                },
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -288,15 +318,15 @@ export default function AdminBusinessDetailPage() {
         <div className="panel p-4 sm:p-5">
           <h2 className="text-[13px] font-semibold mb-1">Activity · last 30 days</h2>
           {activity ? (
-            <div className="grid grid-cols-3 gap-3 pt-1">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-1">
               {[
                 ["Sales", activity.sales],
                 ["Purchases", activity.purchases],
                 ["Payments", activity.payments],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-neutral-100 bg-neutral-50/50 px-3 py-2.5">
-                  <p className="text-[10px] uppercase tracking-widest text-neutral-400">{label}</p>
-                  <p className="text-xl font-semibold tabular-nums mt-1">{value}</p>
+                <div key={label} className="rounded-lg border border-neutral-100 bg-neutral-50/50 px-2 sm:px-3 py-2 sm:py-2.5 min-w-0">
+                  <p className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400 truncate">{label}</p>
+                  <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1">{value}</p>
                 </div>
               ))}
             </div>

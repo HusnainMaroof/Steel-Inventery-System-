@@ -43,16 +43,10 @@ export class PlatformService {
   async overview() {
     const since = new Date();
     since.setDate(since.getDate() - 30);
+    const expiringCutoff = new Date();
+    expiringCutoff.setDate(expiringCutoff.getDate() + 14);
 
-    const [
-      owners,
-      businesses,
-      sales30d,
-      purchases30d,
-      payments30d,
-      recentSales,
-      recentPurchases,
-    ] = await Promise.all([
+    const [owners, businesses, sales30d, purchases30d, payments30d, templateList] = await Promise.all([
       this.prisma.user.findMany({
         where: { role: "ADMIN" },
         select: {
@@ -81,29 +75,7 @@ export class PlatformService {
       this.prisma.sale.count({ where: { date: { gte: since } } }),
       this.prisma.purchase.count({ where: { date: { gte: since } } }),
       this.prisma.payment.count({ where: { date: { gte: since } } }),
-      this.prisma.sale.findMany({
-        take: 8,
-        orderBy: [{ createdAt: "desc" }],
-        select: {
-          id: true,
-          date: true,
-          createdAt: true,
-          business: { select: { name: true, slug: true } },
-          customer: { select: { name: true } },
-          invoice: { select: { number: true } },
-        },
-      }),
-      this.prisma.purchase.findMany({
-        take: 8,
-        orderBy: [{ createdAt: "desc" }],
-        select: {
-          id: true,
-          date: true,
-          createdAt: true,
-          business: { select: { name: true, slug: true } },
-          supplier: { select: { name: true } },
-        },
-      }),
+      this.templates.listTemplates(),
     ]);
 
     const activeOwners = owners.filter((o) => o.active).length;
@@ -113,19 +85,26 @@ export class PlatformService {
     const planCounts = new Map(planCatalog.map((plan) => [plan.id, 0]));
     let activeSubscriptions = 0;
     let expiredSubscriptions = 0;
+    let expiringSoon = 0;
 
     for (const owner of owners) {
       const b = owner.business;
       if (!b?.subscriptionPlanId) continue;
       planCounts.set(b.subscriptionPlanId, (planCounts.get(b.subscriptionPlanId) ?? 0) + 1);
-      if (
-        isSubscriptionActive({
-          billingCycle: b.subscriptionPlanDef?.billingCycle,
-          subscriptionStatus: b.subscriptionStatus,
-          subscriptionEndsAt: b.subscriptionEndsAt,
-        })
-      ) {
+      const subActive = isSubscriptionActive({
+        billingCycle: b.subscriptionPlanDef?.billingCycle,
+        subscriptionStatus: b.subscriptionStatus,
+        subscriptionEndsAt: b.subscriptionEndsAt,
+      });
+      if (subActive) {
         activeSubscriptions++;
+        if (
+          b.subscriptionEndsAt &&
+          b.subscriptionPlanDef?.billingCycle !== "LIFETIME"
+        ) {
+          const end = new Date(b.subscriptionEndsAt);
+          if (end > new Date() && end <= expiringCutoff) expiringSoon++;
+        }
       } else {
         expiredSubscriptions++;
       }
@@ -155,26 +134,16 @@ export class PlatformService {
         payments30d,
       },
       subscriptions: subscriptionCounts,
-      recentActivity: [
-        ...recentSales.map((s) => ({
-          type: "sale" as const,
-          at: s.createdAt.toISOString(),
-          businessName: s.business.name,
-          businessSlug: s.business.slug,
-          label: s.invoice?.number ?? "Sale",
-          party: s.customer.name,
-        })),
-        ...recentPurchases.map((p) => ({
-          type: "purchase" as const,
-          at: p.createdAt.toISOString(),
-          businessName: p.business.name,
-          businessSlug: p.business.slug,
-          label: "Purchase",
-          party: p.supplier.name,
-        })),
-      ]
-        .sort((a, b) => b.at.localeCompare(a.at))
-        .slice(0, 12),
+      catalog: {
+        templates: templateList.length,
+        activePlans: planCatalog.filter((p) => p.active).length,
+        totalPlans: planCatalog.length,
+      },
+      attention: {
+        expiredSubscriptions,
+        revokedOwners,
+        expiringSoon,
+      },
       businesses: owners.map((owner) => {
         const b = owner.business;
         const activity = b?.id ? activityByBusiness.get(b.id) : undefined;
