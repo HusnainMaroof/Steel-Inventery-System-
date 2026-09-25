@@ -6,9 +6,9 @@ import { ServerStatusMonitor } from "@/components/ServerStatusMonitor";
 import Shell from "@/components/Shell";
 
 export const metadata: Metadata = {
-  title: "Tradex — Business Ledger",
+  title: "Tijaratt | Business records, made clearer",
   description:
-    "Tradex keeps stock, sales, invoices, payments and profit in one ledger for shops, depots and factories. Each business owner runs their own books behind their own login.",
+    "Keep stock, purchases, sales, invoices, and payments together with Tijaratt, a straightforward business management tool for shops and trading businesses.",
 };
 
 export default function RootLayout({
