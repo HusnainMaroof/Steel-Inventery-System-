@@ -1,4 +1,4 @@
-import { LegalPage } from "@/components/marketing/MarketingSite";
+import { LegalPage } from "@/components/marketing/PublicPages";
 
 export const metadata = {
   title: "Terms and Conditions | Tijaratt",

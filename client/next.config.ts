@@ -30,7 +30,7 @@ function buildConfig(phase: string): NextConfig {
         // Phase-based check: a globally exported NODE_ENV must not leak into dev.
         `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "img-src 'self' data: https://res.cloudinary.com",
+        "img-src 'self' data: https://res.cloudinary.com https://images.unsplash.com",
         "font-src 'self' https://fonts.gstatic.com",
         "connect-src 'self'",
         "frame-ancestors 'none'",

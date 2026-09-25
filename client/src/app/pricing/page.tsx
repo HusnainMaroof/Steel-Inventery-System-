@@ -1,4 +1,4 @@
-import { PricingPage } from "@/components/marketing/MarketingSite";
+import { PricingPage } from "@/components/marketing/PublicPages";
 
 export const metadata = {
   title: "Pricing | Tijaratt",

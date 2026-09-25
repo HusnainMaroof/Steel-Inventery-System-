@@ -1,9 +1,161 @@
 /* Inter is the app's typeface (modern, clean). Applied globally so headings,
    tables, labels and numbers all share it; falls back to system fonts. */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
 
 @import "tailwindcss";
+
+@theme {
+  --animate-rise: rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade: fade 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-headline-in: headline-in 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-indicator: fade 450ms cubic-bezier(0.16, 1, 0.3, 1) 1100ms both;
+  --animate-slide: slide 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-word: word 400ms cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-pop: pop 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-float-left: float-left 5s ease-in-out 2100ms infinite;
+  --animate-float-right: float-right 6s ease-in-out 2300ms infinite;
+  --animate-float-profit: float-profit 5.5s ease-in-out 2500ms infinite;
+  --animate-dash: dash 1100ms cubic-bezier(0.16, 1, 0.3, 1) 1450ms both;
+  --animate-feature-float-left: feature-float-left 4.8s ease-in-out infinite;
+  --animate-feature-float-center: feature-float-center 5.5s ease-in-out 0.4s infinite;
+  --animate-feature-float-right: feature-float-right 4.2s ease-in-out 0.8s infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(15px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slide {
+    from {
+      opacity: 0;
+      transform: translateX(15px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes headline-in {
+    from {
+      opacity: 0;
+      transform: translateY(-100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes word {
+    from {
+      opacity: 0.55;
+      transform: translateX(var(--shift));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes float-left {
+    0%,
+    100% {
+      transform: translateY(0) rotate(-8deg);
+    }
+    50% {
+      transform: translateY(-8px) rotate(-6deg);
+    }
+  }
+
+  @keyframes float-right {
+    0%,
+    100% {
+      transform: translateY(0) rotate(8deg);
+    }
+    50% {
+      transform: translateY(-8px) rotate(6deg);
+    }
+  }
+
+  @keyframes float-profit {
+    0%,
+    100% {
+      transform: translateY(0) rotate(-10deg);
+    }
+    50% {
+      transform: translateY(-7px) rotate(-8deg);
+    }
+  }
+
+  @keyframes feature-float-left {
+    0%,
+    100% {
+      transform: translateY(0) rotate(-10deg);
+    }
+    50% {
+      transform: translateY(-5px) rotate(-9deg);
+    }
+  }
+
+  @keyframes feature-float-center {
+    0%,
+    100% {
+      transform: translateY(0) rotate(7deg);
+    }
+    50% {
+      transform: translateY(-7px) rotate(8deg);
+    }
+  }
+
+  @keyframes feature-float-right {
+    0%,
+    100% {
+      transform: translateY(0) rotate(17deg);
+    }
+    50% {
+      transform: translateY(-4px) rotate(18deg);
+    }
+  }
+
+  @keyframes dash {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
 
 /* Tiered root type scale — every rem-based size (Tailwind text-*, spacing)
    scales down proportionally: desktop 14.4px → tablet 14px → phone ~13.4px. */

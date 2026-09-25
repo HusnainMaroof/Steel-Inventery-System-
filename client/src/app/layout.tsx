@@ -6,9 +6,9 @@ import { ServerStatusMonitor } from "@/components/ServerStatusMonitor";
 import Shell from "@/components/Shell";
 
 export const metadata: Metadata = {
-  title: "Tijaratt | Business records, made clearer",
+  title: "Tijaratt | Know what you have, owe, and earn",
   description:
-    "Keep stock, purchases, sales, invoices, and payments together with Tijaratt, a straightforward business management tool for shops and trading businesses.",
+    "Tijaratt helps stock-based businesses see what they have, what they owe, and what they earn — stock, purchases, sales, payments, and profit in one record.",
 };
 
 export default function RootLayout({

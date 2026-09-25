@@ -3,12 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { BusyButton } from "@/components/ui";
+import { TijarattBrand } from "@/components/marketing/PublicChrome";
 import { homeFor, useAuth } from "@/lib/auth";
 import { isServerUnavailableMessage, redirectToOfflinePage } from "@/lib/server-offline";
-
-const ease = [0.22, 1, 0.36, 1] as const;
 
 function EyeIcon({ open }: { open: boolean }) {
   return (
@@ -75,52 +72,42 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f8f7] px-5 py-10">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.55, ease }}
-        className="w-full max-w-sm"
-      >
-        <motion.div
-          className="text-center mb-8"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.05, ease }}
+    <main className="grid min-h-screen bg-[#fcfcfc] lg:grid-cols-[.82fr_1.18fr]">
+      <section className="flex min-h-screen flex-col px-5 py-7 sm:px-10 sm:py-9 lg:px-[clamp(40px,6vw,88px)]">
+        <Link
+          href="/"
+          className="w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff]"
+          aria-label="Tijaratt home"
         >
-          <Link href="/" className="text-xl font-semibold tracking-tight">Tijaratt</Link>
-        </motion.div>
+          <TijarattBrand />
+        </Link>
+        <div className="my-auto w-full max-w-[430px] self-center py-12">
+          <div className="mb-8">
+            <p className="font-mono text-[11px] font-medium text-[#145aff]">
+              SECURE SIGN IN
+            </p>
+            <h1 className="mt-4 text-[40px] font-semibold leading-[1.05] tracking-[-0.037em] text-[#020520]">
+              Welcome back.
+            </h1>
+            <p className="mt-3 text-[14px] leading-[1.6] text-[#6b7280]">
+              Use the email and password provided for your business.
+            </p>
+          </div>
 
-        <motion.div
-          className="panel bg-white p-7 sm:p-8"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1, ease }}
-        >
-          <h1 className="text-[17px] font-semibold tracking-tight">Sign in</h1>
-          <p className="text-xs text-[#171717]/70 mt-1.5 mb-7">
-            Use the email and password you were given.
-          </p>
-
-          <AnimatePresence mode="wait">
-            {error && (
-              <motion.div
-                key="login-error"
-                role="alert"
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.25, ease }}
-                className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5 overflow-hidden"
-              >
-                {error}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {error ? (
+            <div
+              role="alert"
+              className="mb-5 overflow-hidden rounded-xl border border-[#f26052]/25 bg-[#f26052]/[.06] px-4 py-3 text-[13px] font-medium text-[#b53c31]"
+            >
+              {error}
+            </div>
+          ) : null}
 
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <div>
-              <label htmlFor="email">Email</label>
+              <label className="!mb-2 !text-[11px] !tracking-[.08em] !text-[#374151]" htmlFor="email">
+                Email
+              </label>
               <input
                 id="email"
                 name="email"
@@ -132,11 +119,13 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 placeholder="you@business.com"
-                className="!py-2.5"
+                className="!min-h-12 !rounded-xl !border-[#e2e8f0] !px-4 !py-3 !text-[14px] !font-normal focus:!border-[#0099ff] focus:!shadow-[0_0_0_3px_rgba(0,153,255,.12)]"
               />
             </div>
             <div>
-              <label htmlFor="password">Password</label>
+              <label className="!mb-2 !text-[11px] !tracking-[.08em] !text-[#374151]" htmlFor="password">
+                Password
+              </label>
               <div className="relative">
                 <input
                   id="password"
@@ -148,41 +137,73 @@ export default function LoginPage() {
                     setPassword(e.target.value);
                     setError(null);
                   }}
-                  placeholder="your password"
-                  className="!py-2.5 !pr-11"
+                  placeholder="Your password"
+                  className="!min-h-12 !rounded-xl !border-[#e2e8f0] !px-4 !py-3 !pr-12 !text-[14px] !font-normal focus:!border-[#0099ff] focus:!shadow-[0_0_0_3px_rgba(0,153,255,.12)]"
                 />
                 <button
                   type="button"
                   id="toggle-password"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   aria-pressed={showPassword}
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-md text-[#171717]/60 hover:text-[#171717] hover:bg-neutral-100 transition-colors"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="absolute right-1.5 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#145aff]"
                 >
                   <EyeIcon open={showPassword} />
                 </button>
               </div>
             </div>
-            <BusyButton type="submit" loading={pending} className="w-full !py-3 !text-[14px] mt-1">
-              Sign in
-            </BusyButton>
+            <button
+              type="submit"
+              disabled={pending}
+              className="mt-1 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-[#145aff] bg-[#fcfcfc] px-7 text-[14px] font-medium text-[#145aff] hover:bg-[#145aff] hover:text-white focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff] disabled:cursor-wait disabled:opacity-60"
+            >
+              {pending ? "Signing in…" : "Sign in"}
+            </button>
           </form>
-        </motion.div>
-
-        <motion.div
-          className="text-center mt-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.35 }}
-        >
+        </div>
+        <div className="flex items-center justify-between gap-4 text-[11px] text-[#6b7280]">
           <Link
             href="/"
-            className="text-xs font-medium text-[#171717]/70 hover:text-black transition-colors"
+            className="inline-flex items-center gap-1.5 font-medium hover:text-[#145aff]"
           >
-            &larr; Back to Tijaratt
+            Back to home
           </Link>
-        </motion.div>
-      </motion.div>
-    </div>
+          <span>Secure account access</span>
+        </div>
+      </section>
+
+      <aside className="relative hidden overflow-hidden bg-[#f0f4fe] p-12 lg:flex lg:flex-col lg:justify-center">
+        <div className="relative mx-auto w-full max-w-[580px]">
+          <p className="font-mono text-[11px] font-medium tracking-[-0.03em] text-[#145aff]">
+            YOUR BUSINESS / ONE CLEAR VIEW
+          </p>
+          <h2 className="mt-5 max-w-[520px] text-[clamp(42px,5vw,64px)] font-semibold leading-[1.03] tracking-[-0.037em] text-[#020520]">
+            Pick up exactly where the day left off.
+          </h2>
+          <div className="mt-10 rounded-[32px] border border-white/80 bg-white/55 p-5 shadow-[0_30px_80px_-45px_rgba(20,90,255,.55)] backdrop-blur-[15px]">
+            <div className="rounded-2xl border border-[#e2e8f0] bg-white p-5">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-semibold text-[#14141e]">Today&apos;s records</span>
+                <span className="rounded-full bg-[#f0f4fe] px-2.5 py-1 text-[9px] font-medium text-[#145aff]">LIVE</span>
+              </div>
+              {[
+                ["Stock received", "24 bags", "#16ca2e"],
+                ["Invoice recorded", "Rs 18,500", "#145aff"],
+                ["Payment collected", "Rs 12,000", "#ffa64d"],
+              ].map(([label, value, color]) => (
+                <div className="mt-3 flex items-center gap-3 rounded-xl bg-[#fcfcfc] px-3 py-3" key={label}>
+                  <i className="size-1.5 rounded-full" style={{ background: color }} />
+                  <span className="text-[11px] text-[#374151]">{label}</span>
+                  <strong className="ml-auto font-mono text-[10px] font-medium text-[#020520]">{value}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-7 text-[12px] text-[#6b7280]">
+            Access is limited to your authorised business records.
+          </p>
+        </div>
+      </aside>
+    </main>
   );
 }

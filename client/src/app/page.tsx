@@ -1,5 +1,5 @@
-import { HomeLandingPage } from "@/components/marketing/MarketingSite";
+import { FocusedLandingPage } from "@/components/marketing/FocusedLandingPage";
 
 export default function HomePage() {
-  return <HomeLandingPage />;
+  return <FocusedLandingPage />;
 }

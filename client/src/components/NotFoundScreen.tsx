@@ -1,29 +1,47 @@
 import Link from "next/link";
+import { TijarattBrand } from "@/components/marketing/PublicChrome";
 
 export function NotFoundScreen() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f8f7] px-5 py-10">
-      <div className="w-full max-w-md text-center">
-        <Link href="/" className="mb-8 inline-flex text-xl font-semibold tracking-tight">
-          Tijaratt
-        </Link>
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#f0f4fe] px-5 py-8 sm:px-6">
+      <Link
+        href="/"
+        className="relative z-10 w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff]"
+        aria-label="Tijaratt home"
+      >
+        <TijarattBrand />
+      </Link>
 
-        <div className="panel bg-white p-7 sm:p-9">
-          <p className="text-[56px] font-bold tracking-tighter text-[#171717]/10 leading-none">404</p>
-          <h1 className="text-[20px] font-semibold tracking-tight mt-2">Page not found</h1>
-          <p className="text-[13px] leading-relaxed text-[#171717]/70 mt-3 mb-7">
-            This page does not exist or you do not have access to it.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/login" className="btn-primary w-full sm:w-auto !py-3 text-center">
-              Go to login
-            </Link>
-            <Link href="/" className="btn-ghost w-full sm:w-auto !py-3 text-center">
-              Homepage
-            </Link>
-          </div>
+      <div className="relative z-10 m-auto w-full max-w-[620px] py-12 text-center">
+        <p className="font-mono text-[12px] font-medium tracking-[-0.03em] text-[#145aff]">
+          ERROR / 404
+        </p>
+        <h1 className="mt-4 text-[clamp(46px,8vw,72px)] font-semibold leading-[1.02] tracking-[-0.037em] text-[#020520]">
+          This page is not in the records.
+        </h1>
+        <p className="mx-auto mt-5 max-w-[480px] text-[16px] leading-[1.63] text-[#374151]">
+          The address may have changed, or you may not have access to this
+          part of Tijaratt.
+        </p>
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <Link
+            href="/"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#145aff] bg-[#fcfcfc] px-7 text-[14px] font-medium text-[#145aff] transition-colors hover:bg-[#145aff] hover:text-white focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff]"
+          >
+            Go home
+        </Link>
+          <Link
+            href="/login"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#e2e8f0] bg-white/70 px-7 text-[14px] font-medium text-[#020520] transition-colors hover:border-[#145aff] hover:text-[#145aff] focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff]"
+          >
+            Log in
+          </Link>
         </div>
       </div>
-    </div>
+
+      <p className="relative z-10 text-center font-mono text-[10px] text-[#6b7280]">
+        TIJARATT / BUSINESS RECORDS, MADE CLEARER
+      </p>
+    </main>
   );
 }
