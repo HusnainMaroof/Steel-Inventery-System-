@@ -1,0 +1,141 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    if: github.event.workflow_run.conclusion == 'success'
+
+    environment:
+      name: production
+      url: https://tijartt.com
+
+    steps:
+      - name: Checkout deployment config
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          sparse-checkout: |
+            docker-compose.yml
+          sparse-checkout-cone: true
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eu
+
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 644 "$HOME/.ssh/known_hosts"
+
+      - name: Verify SSH connection
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "echo 'SSH connection successful'"
+
+      - name: Upload production Compose file
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+
+          scp \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            docker-compose.yml \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/tijaratt/docker-compose.yml.new"
+
+      - name: Deploy to VPS
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -eu
+
+          SHORT_SHA="${DEPLOY_SHA:0:7}"
+
+          echo "Deploying commit: ${DEPLOY_SHA}"
+          echo "Docker image tag: ${SHORT_SHA}"
+
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd /opt/tijaratt && \
+             export IMAGE_TAG='${SHORT_SHA}' && \
+             docker compose -f docker-compose.yml.new config --quiet && \
+             if [ -f docker-compose.yml ]; then \
+               cp -f docker-compose.yml docker-compose.yml.previous; \
+             fi && \
+             mv -f docker-compose.yml.new docker-compose.yml && \
+             docker compose config --quiet && \
+             docker compose pull && \
+             docker compose run --rm backend npx prisma migrate deploy && \
+             docker compose up -d"
+
+      - name: Verify deployment
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+
+          echo "Checking container status..."
+
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd /opt/tijaratt && docker compose ps"
+
+          echo "Checking public health endpoint..."
+
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 10 \
+            --retry-delay 3 \
+            --retry-connrefused \
+            https://tijartt.com/api/health
+
+          echo
+          echo "Production deployment verified successfully."

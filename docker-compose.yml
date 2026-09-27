@@ -1,7 +1,7 @@
 services:
 
   backend:
-    image: tijaratt-backend:1.0.0
+    image: ghcr.io/husnainmaroof/tijaratt-backend:${IMAGE_TAG:-1.0.0}
     container_name: tijaratt-backend
     restart: unless-stopped
 
@@ -40,7 +40,7 @@ services:
 
 
   frontend:
-    image: tijaratt-frontend:1.0.0
+    image: ghcr.io/husnainmaroof/tijaratt-frontend:${IMAGE_TAG:-1.0.0}
     container_name: tijaratt-frontend
     restart: unless-stopped
 
@@ -48,7 +48,6 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
-
       TIJARATT_API_URL: http://backend:4000
       CLIENT_ORIGIN: https://tijartt.com
 
@@ -60,7 +59,7 @@ services:
       - tijaratt-network
 
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
     logging:
       driver: json-file
