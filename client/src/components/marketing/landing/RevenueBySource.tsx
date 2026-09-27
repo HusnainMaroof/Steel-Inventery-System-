@@ -7,7 +7,17 @@ const segments = [
 export function RevenueBySource() {
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
-  let offset = 0;
+  const rings = segments.map((segment, index) => {
+    const length = circumference * segment.value;
+    const offset = segments
+      .slice(0, index)
+      .reduce((sum, item) => sum + circumference * item.value, 0);
+    return {
+      ...segment,
+      dash: `${length} ${circumference - length}`,
+      offset,
+    };
+  });
 
   return (
     <article className="flex h-full min-h-0 flex-col rounded-[8px] border border-[#E5E5E5] bg-white p-4">
@@ -15,26 +25,20 @@ export function RevenueBySource() {
       <div className="mt-2 grid min-h-0 flex-1 place-items-center [container-type:size]">
         <svg className="aspect-square h-[min(100cqh,100cqw)] w-auto" viewBox="0 0 180 180" aria-hidden="true">
           <g transform="rotate(-90 90 90)">
-            {segments.map((segment) => {
-              const length = circumference * segment.value;
-              const dash = `${length} ${circumference - length}`;
-              const node = (
-                <circle
-                  key={segment.label}
-                  cx="90"
-                  cy="90"
-                  r={radius}
-                  fill="none"
-                  stroke={segment.color}
-                  strokeWidth="14"
-                  strokeDasharray={dash}
-                  strokeDashoffset={-offset}
-                  strokeLinecap="butt"
-                />
-              );
-              offset += length;
-              return node;
-            })}
+            {rings.map((segment) => (
+              <circle
+                key={segment.label}
+                cx="90"
+                cy="90"
+                r={radius}
+                fill="none"
+                stroke={segment.color}
+                strokeWidth="14"
+                strokeDasharray={segment.dash}
+                strokeDashoffset={-segment.offset}
+                strokeLinecap="butt"
+              />
+            ))}
           </g>
           <text x="90" y="86" textAnchor="middle" fill="#111" fontSize="15" fontWeight="700">
             ₹7,93,981

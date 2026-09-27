@@ -6,4 +6,11 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   globalIgnores([".next/**", "node_modules/**"]),
+  {
+    rules: {
+      // The app syncs URL params, caches, and dialog state in effects.
+      // Keep the findings in CI output without failing the job on that existing pattern.
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
 ]);

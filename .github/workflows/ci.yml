@@ -42,9 +42,16 @@ jobs:
         run: npm ci
 
       - name: Validate Prisma schema
+        env:
+          # Placeholder only. Prisma validate/generate do not connect, and this is not a production database.
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
+          DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
         run: npx prisma validate
 
       - name: Generate Prisma Client
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
+          DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
         run: npx prisma generate
 
       - name: TypeScript check
@@ -85,4 +92,8 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Build frontend
+        env:
+          # Same local origins as .env.example. Required because `next build` runs with NODE_ENV=production.
+          TIJARATT_API_URL: http://127.0.0.1:4000
+          CLIENT_ORIGIN: http://localhost:3000
         run: npm run build
