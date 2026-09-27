@@ -17,7 +17,7 @@ PostgreSQL (Neon) · REST `/api/v1`
    # DATABASE_URL=postgresql://...   (Neon pooled connection)
    # DIRECT_URL=postgresql://...     (Neon direct connection, for migrations)
    # JWT_SECRET=<long random string>
-   # ADMIN_EMAIL=admin@tijaratt.com
+   # ADMIN_EMAIL=admin@tijartt.com
    # ADMIN_PASSWORD=<at least 8 characters>
    ```
 

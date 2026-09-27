@@ -51,7 +51,7 @@ export function PricingPage() {
               </div>
               <a
                 className={`${outlineButton} shrink-0`}
-                href="mailto:contact@tijaratt.com?subject=Tijaratt%20pricing%20enquiry"
+                href="mailto:contact@tijartt.com?subject=Tijaratt%20pricing%20enquiry"
               >
                 Ask about pricing
               </a>
@@ -78,7 +78,7 @@ export function PricingPage() {
                   <span className="text-[13px] text-[#374151]">{price}</span>
                   <a
                     className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[#e2e8f0] px-4 text-[12px] font-medium text-[#0f46d8] transition-colors hover:border-[#0f46d8] sm:w-28"
-                    href={`mailto:contact@tijaratt.com?subject=${encodeURIComponent(`Tijaratt ${name} plan`)}`}
+                    href={`mailto:contact@tijartt.com?subject=${encodeURIComponent(`Tijaratt ${name} plan`)}`}
                   >
                     Contact us
                   </a>
@@ -122,7 +122,7 @@ export function PricingPage() {
           </p>
           <a
             className={`${outlineButton} mt-7`}
-            href="mailto:contact@tijaratt.com?subject=Tijaratt%20pricing%20enquiry"
+            href="mailto:contact@tijartt.com?subject=Tijaratt%20pricing%20enquiry"
           >
             Contact Tijaratt
           </a>
@@ -232,8 +232,8 @@ export function LegalPage({
             <div className="mt-8 rounded-2xl border border-[#e2e8f0] bg-[#f3f5f9] p-5">
               <p className="text-[14px] text-[#374151]">
                 Questions about this page?{" "}
-                <a className="font-medium text-[#0f46d8] hover:underline" href="mailto:contact@tijaratt.com">
-                  Contact us at contact@tijaratt.com
+                <a className="font-medium text-[#0f46d8] hover:underline" href="mailto:contact@tijartt.com">
+                  Contact us at contact@tijartt.com
                 </a>
                 .
               </p>

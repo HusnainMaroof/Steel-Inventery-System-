@@ -49,7 +49,7 @@ export function PublicFooter() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#171717]/70">Company</p>
           <div className="mt-3 flex flex-col gap-2 text-[13px]">
             <Link href="/#product">About</Link>
-            <a href="mailto:contact@tijaratt.com">Contact</a>
+            <a href="mailto:contact@tijartt.com">Contact</a>
           </div>
         </div>
         <div>

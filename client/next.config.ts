@@ -41,6 +41,7 @@ function buildConfig(phase: string): NextConfig {
   ];
 
   return {
+    output: "standalone",
     outputFileTracingRoot: __dirname,
     async headers() {
       return [
