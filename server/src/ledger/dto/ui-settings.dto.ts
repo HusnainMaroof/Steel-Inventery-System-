@@ -1,3 +1,4 @@
+import { Transform } from "class-transformer";
 import {
   IsBoolean,
   IsEmail,
@@ -5,6 +6,12 @@ import {
   IsString,
   MaxLength,
 } from "class-validator";
+
+/** Blank means "no invoice email" — the settings form sends "" when untouched. */
+const blankToUndefined = ({ value }: { value: unknown }): unknown => {
+  const trimmed = typeof value === "string" ? value.trim() : value;
+  return trimmed === "" ? undefined : trimmed;
+};
 
 export class UiSettingsDto {
   @IsOptional()
@@ -27,7 +34,8 @@ export class UiSettingsDto {
   phone?: string;
 
   @IsOptional()
-  @IsEmail()
+  @Transform(blankToUndefined)
+  @IsEmail({}, { message: "Invoice email is not valid" })
   @MaxLength(120)
   invoiceEmail?: string;
 

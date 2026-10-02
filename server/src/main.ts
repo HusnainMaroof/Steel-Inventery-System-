@@ -11,7 +11,6 @@ import {
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import helmet from "@fastify/helmet";
-import multipart from "@fastify/multipart";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
@@ -44,9 +43,15 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: "same-site" },
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     });
-    await app.register(multipart, {
-      limits: { fileSize: 8 * 1024 * 1024, files: 1 },
-    });
+    // Multipart bodies are parsed by real multer inside MulterFileInterceptor.
+    // Fastify only needs a pass-through parser so it does not consume the body
+    // before multer sees it (file limits live in businessLogoUploadOptions).
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addContentTypeParser("multipart/form-data", (_req, payload, done) => {
+        done(null, payload);
+      });
     app.setGlobalPrefix("api", {
       exclude: [{ path: "health", method: RequestMethod.GET }],
     });

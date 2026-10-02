@@ -10,12 +10,13 @@ export class MediaService {
     private readonly cloudinary: CloudinaryService,
   ) {}
 
-  async uploadBusinessLogo(file: Express.Multer.File) {
+  async uploadBusinessLogo(file?: Express.Multer.File) {
     if (!file?.buffer?.length) {
       throw new BadRequestException("Logo image is required");
     }
 
-    const compressed = await this.compress.compress(file.buffer);
+    // Always compress before upload, whatever the original size or format.
+    const compressed = await this.compressImage(file.buffer);
     const key = `logo-${randomUUID()}`;
     const uploaded = await this.cloudinary.uploadBusinessLogo(compressed, key);
 
@@ -26,5 +27,15 @@ export class MediaService {
       height: uploaded.height,
       bytes: uploaded.bytes,
     };
+  }
+
+  private async compressImage(buffer: Buffer): Promise<Buffer> {
+    try {
+      return await this.compress.compress(buffer);
+    } catch {
+      throw new BadRequestException(
+        "This image is corrupted. Please try another PNG, JPG, or WebP image.",
+      );
+    }
   }
 }

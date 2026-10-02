@@ -1,6 +1,8 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { v2 as cloudinary } from "cloudinary";
 import { ConfigService } from "../config/config.service";
+
+const UPLOAD_FAILED_MESSAGE = "Image is not uploaded. Please try again.";
 
 export type CloudinaryUploadResult = {
   url: string;
@@ -12,6 +14,7 @@ export type CloudinaryUploadResult = {
 
 @Injectable()
 export class CloudinaryService {
+  private readonly logger = new Logger(CloudinaryService.name);
   private configured = false;
 
   constructor(private readonly config: ConfigService) {
@@ -24,19 +27,17 @@ export class CloudinaryService {
         secure: true,
       });
       this.configured = true;
-    }
-  }
-
-  assertReady(): void {
-    if (!this.configured) {
-      throw new BadRequestException(
-        "Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.",
+    } else {
+      this.logger.warn(
+        "Cloudinary credentials missing (CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET)",
       );
     }
   }
 
   uploadBusinessLogo(buffer: Buffer, key: string): Promise<CloudinaryUploadResult> {
-    this.assertReady();
+    if (!this.configured) {
+      throw new BadRequestException(UPLOAD_FAILED_MESSAGE);
+    }
     const folder = this.config.cloudinary.folder;
 
     return new Promise((resolve, reject) => {
@@ -50,7 +51,10 @@ export class CloudinaryService {
         },
         (error, result) => {
           if (error || !result) {
-            reject(error ?? new Error("Cloudinary upload failed"));
+            this.logger.error(
+              `Cloudinary upload failed: ${error?.message ?? "empty result"}`,
+            );
+            reject(new BadRequestException(UPLOAD_FAILED_MESSAGE));
             return;
           }
           resolve({
