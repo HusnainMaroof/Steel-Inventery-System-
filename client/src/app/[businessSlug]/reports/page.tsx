@@ -269,7 +269,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {reportLoading ? <ReportsSkeleton /> : null}
+      {reportLoading && !hasAny ? <ReportsSkeleton /> : null}
 
       {reportError && !reportLoading && !hasAny ? (
         <ErrorState
@@ -308,8 +308,8 @@ export default function ReportsPage() {
             </BusinessLink>
           }
         />
-      ) : !reportLoading && hasAny ? (
-        <>
+      ) : hasAny ? (
+        <div className={reportLoading ? "opacity-60" : ""}>
           <div
             role="tablist"
             aria-label="Report sections"
@@ -354,7 +354,7 @@ export default function ReportsPage() {
           ) : (
             <MoneySides report={report} />
           )}
-        </>
+        </div>
       ) : null}
 
       <Modal

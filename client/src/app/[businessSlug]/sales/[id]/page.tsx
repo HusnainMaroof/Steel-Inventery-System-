@@ -11,12 +11,20 @@ import { invoiceLineDetail } from "@/lib/invoiceDetail";
 export default function SaleInvoicePage() {
   const params = useParams<{ id: string }>();
   const business = useBusinessProfile();
-  const { sales, customers, products, categories, variants, attributeDefs, salePaid } = useStore();
+  const { sales, customers, products, categories, variants, attributeDefs, salePaid, ready, transactionsReady, error } = useStore();
   const sale = sales.find((s) => s.id === params.id);
   const ctx = useMemo(
     () => ({ products, categories, variants, attributeDefs }),
     [products, categories, variants, attributeDefs]
   );
+
+  if (!ready || !transactionsReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8">
+        <p className="text-neutral-500">{error || "Loading invoice..."}</p>
+      </div>
+    );
+  }
 
   if (!sale)
     return (

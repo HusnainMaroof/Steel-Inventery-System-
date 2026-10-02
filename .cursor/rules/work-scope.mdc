@@ -1,0 +1,10 @@
+---
+description: Do only the asked task, do not invent, reuse a running runtime
+alwaysApply: true
+---
+
+# Work scope
+
+- Do only what the task asks. Do not add extra work.
+- Do not invent facts, files, commands, or results.
+- If a client or server is already running, use that for tests. Do not start a second one.

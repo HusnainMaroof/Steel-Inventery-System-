@@ -288,8 +288,9 @@ export class PaymentsService {
     type?: "customer" | "supplier",
   ) {
     const where = this.baseWhere(businessId, type);
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.payment.findMany({
+        relationLoadStrategy: "join",
         where,
         skip,
         take,
@@ -304,6 +305,7 @@ export class PaymentsService {
   /** Bulk fetch for /ledger/transactions — one findMany, no count. */
   listAll(businessId: string, take: number) {
     return this.prisma.payment.findMany({
+      relationLoadStrategy: "join",
       where: this.baseWhere(businessId),
       include: listInclude,
       orderBy: listOrder,

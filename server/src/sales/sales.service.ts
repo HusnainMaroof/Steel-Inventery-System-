@@ -308,8 +308,9 @@ export class SalesService {
 
   async list(businessId: string, skip: number, take: number, customerId?: string) {
     const where = this.baseWhere(businessId, customerId);
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.sale.findMany({
+        relationLoadStrategy: "join",
         where,
         skip,
         take,
@@ -324,6 +325,7 @@ export class SalesService {
   /** Bulk fetch for /ledger/transactions — one findMany, no count. */
   listAll(businessId: string, take: number) {
     return this.prisma.sale.findMany({
+      relationLoadStrategy: "join",
       where: this.baseWhere(businessId),
       include: listInclude,
       orderBy: listOrder,

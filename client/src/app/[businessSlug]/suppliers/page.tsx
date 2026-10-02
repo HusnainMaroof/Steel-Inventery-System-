@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
 import {
   groupPurchasesByParent,
@@ -102,12 +102,22 @@ export default function SuppliersPage() {
     setSearchInput(searchMode === "phone" ? formatPhone(v) : v);
   };
 
+  const [savingSupplier, setSavingSupplier] = useState(false);
+  const savingSupplierRef = useRef(false);
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || isPending("supplier:create")) return;
-    await addSupplier({ name: form.name.trim(), mill: form.mill.trim(), phone: form.phone.trim() });
-    setForm({ name: "", mill: "", phone: "" });
-    onClose();
+    if (savingSupplierRef.current || !form.name.trim() || isPending("supplier:create")) return;
+    savingSupplierRef.current = true;
+    setSavingSupplier(true);
+    try {
+      await addSupplier({ name: form.name.trim(), mill: form.mill.trim(), phone: form.phone.trim() });
+      setForm({ name: "", mill: "", phone: "" });
+      onClose();
+    } finally {
+      savingSupplierRef.current = false;
+      setSavingSupplier(false);
+    }
   };
 
   const filteredSuppliers = useMemo(() => {
@@ -252,7 +262,7 @@ export default function SuppliersPage() {
           <div><label>Phone</label><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" /></div>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-            <BusyButton type="submit" loading={isPending("supplier:create")} disabled={!form.name.trim()}>
+            <BusyButton type="submit" loading={savingSupplier || isPending("supplier:create")} disabled={!form.name.trim()}>
               Add Supplier
             </BusyButton>
           </div>

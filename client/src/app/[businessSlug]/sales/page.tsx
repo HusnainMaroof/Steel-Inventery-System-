@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePaginatedSales } from "@/hooks/use-paginated-sales";
 import { useStore } from "@/lib/store";
 import { fmtMoney } from "@/lib/format";
@@ -49,6 +49,8 @@ export default function SalesPage() {
   const [paidNow, setPaidNow] = useState(0);
   const [payError, setPayError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [savingSale, setSavingSale] = useState(false);
+  const savingSaleRef = useRef(false);
 
   /* ---- money on the current draft ---- */
   const subtotal = api.lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
@@ -99,10 +101,12 @@ export default function SalesPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave || isPending("sale:create")) return;
+    if (savingSaleRef.current || !canSave || isPending("sale:create")) return;
+    savingSaleRef.current = true;
+    setSavingSale(true);
     const paying = Number(paidNow) || 0;
     if (paying > grandTotal + 0.001) {
-      setPayError(`Amount paid (${fmtMoney(paying)}) can't be more than this invoice's total of ${fmtMoney(grandTotal)}.`);
+      setPayError(`Amount paid (${fmtMoney(paying)}) can't be more than this sale's total of ${fmtMoney(grandTotal)}.`);
       return;
     }
     setPayError("");
@@ -135,6 +139,9 @@ export default function SalesPage() {
       setViewId(saleId);
     } catch (reason) {
       setSubmitError(userFacingError(reason, "Could not save this sale. Check stock and try again."));
+    } finally {
+      savingSaleRef.current = false;
+      setSavingSale(false);
     }
   };
 
@@ -190,8 +197,8 @@ export default function SalesPage() {
     <Page>
       {/* ================= SALES LIST ================= */}
       <PageTitle
-        title="Sales & Invoices"
-        sub="Every sale is an invoice — create, open, print or receive payment"
+        title="Sales"
+        sub="Create a sale, open it, print it, or take payment"
         action={
           tab === "invoices" ? (
             <button className="btn-primary" onClick={startNewSale}>
@@ -203,8 +210,8 @@ export default function SalesPage() {
 
       <div className="flex gap-6 border-b border-neutral-200 mb-4">
         {([
-          ["invoices", "Invoices"],
-          ["print", "Print Invoice"],
+          ["invoices", "Sales"],
+          ["print", "Print"],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -291,7 +298,7 @@ export default function SalesPage() {
           canSave,
         }}
         itemsCount={api.lines.length}
-        submitting={isPending("sale:create")}
+        submitting={savingSale || isPending("sale:create")}
         showOptionalDetails={prefs.showOptionalDetails}
         submitError={submitError}
       />

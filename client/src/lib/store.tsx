@@ -208,7 +208,7 @@ interface Store {
     input: { name?: string; title?: string; access?: StaffPage[]; password?: string },
   ) => Promise<void>;
   removeStaff: (id: string) => Promise<void>;
-  addPurchase: (doc: CreatePurchaseInput) => Promise<void>;
+  addPurchase: (doc: CreatePurchaseInput) => Promise<string>;
   /** Same date/supplier; one API purchase per doc (per-item charges & paid). */
   addPurchaseBatch: (docs: CreatePurchaseInput[]) => Promise<void>;
   updatePurchase: (id: string, patch: Partial<Purchase>) => Promise<void>;
@@ -475,6 +475,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => createCoalescedRefresh(refreshFull),
     [refreshFull],
   );
+  const refreshLedger = useCallback(async () => {
+    await loadTransactions();
+    setDataVersion((v) => v + 1);
+  }, [loadTransactions]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -1116,8 +1120,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const product = products.find((item) => item.id === line.productId);
         if (!product) throw new Error("Choose a valid product");
       }
-      await mutate("purchase:create", () =>
-        apiFetch("/purchases", {
+      setPending("purchase:create");
+      try {
+        const created = await apiFetch<{ id: string }>("/purchases", {
           method: "POST",
           ...jsonBody({
             date: doc.date,
@@ -1145,8 +1150,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               locationId: line.locationId,
             })),
           }),
-        }),
-      );
+        });
+        await refreshLedger();
+        return created.id;
+      } finally {
+        setPending(null);
+      }
     },
     addPurchaseBatch: async (docs) => {
       if (!docs.length) throw new Error("Add at least one purchase line");

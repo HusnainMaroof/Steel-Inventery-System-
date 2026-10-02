@@ -40,6 +40,7 @@ export interface QtyBlock {
 export interface PartyDue {
   id: string;
   name: string;
+  place?: string;
   due: number;
   days?: number;
 }
@@ -565,7 +566,12 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
   for (const [id, due] of Object.entries(bySup)) {
     if (due <= 0.001) continue;
     const s = input.suppliers.find((x) => x.id === id);
-    suppliers.push({ id, name: s?.name ?? id, due });
+    suppliers.push({
+      id,
+      name: s?.name?.trim() || id,
+      place: s?.mill?.trim() || undefined,
+      due,
+    });
   }
   suppliers.sort((a, b) => b.due - a.due);
   const supplierDue = suppliers.reduce((a, r) => a + r.due, 0);
@@ -587,7 +593,13 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     .filter(([, r]) => r.due > 0.001)
     .map(([id, r]) => {
       const c = input.customers.find((x) => x.id === id);
-      return { id, name: c?.shop || c?.name || id, due: r.due, days: r.days };
+      return {
+        id,
+        name: c?.name?.trim() || id,
+        place: c?.shop?.trim() || undefined,
+        due: r.due,
+        days: r.days,
+      };
     })
     .sort((a, b) => b.due - a.due);
   const customerDue = customers.reduce((a, r) => a + r.due, 0);

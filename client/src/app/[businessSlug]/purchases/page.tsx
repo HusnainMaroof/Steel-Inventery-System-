@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
 import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, RowActionsMenu, InlineFormError } from "@/components/ui";
 import { userFacingError } from "@/lib/user-error";
@@ -142,6 +142,10 @@ export default function PurchasesPage() {
   const [payAmount, setPayAmount] = useState(0);
   const [payError, setPayError] = useState("");
   const [formError, setFormError] = useState("");
+  const [savingPurchase, setSavingPurchase] = useState(false);
+  const savingPurchaseRef = useRef(false);
+  const [savingPay, setSavingPay] = useState(false);
+  const savingPayRef = useRef(false);
   const [query, setQuery] = useState("");
   const [dateRange, setDateRange] = useState<{ from: string | null; to: string | null }>({
     from: null,
@@ -210,18 +214,24 @@ export default function PurchasesPage() {
 
   const submitNewPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!purchaseDraft.canSave || isPending("purchase:create")) return;
+    if (savingPurchaseRef.current || !purchaseDraft.canSave || isPending("purchase:create")) return;
+    savingPurchaseRef.current = true;
+    setSavingPurchase(true);
     setFormError("");
-    const result = await purchaseDraft.buildCreateInput(purchaseDate, supplierId);
-    if ("error" in result) {
-      setFormError(result.error);
-      return;
-    }
     try {
-      await addPurchase(result.doc);
+      const result = await purchaseDraft.buildCreateInput(purchaseDate, supplierId);
+      if ("error" in result) {
+        setFormError(result.error);
+        return;
+      }
+      const id = await addPurchase(result.doc);
       closeAddModal();
+      setSelectedId(id);
     } catch (reason) {
       setFormError(userFacingError(reason, "Could not save this purchase."));
+    } finally {
+      savingPurchaseRef.current = false;
+      setSavingPurchase(false);
     }
   };
 
@@ -281,7 +291,10 @@ export default function PurchasesPage() {
       .map(([date, items]) => ({ date, rows: items }));
   }, [filteredDues]); // eslint-disable-line react-hooks/preserve-manual-memoization
 
-  const selected = purchases.find((p) => p.id === selectedId) ?? null;
+  const selected =
+    purchases.find((p) => p.id === selectedId) ??
+    purchases.find((p) => purchaseParentId(p) === selectedId) ??
+    null;
 
   const warehouseName = (id?: string) => warehouses.find((w) => w.id === id)?.name;
   const locationName = (id?: string) => locations.find((l) => l.id === id)?.name;
@@ -372,7 +385,8 @@ export default function PurchasesPage() {
                   <div className="flex-1 border-b border-neutral-200" />
                 </div>
 
-                <div className="hidden sm:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_100px_108px_108px_44px] gap-3 px-4 py-2.5 text-[10px] uppercase tracking-widest text-neutral-500 font-medium bg-neutral-50/90 border border-neutral-200 rounded-lg mb-2 items-start">
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
+                <div className="mb-3 hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_100px_108px_108px_44px] gap-3 px-4 py-1 text-[10px] uppercase tracking-widest text-neutral-500 font-medium items-center">
                   <span>Supplier</span>
                   <span>Product</span>
                   <span className="text-right">Qty</span>
@@ -381,7 +395,7 @@ export default function PurchasesPage() {
                   <span className="sr-only">Actions</span>
                 </div>
 
-                <div className="hidden sm:flex sm:flex-col sm:gap-4">
+                <div className="hidden md:flex md:flex-col md:gap-3">
                   {g.rows.map((r) => (
                     <div
                       key={r.id}
@@ -430,7 +444,7 @@ export default function PurchasesPage() {
                   ))}
                 </div>
 
-                <div className="sm:hidden space-y-3">
+                <div className="flex flex-col gap-3 md:hidden">
                   {g.rows.map((r) => (
                     <div
                       key={r.id}
@@ -477,6 +491,7 @@ export default function PurchasesPage() {
                       </dl>
                     </div>
                   ))}
+                </div>
                 </div>
               </div>
             ))}
@@ -527,7 +542,8 @@ export default function PurchasesPage() {
                     <div className="flex-1 border-b border-neutral-200" />
                   </div>
 
-                  <div className="hidden sm:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_100px_120px_44px] gap-3 px-4 py-2.5 text-[10px] uppercase tracking-widest text-neutral-500 font-medium bg-neutral-50/90 border border-neutral-200 rounded-lg mb-2 items-start">
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
+                  <div className="mb-3 hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_100px_120px_44px] gap-3 px-4 py-1 text-[10px] uppercase tracking-widest text-neutral-500 font-medium items-center">
                     <span>Supplier</span>
                     <span>Product</span>
                     <span className="text-right">Qty</span>
@@ -535,7 +551,7 @@ export default function PurchasesPage() {
                     <span className="sr-only">Actions</span>
                   </div>
 
-                  <div className="hidden sm:flex sm:flex-col sm:gap-3">
+                  <div className="hidden md:flex md:flex-col md:gap-3">
                     {g.rows.map((r) => (
                       <div
                         key={r.id}
@@ -580,7 +596,7 @@ export default function PurchasesPage() {
                     ))}
                   </div>
 
-                  <div className="sm:hidden space-y-2.5">
+                  <div className="flex flex-col gap-3 md:hidden">
                     {g.rows.map((r) => (
                       <div key={r.id} className="rounded-xl border border-neutral-200 bg-white p-3.5 shadow-sm">
                         <div className="flex items-start justify-between gap-2 mb-2">
@@ -621,6 +637,7 @@ export default function PurchasesPage() {
                       </div>
                     ))}
                   </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -640,7 +657,7 @@ export default function PurchasesPage() {
         api={purchaseDraft}
         formError={formError || undefined}
         showOptionalDetails={prefs.showOptionalDetails}
-        submitting={isPending("purchase:create")}
+        submitting={savingPurchase || isPending("purchase:create")}
       />
 
       {/* ============ Purchase Details Modal ============ */}
@@ -678,6 +695,13 @@ export default function PurchasesPage() {
                 className="btn-ghost w-full sm:w-auto !py-2.5 text-sm text-[#a12b1f]"
               >
                 Delete purchase
+              </button>
+              <button
+                type="button"
+                className="btn-primary w-full sm:w-auto !py-2.5 text-sm"
+                onClick={() => setSelectedId(null)}
+              >
+                Continue
               </button>
             </div>
           ) : undefined
@@ -874,7 +898,7 @@ export default function PurchasesPage() {
               <BusyButton
                 type="submit"
                 form="pay-supplier-form"
-                loading={isPending("payment:create")}
+                loading={savingPay || isPending("payment:create")}
                 className="w-full sm:w-auto !py-2.5"
               >
                 Record payment
@@ -895,6 +919,7 @@ export default function PurchasesPage() {
               className="space-y-5"
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (savingPayRef.current || isPending("payment:create")) return;
                 const amt = Number(payAmount) || 0;
                 if (amt <= 0) {
                   setPayError("Enter the amount you are paying to the mill.");
@@ -907,6 +932,8 @@ export default function PurchasesPage() {
                   return;
                 }
                 setPayError("");
+                savingPayRef.current = true;
+                setSavingPay(true);
                 const today = new Date().toISOString().slice(0, 10);
                 try {
                   await addPayment({
@@ -921,6 +948,9 @@ export default function PurchasesPage() {
                   closePay();
                 } catch (reason) {
                   setPayError(userFacingError(reason, "Could not record this payment."));
+                } finally {
+                  savingPayRef.current = false;
+                  setSavingPay(false);
                 }
               }}
             >

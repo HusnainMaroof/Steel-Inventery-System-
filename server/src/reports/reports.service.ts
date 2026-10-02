@@ -33,6 +33,7 @@ export class ReportsService {
     // (they used to be awaited one by one, stacking a full DB round trip
     // per query; the report only needs two sequential phases)
     const salesPromise = this.prisma.sale.findMany({
+      relationLoadStrategy: "join",
       where: {
         businessId,
         date: { gte: period.from, lte: period.to },
@@ -41,7 +42,6 @@ export class ReportsService {
       include: {
         lines: {
           where: productId ? { productId } : undefined,
-          include: { product: { select: { id: true, name: true, unit: true } } },
         },
       },
       orderBy: { date: "asc" },
@@ -63,43 +63,89 @@ export class ReportsService {
       where: { businessId, ...(productId ? { id: productId } : {}) },
       select: { id: true, name: true, unit: true },
     });
-    const openingRowsPromise = this.prisma.$queryRaw<{ productId: string; qty: string }[]>`
-      SELECT "productId", COALESCE(SUM(qty), 0)::text AS qty
-      FROM "InventoryTransaction"
-      WHERE "businessId" = ${businessId}
-        AND date < ${period.from}
-        ${productFilter}
-      GROUP BY "productId"
-    `;
-    const closingRowsPromise = this.prisma.$queryRaw<{ productId: string; qty: string }[]>`
-      SELECT "productId", COALESCE(SUM(qty), 0)::text AS qty
+    const stockRowsPromise = this.prisma.$queryRaw<
+      { productId: string; opening: string; closing: string }[]
+    >`
+      SELECT "productId",
+        COALESCE(SUM(qty) FILTER (WHERE date < ${period.from}), 0)::text AS opening,
+        COALESCE(SUM(qty) FILTER (WHERE date <= ${period.to}), 0)::text AS closing
       FROM "InventoryTransaction"
       WHERE "businessId" = ${businessId}
         AND date <= ${period.to}
         ${productFilter}
       GROUP BY "productId"
     `;
-    const invoiceTotalsPromise = this.prisma.invoice.aggregate({
-      where: { businessId },
-      _sum: { total: true },
-    });
-    const invoicePaidPromise = this.prisma.invoice.aggregate({
-      where: { businessId },
-      _sum: { paid: true },
-    });
-    const supplierDueRowsPromise = this.prisma.$queryRaw<{ due: string }[]>`
+    // Dues are the balance at the end of the selected dates.
+    // A bill or payment after that date does not count.
+    // A chosen product gets only its share of each open bill.
+    const customerDueRowsPromise = this.prisma.$queryRaw<{ due: string }[]>`
+      WITH paid AS (
+        SELECT pa."saleId" AS sale_id, COALESCE(SUM(pa.amount), 0) AS amount
+        FROM "PaymentAllocation" pa
+        INNER JOIN "Payment" pay ON pay."id" = pa."paymentId"
+        WHERE pay."businessId" = ${businessId}
+          AND pay."date" <= ${period.to}
+          AND pa."saleId" IS NOT NULL
+        GROUP BY pa."saleId"
+      ),
+      goods AS (
+        SELECT sl."saleId" AS sale_id,
+          COALESCE(SUM(sl."qty" * sl."rate"), 0) AS all_goods,
+          COALESCE(SUM(sl."qty" * sl."rate") FILTER (WHERE sl."productId" = ${productId ?? ""}), 0) AS product_goods
+        FROM "SaleLine" sl
+        INNER JOIN "Sale" s ON s."id" = sl."saleId"
+        WHERE s."businessId" = ${businessId}
+          AND s."date" <= ${period.to}
+        GROUP BY sl."saleId"
+      )
       SELECT COALESCE(SUM(
-        GREATEST(
-          0,
-          COALESCE((
-            SELECT SUM(pl."qty" * pl."rate")
-            FROM "PurchaseLine" pl
-            WHERE pl."purchaseId" = p."id"
-          ), 0) - p."paid"
-        )
+        GREATEST(0, i."total" - COALESCE(paid.amount, 0))
+        * CASE
+            WHEN ${productId ?? null}::text IS NULL THEN 1
+            WHEN COALESCE(goods.all_goods, 0) <= 0 THEN 0
+            ELSE COALESCE(goods.product_goods, 0) / goods.all_goods
+          END
+      ), 0)::text AS due
+      FROM "Invoice" i
+      INNER JOIN "Sale" s ON s."id" = i."saleId"
+      LEFT JOIN paid ON paid.sale_id = s."id"
+      LEFT JOIN goods ON goods.sale_id = s."id"
+      WHERE i."businessId" = ${businessId}
+        AND s."date" <= ${period.to}
+    `;
+    const supplierDueRowsPromise = this.prisma.$queryRaw<{ due: string }[]>`
+      WITH paid AS (
+        SELECT pa."purchaseId" AS purchase_id, COALESCE(SUM(pa.amount), 0) AS amount
+        FROM "PaymentAllocation" pa
+        INNER JOIN "Payment" pay ON pay."id" = pa."paymentId"
+        WHERE pay."businessId" = ${businessId}
+          AND pay."date" <= ${period.to}
+          AND pa."purchaseId" IS NOT NULL
+        GROUP BY pa."purchaseId"
+      ),
+      goods AS (
+        SELECT pl."purchaseId" AS purchase_id,
+          COALESCE(SUM(pl."qty" * pl."rate"), 0) AS all_goods,
+          COALESCE(SUM(pl."qty" * pl."rate") FILTER (WHERE pl."productId" = ${productId ?? ""}), 0) AS product_goods
+        FROM "PurchaseLine" pl
+        INNER JOIN "Purchase" p ON p."id" = pl."purchaseId"
+        WHERE p."businessId" = ${businessId}
+          AND p."date" <= ${period.to}
+        GROUP BY pl."purchaseId"
+      )
+      SELECT COALESCE(SUM(
+        GREATEST(0, COALESCE(goods.all_goods, 0) - COALESCE(paid.amount, 0))
+        * CASE
+            WHEN ${productId ?? null}::text IS NULL THEN 1
+            WHEN COALESCE(goods.all_goods, 0) <= 0 THEN 0
+            ELSE COALESCE(goods.product_goods, 0) / goods.all_goods
+          END
       ), 0)::text AS due
       FROM "Purchase" p
+      LEFT JOIN paid ON paid.purchase_id = p."id"
+      LEFT JOIN goods ON goods.purchase_id = p."id"
       WHERE p."businessId" = ${businessId}
+        AND p."date" <= ${period.to}
     `;
     const customerCashPromise = this.prisma.payment.aggregate({
       where: {
@@ -158,6 +204,7 @@ export class ReportsService {
       sales.length === 0
         ? Promise.resolve([])
         : this.prisma.purchase.findMany({
+            relationLoadStrategy: "join",
             where: {
               businessId,
               date: { lte: period.to },
@@ -179,10 +226,8 @@ export class ReportsService {
     const [
       costPurchases,
       products,
-      openingRows,
-      closingRows,
-      invoiceTotals,
-      invoicePaid,
+      stockRows,
+      customerDueRows,
       supplierDueRows,
       customerCash,
       supplierCash,
@@ -191,10 +236,8 @@ export class ReportsService {
     ] = await Promise.all([
       costPurchasesPromise,
       productsPromise,
-      openingRowsPromise,
-      closingRowsPromise,
-      invoiceTotalsPromise,
-      invoicePaidPromise,
+      stockRowsPromise,
+      customerDueRowsPromise,
       supplierDueRowsPromise,
       customerCashPromise,
       supplierCashPromise,
@@ -268,8 +311,8 @@ export class ReportsService {
     );
 
     // ---- stock flow (per product, own unit) from the inventory ledger ----
-    const openingBy = new Map(openingRows.map((r) => [r.productId, Number(r.qty)]));
-    const closingBy = new Map(closingRows.map((r) => [r.productId, Number(r.qty)]));
+    const openingBy = new Map(stockRows.map((r) => [r.productId, Number(r.opening)]));
+    const closingBy = new Map(stockRows.map((r) => [r.productId, Number(r.closing)]));
     const stock = products.map((p) => ({
       productId: p.id,
       productName: p.name,
@@ -279,10 +322,7 @@ export class ReportsService {
     }));
 
     // ---- dues (balances are derived, never stored — §27) ----
-    const customerDue = Math.max(
-      0,
-      Number(invoiceTotals._sum.total ?? 0) - Number(invoicePaid._sum.paid ?? 0),
-    );
+    const customerDue = Number(customerDueRows[0]?.due ?? 0);
     const supplierDue = Number(supplierDueRows[0]?.due ?? 0);
 
     // ---- cash ----

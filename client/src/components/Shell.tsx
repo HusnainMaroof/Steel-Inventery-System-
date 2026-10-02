@@ -261,7 +261,7 @@ function MobileNav({
         <span className="w-9" aria-hidden />
       </header>
       {user.role === "SUPERADMIN" ? <AdminMobileTabBar pathname={pathname} /> : null}
-      <main className="p-4 min-w-0 overflow-x-hidden">{children}</main>
+      <main className="p-4 min-w-0 overflow-x-auto">{children}</main>
       <AnimatePresence>
         {drawerOpen && (
           <>

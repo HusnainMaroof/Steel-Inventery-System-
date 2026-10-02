@@ -1,0 +1,11 @@
+---
+description: Ask before database writes, deletes, or process kill and restart
+alwaysApply: true
+---
+
+# Dev state
+
+- Do not write or delete database data, and do not kill or restart a process, without asking first.
+- Say the command and the reason, then wait for the answer.
+- This includes test cleanup.
+- Read-only checks are allowed: `find`, `count`, `ps`, `lsof`, `SELECT`.

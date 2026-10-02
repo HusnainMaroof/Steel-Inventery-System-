@@ -15,12 +15,12 @@ export function Tabs({
   onChange: (key: string) => void;
 }) {
   return (
-    <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-neutral-100 border border-neutral-200">
+    <div className="flex w-full max-w-full items-center gap-1 overflow-x-auto p-1 rounded-lg bg-neutral-100 border border-neutral-200">
       {tabs.map((t) => (
         <button
           key={t.key}
           onClick={() => onChange(t.key)}
-          className={`relative px-4 py-2 text-xs font-medium rounded-md transition-all duration-200 ${
+          className={`relative shrink-0 min-h-[44px] px-4 py-2 text-xs font-medium rounded-md transition-all duration-200 whitespace-nowrap ${
             value === t.key
               ? "bg-white text-black shadow-sm"
               : "text-neutral-500 hover:text-neutral-800"

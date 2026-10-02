@@ -91,12 +91,12 @@ export function reportCsv(ex: ProfitReport) {
     [],
     ["Money to Pay"],
     ["Supplier", "Due"],
-    ...ex.suppliers.map((r) => [r.name, r.due]),
+    ...ex.suppliers.map((r) => [r.place ? `${r.name} (${r.place})` : r.name, r.due]),
     ["Total Supplier Due", ex.supplierDue],
     [],
     ["Money to Receive"],
     ["Customer", "Due"],
-    ...ex.customers.map((r) => [r.name, r.due]),
+    ...ex.customers.map((r) => [r.place ? `${r.name} (${r.place})` : r.name, r.due]),
     ["Total Customer Due", ex.customerDue],
     [],
     ["Expenses"],
@@ -171,8 +171,10 @@ export function printReportPdf(ex: ProfitReport) {
       </tr>`
     )
     .join("");
-  const payRows = ex.suppliers.map((r) => tr(r.name, money(r.due))).join("");
-  const recRows = ex.customers.map((r) => tr(r.name, money(r.due))).join("");
+  const partyLabel = (r: { name: string; place?: string }) =>
+    r.place ? `${r.name} (${r.place})` : r.name;
+  const payRows = ex.suppliers.map((r) => tr(partyLabel(r), money(r.due))).join("");
+  const recRows = ex.customers.map((r) => tr(partyLabel(r), money(r.due))).join("");
   const purChargeRows = [
     ["Transport", ex.purchaseCharges.transport],
     ["Loading", ex.purchaseCharges.loading],

@@ -1,0 +1,21 @@
+---
+description: Short Hinglish chat replies, English files, clear spacing
+alwaysApply: true
+---
+
+# Response style
+
+Apply this to every response: code, explanation, and discussion.
+
+| Rule | Meaning |
+| --- | --- |
+| No over-explain | Get to the point. Skip extra background. |
+| Simple words | Use easy words. Avoid heavy jargon. |
+| Hinglish in chat | Chat replies use a Hindi + English mix. |
+| English in the repo | Every file in the repo stays in English. |
+| No long paragraphs | Break the answer into short pieces. |
+| Points and tables | Use bullets or tables. |
+| Proper spacing | Leave space between lines. Do not pack text together. |
+| Crisp | Say only what is needed. |
+| No em-dashes | Do not use an em-dash. Use a comma or a period. |
+| No emojis | Do not use emojis. |

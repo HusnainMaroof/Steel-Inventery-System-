@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
 import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
@@ -74,12 +74,22 @@ export default function CustomersPage() {
     setSearchInput(searchMode === "phone" ? formatPhone(v) : v);
   };
 
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const savingCustomerRef = useRef(false);
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || isPending("customer:create")) return;
-    await addCustomer({ name: form.name.trim(), shop: form.shop.trim(), phone: form.phone.trim() });
-    setForm({ name: "", shop: "", phone: "" });
-    onClose();
+    if (savingCustomerRef.current || !form.name.trim() || isPending("customer:create")) return;
+    savingCustomerRef.current = true;
+    setSavingCustomer(true);
+    try {
+      await addCustomer({ name: form.name.trim(), shop: form.shop.trim(), phone: form.phone.trim() });
+      setForm({ name: "", shop: "", phone: "" });
+      onClose();
+    } finally {
+      savingCustomerRef.current = false;
+      setSavingCustomer(false);
+    }
   };
 
   const rows = useMemo(() => {
@@ -324,7 +334,7 @@ export default function CustomersPage() {
           <div><label>Phone</label><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" /></div>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-            <BusyButton type="submit" loading={isPending("customer:create")} disabled={!form.name.trim()}>
+            <BusyButton type="submit" loading={savingCustomer || isPending("customer:create")} disabled={!form.name.trim()}>
               Add Customer
             </BusyButton>
           </div>

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { saleGrandTotal, useStore } from "@/lib/store";
+import { useBusinessHref } from "@/components/BusinessLink";
 import { Skeleton } from "@/components/skeletons";
 import { ConfirmModal, EmptyState, ErrorState, PaginationBar, RowActionsMenu } from "@/components/ui";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -30,23 +31,7 @@ type SaleRow = {
 };
 
 const SALE_GRID =
-  "sm:grid sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_80px_110px_110px_110px_44px] sm:gap-3 sm:px-4";
-
-function SaleDateColumnsHeader() {
-  return (
-    <div
-      className={`${SALE_GRID} hidden sm:grid py-2.5 text-[10px] font-medium uppercase tracking-widest text-neutral-500 bg-neutral-50/90 border border-neutral-200 rounded-lg mb-2 items-center`}
-    >
-      <span>Invoice / customer</span>
-      <span>Items</span>
-      <span className="text-right">Time</span>
-      <span className="text-right">Total</span>
-      <span className="text-right">Paid</span>
-      <span className="text-right">Due</span>
-      <span className="sr-only">Actions</span>
-    </div>
-  );
-}
+  "md:grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_80px_110px_110px_110px_44px] md:gap-3 md:px-4";
 
 type Status = "all" | "paid" | "partial" | "due";
 
@@ -111,6 +96,7 @@ export default function SalesTable({
   onPageChange?: (page: number) => void;
 }) {
   const { isPending } = useStore();
+  const businessHref = useBusinessHref();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status>("all");
   const [dateRange, setDateRange] = useState<{ from: string | null; to: string | null }>({
@@ -205,9 +191,9 @@ export default function SalesTable({
   const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
 
   const menuItems = (s: SaleRow) => [
-    { label: "Open Invoice", onClick: () => onView(s.id) },
+    { label: "View sale", onClick: () => onView(s.id) },
     { label: "Receive Payment", onClick: () => onReceive(s.id) },
-    { label: "Print", onClick: () => window.open(`/sales/${s.id}`, "_blank") },
+    { label: "Print", onClick: () => window.open(businessHref(`/sales/${s.id}`), "_blank") },
     { label: "Delete", onClick: () => setDeleteId(s.id) },
   ];
 
@@ -267,7 +253,7 @@ export default function SalesTable({
       <EmptyState
         emoji={hasInventory ? "🧾" : "🏗️"}
         title={hasInventory ? "No sales yet" : "Nothing to sell yet"}
-        hint={hasInventory ? "Sell from your stock — the invoice is created automatically." : "Record a purchase first — once stock lands, sales take a minute."}
+        hint={hasInventory ? "Sell from your stock. The bill is created when you save." : "Record a purchase first. Once stock lands, a sale takes a minute."}
         action={<button className="btn-primary" onClick={onNewSale}>+ New Sale</button>}
       />
     );
@@ -285,7 +271,7 @@ export default function SalesTable({
           </svg>
           <input
             type="text"
-            placeholder="Search customer, invoice, product…"
+            placeholder="Search customer or product"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="!w-full !pl-9 !text-xs !py-2"
@@ -297,7 +283,7 @@ export default function SalesTable({
           className="!w-auto !text-xs"
           aria-label="Filter by payment status"
         >
-          <option value="all">All Invoices</option>
+          <option value="all">All sales</option>
           <option value="paid">Paid</option>
           <option value="partial">Partially Paid</option>
           <option value="due">Due</option>
@@ -319,7 +305,7 @@ export default function SalesTable({
       {/* ── summary: invoice count + outstanding ── */}
       <div className="border border-neutral-200 bg-white p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Invoices</span>
+          <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Sales</span>
           <span className="block text-2xl font-bold tabular-nums text-black mt-1">
             {filteredCount}
             {hasFilters && <span className="text-sm font-normal text-black/60"> / {catalogTotal}</span>}
@@ -348,73 +334,90 @@ export default function SalesTable({
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
                 <span className="text-sm font-bold text-black">{fmtDate(g.date)}</span>
                 <span className="text-[11px] font-medium text-neutral-600 tabular-nums">
-                  {g.sales.length} invoice{g.sales.length === 1 ? "" : "s"} · {fmtMoney(g.dayTotal)}
+                  {g.sales.length} sale{g.sales.length === 1 ? "" : "s"} · {fmtMoney(g.dayTotal)}
                 </span>
                 <div className="flex-1 min-w-[2rem] border-b border-neutral-200" />
               </div>
 
-              <SaleDateColumnsHeader />
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
+                <div
+                  className={`${SALE_GRID} mb-3 hidden py-1 text-[10px] font-medium uppercase tracking-widest text-neutral-500 md:grid md:items-center`}
+                >
+                  <span>Customer</span>
+                  <span>Items</span>
+                  <span className="text-right">Time</span>
+                  <span className="text-right">Total</span>
+                  <span className="text-right">Paid</span>
+                  <span className="text-right">Due</span>
+                  <span className="sr-only">Actions</span>
+                </div>
 
-              <div className="hidden sm:flex sm:flex-col sm:gap-3">
-                {g.sales.map((s) => (
-                  <div
-                    key={s.id}
-                    onClick={() => onView(s.id)}
-                    className="rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden cursor-pointer transition-shadow hover:shadow-md"
-                  >
-                    <div className={`${SALE_GRID} sm:py-3.5 sm:items-start`}>
-                      <span className="min-w-0 self-start">
-                        <span className="block text-[11px] text-black/60 truncate">{s.invoiceNo}</span>
-                        <span className="block font-semibold text-xs text-black truncate">{s.customerName}</span>
-                      </span>
-                      <div className="min-w-0 self-start">{itemsBlock(s)}</div>
-                      <span className="self-start text-right text-xs text-black tabular-nums whitespace-nowrap">
-                        {s.time}
-                      </span>
-                      <span className="self-start text-right font-medium text-xs text-black tabular-nums">
-                        {fmtMoney(s.total)}
-                      </span>
-                      <span className="self-start text-right text-xs text-black tabular-nums">{fmtMoney(s.paid)}</span>
-                      <span
-                        className={`self-start text-right font-semibold text-xs tabular-nums ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}
-                      >
-                        {s.due > 0 ? fmtMoney(s.due) : "—"}
-                      </span>
-                      <span className="self-start flex justify-end" onClick={(e) => e.stopPropagation()}>
-                        <RowActionsMenu items={menuItems(s)} />
-                      </span>
+                <div className="hidden flex-col gap-3 md:flex">
+                  {g.sales.map((s) => (
+                    <div
+                      key={s.id}
+                      onClick={() => onView(s.id)}
+                      className="cursor-pointer overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                    >
+                      <div className={`${SALE_GRID} items-start py-3.5`}>
+                        <span className="min-w-0 self-start font-semibold text-xs text-black truncate">
+                          {s.customerName}
+                        </span>
+                        <div className="min-w-0 self-start">{itemsBlock(s)}</div>
+                        <span className="self-start text-right text-xs text-black tabular-nums whitespace-nowrap">
+                          {s.time}
+                        </span>
+                        <span className="self-start text-right font-medium text-xs text-black tabular-nums">
+                          {fmtMoney(s.total)}
+                        </span>
+                        <span className="self-start text-right text-xs text-black tabular-nums">{fmtMoney(s.paid)}</span>
+                        <span
+                          className={`self-start text-right font-semibold text-xs tabular-nums ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}
+                        >
+                          {s.due > 0 ? fmtMoney(s.due) : "-"}
+                        </span>
+                        <span className="self-start flex justify-end" onClick={(e) => e.stopPropagation()}>
+                          <RowActionsMenu items={menuItems(s)} />
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              {/* mobile */}
-              <div className="sm:hidden space-y-3">
-                {g.sales.map((s) => (
-                  <div
-                    key={s.id}
-                    onClick={() => onView(s.id)}
-                    className="rounded-xl border border-neutral-200 bg-white p-3.5 shadow-sm cursor-pointer active:bg-neutral-50"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="min-w-0">
-                        <span className="block text-[11px] text-black/60">{s.invoiceNo}</span>
-                        <span className="block font-semibold text-sm text-black truncate">{s.customerName}</span>
-                      </span>
-                      <span className="flex items-center gap-1 shrink-0">
-                        <span className="text-xs text-black tabular-nums">{s.time}</span>
-                        <RowActionsMenu items={menuItems(s)} />
-                      </span>
+                <div className="flex flex-col gap-3 md:hidden">
+                  {g.sales.map((s) => (
+                    <div
+                      key={s.id}
+                      onClick={() => onView(s.id)}
+                      className="cursor-pointer rounded-xl border border-neutral-200 bg-white p-3.5 shadow-sm active:bg-neutral-50"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 font-semibold text-sm text-black truncate">{s.customerName}</span>
+                        <span className="flex items-center gap-1 shrink-0">
+                          <span className="text-xs text-black tabular-nums">{s.time}</span>
+                          <RowActionsMenu items={menuItems(s)} />
+                        </span>
+                      </div>
+                      <div className="mt-2 mb-2">{itemsBlock(s)}</div>
+                      <div className="grid grid-cols-3 gap-2 border-t border-neutral-100 pt-2">
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide text-neutral-500">Total</span>
+                          <span className="block font-medium tabular-nums text-sm text-black">{fmtMoney(s.total)}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide text-neutral-500">Paid</span>
+                          <span className="block tabular-nums text-sm text-black">{fmtMoney(s.paid)}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-[10px] uppercase tracking-wide text-neutral-500">Due</span>
+                          <span className={`block tabular-nums text-sm font-semibold ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}>
+                            {s.due > 0 ? fmtMoney(s.due) : "-"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="mt-2 mb-2">{itemsBlock(s)}</div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium tabular-nums text-sm text-black">{fmtMoney(s.total)}</span>
-                      <span className={`tabular-nums text-xs font-semibold ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}>
-                        {s.due > 0 ? `Due ${fmtMoney(s.due)}` : "Paid"}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           ))}
@@ -438,8 +441,8 @@ export default function SalesTable({
           if (deleteId) await onDelete(deleteId);
           setDeleteId(null);
         }}
-        title="Delete this invoice?"
-        confirmLabel="Delete Invoice"
+        title="Delete this sale?"
+        confirmLabel="Delete sale"
         loading={deleteId ? isPending(`sale:delete:${deleteId}`) : false}
       >
         {(() => {

@@ -87,7 +87,7 @@ export class LedgerService {
     if (cached) return cached;
 
     const [products, productItems, categories, attributeDefs, variants, warehouses, business] =
-      await this.prisma.$transaction([
+      await Promise.all([
         this.prisma.product.findMany({ where: { businessId }, orderBy: { createdAt: "asc" } }),
         this.prisma.productItem.findMany({ where: { businessId }, orderBy: { name: "asc" } }),
         this.prisma.productCategory.findMany({
@@ -95,12 +95,14 @@ export class LedgerService {
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         }),
         this.prisma.attributeDef.findMany({
+          relationLoadStrategy: "join",
           where: { businessId },
           include: { options: { orderBy: [{ sortOrder: "asc" }, { label: "asc" }] } },
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         }),
         this.prisma.variant.findMany({ where: { businessId }, orderBy: { createdAt: "asc" } }),
         this.prisma.warehouse.findMany({
+          relationLoadStrategy: "join",
           where: { businessId },
           include: { locations: { orderBy: { name: "asc" } } },
           orderBy: { name: "asc" },

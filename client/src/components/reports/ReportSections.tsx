@@ -1,7 +1,9 @@
 "use client";
 
 import { BusinessLink } from "@/components/BusinessLink";
+import { useAuth } from "@/lib/auth";
 import { fmtCompact, fmtMoney, fmtPct, fmtQtyWithUnit, qtyUnitLabel } from "@/lib/format";
+import { pagesFor } from "@/lib/staff-access";
 import type { ProfitReport, QtyBlock, StockCheckView } from "@/lib/profitReport";
 import { Section, StatementRow, StatementRule, StatementTotal } from "./shared";
 
@@ -33,7 +35,7 @@ function FlowRow({
   strong?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-2.5 text-[14px]">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5 text-[14px]">
       <span className="flex items-baseline gap-2 min-w-0">
         <span className="tabular-nums text-[11px] font-medium text-[#171717]/70 w-4 shrink-0">{no}</span>
         <span className="text-[#171717]/70">
@@ -181,7 +183,7 @@ function PartyList({
   rows,
   empty,
 }: {
-  rows: { id: string; name: string; due: number }[];
+  rows: { id: string; name: string; place?: string; due: number }[];
   empty: string;
 }) {
   if (rows.length === 0) {
@@ -194,7 +196,12 @@ function PartyList({
           key={r.id}
           className="flex items-baseline justify-between gap-3 py-2.5 border-b border-[#E5E5E5] last:border-b-0"
         >
-          <span className="min-w-0 truncate font-medium">{r.name}</span>
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{r.name}</span>
+            {r.place ? (
+              <span className="block truncate text-[12px] font-normal text-[#171717]/60">{r.place}</span>
+            ) : null}
+          </span>
           <span className={`tabular-nums font-semibold ${r.due > 0 ? "text-[#a12b1f]" : "text-[#171717]"}`}>
             {fmtCompact(r.due)}
           </span>
@@ -244,14 +251,16 @@ export function Expenses({
   report: ProfitReport;
   className?: string;
 }) {
-  const addButton = (
+  const { user } = useAuth();
+  const canAddExpense = !!user && pagesFor(user).some((page) => page.key === "expenses");
+  const addButton = canAddExpense ? (
     <BusinessLink
       href="/expenses"
       className="btn-ghost !py-2 !px-3 !text-xs min-h-[44px] inline-flex items-center"
     >
       + Add Expense
     </BusinessLink>
-  );
+  ) : undefined;
 
   const pc = report.purchaseCharges;
   const sc = report.saleCharges;

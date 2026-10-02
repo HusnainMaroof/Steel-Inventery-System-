@@ -53,10 +53,11 @@ export function useServerPaginated<T>({
   const cacheKey = `${path}?page=${page}&limit=${limit}`;
   // Lazy state init: a cached page mounts with its data and no spinner.
   const cached = pageCache.get(cacheKey) as CacheEntry<T> | undefined;
+  const cachedFresh = cached?.dataVersion === dataVersion;
   const [items, setItems] = useState<T[]>(cached?.items ?? []);
   const [total, setTotal] = useState(cached?.total ?? 0);
   const [totalPages, setTotalPages] = useState(cached?.pages ?? 1);
-  const [loading, setLoading] = useState(!cached);
+  const [loading, setLoading] = useState(!cachedFresh);
   const [error, setError] = useState<string | null>(null);
 
   const fetchPage = useCallback(async () => {
@@ -87,7 +88,7 @@ export function useServerPaginated<T>({
   useEffect(() => {
     const applyCache = () => {
       const hit = pageCache.get(cacheKey) as CacheEntry<T> | undefined;
-      if (!hit) return false;
+      if (!hit || hit.dataVersion !== dataVersion) return false;
       setItems(hit.items);
       setTotal(hit.total);
       setTotalPages(hit.pages);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { BusinessLink } from "@/components/BusinessLink";
 import { useStore, saleTotal, saleDiscount, saleTax, saleGrandTotal, invoiceStatus } from "@/lib/store";
 import { Modal } from "@/components/ui";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
@@ -106,14 +106,17 @@ export default function SaleDetailModal({
       size="6xl"
       footer={
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/sales/${sale.id}`} className="btn-ghost !py-2 !px-4 text-[13px]">
+          <BusinessLink href={`/sales/${sale.id}`} className="btn-ghost !py-2 !px-4 text-[13px]">
             Print / Save PDF
-          </Link>
+          </BusinessLink>
           {due > 0 && (
-            <button type="button" onClick={() => setPayOpen(true)} className="btn-primary !py-2 !px-4 text-[13px]">
+            <button type="button" onClick={() => setPayOpen(true)} className="btn-ghost !py-2 !px-4 text-[13px]">
               Receive Payment
             </button>
           )}
+          <button type="button" className="btn-primary !py-2 !px-4 text-[13px]" onClick={onClose}>
+            Continue
+          </button>
         </div>
       }
     >

@@ -7,6 +7,20 @@ function has(access: Set<StaffPage>, page: StaffPage) {
   return access.has(page);
 }
 
+/** Payments page sees every cash row. Sales can still see money received.
+ *  Purchases can still see money paid. */
+function paymentsForAccess(rows: unknown, can: (page: StaffPage) => boolean): unknown[] {
+  const list = Array.isArray(rows) ? rows : [];
+  if (can("payments")) return list;
+  return list.filter((row) => {
+    if (!row || typeof row !== "object") return false;
+    const type = (row as { type?: string }).type;
+    if (type === "CUSTOMER") return can("sales");
+    if (type === "SUPPLIER") return can("purchases");
+    return false;
+  });
+}
+
 /** Strip bootstrap collections staff should not receive (mirrors API page guards). */
 export function filterBootstrapForStaff(
   data: BootstrapPayload,
@@ -22,7 +36,7 @@ export function filterBootstrapForStaff(
     customers: can("customers") || salesContext ? data.customers : [],
     purchases: can("purchases") ? data.purchases : [],
     sales: can("sales") ? data.sales : [],
-    payments: can("payments") ? data.payments : [],
+    payments: paymentsForAccess(data.payments, can),
     expenses: can("expenses") ? (data.expenses ?? []) : [],
     stockChecks: can("inventory") ? data.stockChecks : [],
     products:
@@ -68,7 +82,7 @@ export function filterTransactionsForStaff(
     suppliers: can("suppliers") || can("purchases") ? data.suppliers : [],
     purchases: can("purchases") ? data.purchases : [],
     sales: can("sales") ? data.sales : [],
-    payments: can("payments") ? data.payments : [],
+    payments: paymentsForAccess(data.payments, can),
     expenses: can("expenses") ? (data.expenses ?? []) : [],
     stockChecks: can("inventory") ? data.stockChecks : [],
   };

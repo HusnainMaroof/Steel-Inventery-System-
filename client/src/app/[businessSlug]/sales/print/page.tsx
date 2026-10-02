@@ -43,7 +43,7 @@ function BatchPrintInner() {
   if (list.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8 gap-3">
-        <p className="text-neutral-500">No invoices in {title}.</p>
+        <p className="text-neutral-500">No sales on {title}.</p>
         <BusinessLink href="/sales?tab=print" className="text-[13px] text-neutral-500 hover:text-black underline-offset-2 hover:underline">
           ← Back to sales
         </BusinessLink>
@@ -77,7 +77,7 @@ export default function BatchPrintPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center p-8">
-          <p className="text-neutral-500">Preparing invoice…</p>
+          <p className="text-neutral-500">Preparing sales...</p>
         </div>
       }
     >

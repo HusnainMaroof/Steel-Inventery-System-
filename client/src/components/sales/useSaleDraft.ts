@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { attrsValuesLine, identityKey, productUsesCategories, resolveDefs, scopedDefs, variantKey } from "@/lib/catalogue";
 
@@ -24,7 +24,7 @@ export interface DraftPick {
   attrs: Record<string, string>;
   lotId: string; // "" = any lot of the variant (FIFO)
   qty: number;
-  /** Selling price per unit for the next line added */
+  /** Optional price for this customer only. Empty means use the stock selling price. */
   rate: number;
 }
 
@@ -246,26 +246,15 @@ export function useSaleDraft() {
   const draftOver = (Number(pick.qty) || 0) > draftAvail;
   const draftPrice = pickLot?.sellPrice ?? pickLots.find((l) => l.sellPrice)?.sellPrice ?? pickRow?.sellRate;
   const draftLanded = pickLot?.landedPerUnit ?? pickRow?.landedAvg ?? 0;
-  const suggestedSellRate = useMemo(() => {
-    if (!pickVariant || !pickRow) return 0;
-    return Math.round(draftPrice ?? draftLanded * 1.15) || 0;
-  }, [pickVariant, pickRow, draftPrice, draftLanded]);
-
-  useEffect(() => {
-    if (!pickVariant || !pickRow) return;
-    setPickState((d) => {
-      if (d.rate === suggestedSellRate) return d;
-      return { ...d, rate: suggestedSellRate };
-    });
-  }, [pickVariant?.id, pick.lotId, pick.productId, pick.categoryId, suggestedSellRate, pickVariant, pickRow]);
-
-  const draftRate = Number(pick.rate) || 0;
+  const oldSellRate = draftPrice && draftPrice > 0 ? draftPrice : 0;
+  const newSellRate = Number(pick.rate) || 0;
+  const chargeRate = newSellRate > 0 ? newSellRate : oldSellRate;
   const canAdd =
     !!pickVariant &&
     !!pickRow &&
     !draftOver &&
     (Number(pick.qty) || 0) > 0 &&
-    draftRate > 0;
+    chargeRate > 0;
 
   const setLine = (i: number, patch: Partial<SaleDraftLine>) =>
     setLines((prev) => prev.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -291,7 +280,7 @@ export function useSaleDraft() {
         snapshot: pickVariant.attributes,
         unit: draftUnit,
         qty: Number(pick.qty) || 1,
-        rate: draftRate,
+        rate: chargeRate,
         qualityName: sourcePurchase?.quality || gradeAttr || undefined,
         // explicit lot only when the operator picks one; otherwise leave unset
         // so the store consumes FIFO across the variant's lots
@@ -299,7 +288,7 @@ export function useSaleDraft() {
         purchaseId: pick.lotId ? source?.purchaseId : undefined,
       },
     ]);
-    setPickState((d) => ({ ...d, qty: 1 }));
+    setPickState((d) => ({ ...d, qty: 1, rate: 0 }));
   };
 
   const unitOf = (item: string) => inventory.find((r) => r.item === item)?.unit ?? "";
@@ -347,8 +336,9 @@ export function useSaleDraft() {
     draftAvail,
     draftPrice,
     draftLanded,
-    suggestedSellRate,
-    draftRate,
+    oldSellRate,
+    newSellRate,
+    chargeRate,
     draftOver,
     canAdd,
     addDraftItem,

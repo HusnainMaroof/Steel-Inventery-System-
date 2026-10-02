@@ -92,7 +92,7 @@ export default function LineItemsTable({
                       required
                     />
                   </div>
-                  {over && <span className="block text-[10px] text-red-600 font-normal">Over stock!</span>}
+                  {over && <span className="block text-[10px] text-red-600 font-normal">More than what is left in inventory.</span>}
                 </td>
                 <td className="num">
                   <input

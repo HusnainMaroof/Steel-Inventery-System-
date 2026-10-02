@@ -7,17 +7,9 @@ import type { Sale } from "@/lib/types";
 import { useBusinessHref } from "@/components/BusinessLink";
 import { EmptyState } from "@/components/ui";
 import { DateRangePicker, formatRangeLabel } from "@/components/ui/date-range-picker";
-import { dateInIsoRange } from "@/lib/date-range-filter";
+import { dateInIsoRange, todayIsoDay } from "@/lib/date-range-filter";
 import PeriodInvoice from "@/components/sales/PeriodInvoice";
 import { fmtMoney } from "@/lib/format";
-
-function fmtDateOf(iso: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 export function rangeInvoiceNo(from: string | null, to: string | null) {
   if (from && to) return `INV-${from.replaceAll("-", "")}_${to.replaceAll("-", "")}`;
@@ -39,9 +31,10 @@ export default function PrintPack({
 }) {
   const router = useRouter();
   const businessHref = useBusinessHref();
+  const today = todayIsoDay();
   const [range, setRange] = useState<{ from: string | null; to: string | null }>({
-    from: null,
-    to: null,
+    from: today,
+    to: today,
   });
   const { from, to } = range;
 
@@ -70,52 +63,38 @@ export default function PrintPack({
   };
 
   return (
-    <div>
-      <div className="border border-neutral-200 bg-white p-4 sm:p-5 mb-5">
-        <p className="text-[11px] uppercase tracking-widest text-neutral-400 font-medium mb-2">Period</p>
+    <div className="max-w-[210mm]">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <DateRangePicker
           from={from}
           to={to}
           onChange={setRange}
-          placeholder="All dates"
-          ariaLabel="Pick invoice date range"
+          placeholder="Today"
+          ariaLabel="Pick sales date"
         />
-        <p className="mt-2 text-[13px] text-neutral-500">
-          {filtered.length} invoice{filtered.length === 1 ? "" : "s"} in {title.toLowerCase()}
-        </p>
-      </div>
-
-      <div className="border border-neutral-200 bg-white p-4 mb-5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap gap-8">
-          <div>
-            <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Invoices</span>
-            <span className="block text-2xl font-bold tabular-nums text-black mt-1">{filtered.length}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Total billed</span>
-            <span className="block text-2xl font-bold tabular-nums text-black mt-1">{fmtMoney(total)}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Outstanding</span>
-            <span className={`block text-2xl font-bold tabular-nums mt-1 ${due > 0 ? "text-[#a12b1f]" : "text-black"}`}>
-              {fmtMoney(due)}
-            </span>
-          </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
+          <span className="tabular-nums text-neutral-700">
+            <span className="font-semibold text-neutral-900">{filtered.length}</span> sale{filtered.length === 1 ? "" : "s"}
+          </span>
+          <span className="tabular-nums text-neutral-700">{fmtMoney(total)}</span>
+          <span className={`tabular-nums font-medium ${due > 0 ? "text-[#a12b1f]" : "text-neutral-700"}`}>
+            Due {fmtMoney(due)}
+          </span>
+          <button
+            type="button"
+            className="btn-primary !py-2 !px-4 text-[13px]"
+            onClick={openPrint}
+            disabled={filtered.length === 0}
+          >
+            Print
+          </button>
         </div>
-        <button
-          type="button"
-          className="btn-primary shrink-0"
-          onClick={openPrint}
-          disabled={filtered.length === 0}
-        >
-          Print invoice
-        </button>
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
-          title={`No invoices in ${title}`}
-          hint="Pick another date range, or record a sale first."
+          title={`No sales on ${title}`}
+          hint="Pick another date, or record a sale first."
         />
       ) : (
         <PeriodInvoice sales={filtered} title={title} invoiceNo={invoiceNo} />

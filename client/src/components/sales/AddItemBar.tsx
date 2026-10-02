@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { fmtQtyWithUnit, perUnitLabel, qtyUnitLabel } from "@/lib/format";
+import { fmtMoney, fmtQtyWithUnit, perUnitLabel, qtyUnitLabel } from "@/lib/format";
 import { OptionalSection } from "@/components/ui";
 import { AttributeFields } from "@/components/catalogue/AttributeFields";
 import type { SaleDraftApi } from "./useSaleDraft";
@@ -45,7 +45,7 @@ export default function AddItemBar({
         {!api.hasStock ? (
           <span className="text-[12px] text-neutral-400">No stock — record a purchase first</span>
         ) : (
-          <span className="text-[12px] text-neutral-400">Price prefilled from stock — edit before adding</span>
+          <span className="text-[12px] text-neutral-400">Leave new price empty to use the old selling price</span>
         )}
       </div>
 
@@ -114,51 +114,29 @@ export default function AddItemBar({
                   <span className="font-medium text-neutral-800">{productName}</span>
                   {itemName ? ` · ${itemName}` : ""}
                   {api.noStockForCombo ? (
-                    <span className="block sm:inline sm:ml-2 text-neutral-500">This combination is not in stock.</span>
+                    <span className="block sm:inline sm:ml-2 text-[#a12b1f]">This size, grade, or maker is not in inventory.</span>
                   ) : api.notInStock ? (
-                    <span className="block sm:inline sm:ml-2 text-neutral-500">Fill attributes to match stock.</span>
+                    <span className="block sm:inline sm:ml-2 text-neutral-500">Choose the size, grade, or maker that is in inventory.</span>
                   ) : null}
                 </>
               ) : api.noStockForCombo ? (
-                "This combination is not in stock."
+                "This size, grade, or maker is not in inventory."
               ) : api.notInStock ? (
-                "Fill the attributes to match stock on hand."
+                "Choose the size, grade, or maker that is in inventory."
               ) : (
                 "Pick a product"
               )}
             </div>
             <div className="flex flex-wrap items-end gap-3 shrink-0 w-full sm:w-auto">
-              {pickVariant && pick.productId && scopeRows.length > 0 ? (
-                <div className="flex flex-col min-w-0">
-                  <label className="!mb-1">
-                    Selling price
-                    <span className="font-normal text-neutral-400">{perUnitLabel(scopeUnit || api.draftUnit)}</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    className="!w-32 tabular-nums"
-                    value={numVal(pick.rate)}
-                    onChange={(e) => setPick({ rate: Number(e.target.value) })}
-                    disabled={!pickVariant}
-                    title={
-                      api.suggestedSellRate > 0 && pick.rate !== api.suggestedSellRate
-                        ? `Stock list price: ${api.suggestedSellRate}`
-                        : undefined
-                    }
-                  />
-                </div>
-              ) : null}
               <div className="flex flex-col min-w-0 flex-1 sm:flex-initial">
                 <label className="!mb-1">Qty ({qtyUnitLabel(scopeUnit || api.draftUnit)})</label>
                 <div className="flex items-stretch gap-2">
                   {scopeUnit && pick.productId && scopeRows.length > 0 ? (
                     <span
                       className="inline-flex items-center rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-2 text-[13px] font-semibold tabular-nums text-neutral-900 whitespace-nowrap"
-                      title="Maximum you can add for this item"
+                      title="What is left in inventory"
                     >
-                      Max {maxQtyLabel}
+                      In stock {maxQtyLabel}
                     </span>
                   ) : null}
                   <input
@@ -172,6 +150,35 @@ export default function AddItemBar({
                   />
                 </div>
               </div>
+              {pickVariant && pick.productId && scopeRows.length > 0 ? (
+                <>
+                  <div className="flex flex-col min-w-0">
+                    <label className="!mb-1">
+                      Old selling price
+                      <span className="font-normal text-neutral-400">{perUnitLabel(scopeUnit || api.draftUnit)}</span>
+                    </label>
+                    <span className="inline-flex items-center min-h-[39px] rounded-md border border-neutral-200 bg-neutral-50 px-2.5 text-[15px] font-medium tabular-nums text-neutral-900 whitespace-nowrap">
+                      {api.oldSellRate > 0 ? fmtMoney(api.oldSellRate) : "-"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <label className="!mb-1">
+                      New selling price
+                      <span className="font-normal text-neutral-400">{perUnitLabel(scopeUnit || api.draftUnit)}</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="Optional"
+                      className="!w-32 tabular-nums"
+                      value={numVal(pick.rate)}
+                      onChange={(e) => setPick({ rate: Number(e.target.value) })}
+                      disabled={!pickVariant}
+                    />
+                  </div>
+                </>
+              ) : null}
               <button
                 type="button"
                 className="btn-primary !py-2.5 !px-5 text-[13px] w-full sm:w-auto"
@@ -185,7 +192,9 @@ export default function AddItemBar({
 
           {(api.draftOver || (Number(pick.qty) || 0) > stockOnHand) && scopeUnit && (
             <p className="text-[12px] text-red-600">
-              Only {fmtQtyWithUnit(stockOnHand, scopeUnit)} remaining for this item.
+              {stockOnHand > 0
+                ? `This quantity is not in inventory. Only ${fmtQtyWithUnit(stockOnHand, scopeUnit)} is remaining.`
+                : "This is not remaining in inventory."}
             </p>
           )}
         </div>

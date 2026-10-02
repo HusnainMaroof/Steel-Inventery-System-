@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useStore } from "@/lib/store";
 import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -73,9 +73,12 @@ export default function ExpensesPage() {
     setError(null);
   };
 
+  const [savingExpense, setSavingExpense] = useState(false);
+  const savingExpenseRef = useRef(false);
+
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    if (isPending("expense:create")) return;
+    if (savingExpenseRef.current || isPending("expense:create")) return;
     const ready = lines
       .map((line) => ({
         name: line.name.trim(),
@@ -97,15 +100,22 @@ export default function ExpensesPage() {
         return;
       }
     }
-    for (const line of ready) {
-      await addExpense({
-        date,
-        label: line.name,
-        category: "Other",
-        amount: line.amount,
-      });
+    savingExpenseRef.current = true;
+    setSavingExpense(true);
+    try {
+      for (const line of ready) {
+        await addExpense({
+          date,
+          label: line.name,
+          category: "Other",
+          amount: line.amount,
+        });
+      }
+      setAddOpen(false);
+    } finally {
+      savingExpenseRef.current = false;
+      setSavingExpense(false);
     }
-    setAddOpen(false);
   };
 
   return (
@@ -340,7 +350,7 @@ export default function ExpensesPage() {
             <button type="button" className="btn-ghost" onClick={() => setAddOpen(false)}>
               Cancel
             </button>
-            <BusyButton type="submit" loading={isPending("expense:create")}>
+            <BusyButton type="submit" loading={savingExpense || isPending("expense:create")}>
               Save
             </BusyButton>
           </div>

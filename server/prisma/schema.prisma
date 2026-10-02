@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -466,6 +467,8 @@ model Invoice {
   @@index([businessId, createdAt])
 }
 
+/// Cash log. CUSTOMER is money received. SUPPLIER is money paid.
+/// A sale or a purchase records the row. The Payments screen only lists them.
 model Payment {
   id         String       @id @default(cuid())
   businessId String
@@ -475,8 +478,8 @@ model Payment {
   supplierId String?
   amount     Decimal      @db.Decimal(14, 2)
   method     PaymentMethod @default(CASH)
-  saleId     String? // the specific invoice this payment settles
-  purchaseId String? // the specific purchase this payment settles (supplier)
+  saleId     String? // invoice this receipt belongs to, when known
+  purchaseId String? // purchase this payment belongs to, when known
   note       String?
   createdAt  DateTime     @default(now())
 
