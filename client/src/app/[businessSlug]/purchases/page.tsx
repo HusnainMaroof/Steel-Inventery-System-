@@ -143,6 +143,7 @@ export default function PurchasesPage() {
   const [payId, setPayId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState(0);
   const [payError, setPayError] = useState("");
+  const payErrorRef = useRef<HTMLDivElement>(null);
   const [formError, setFormError] = useState("");
   const [savingPurchase, setSavingPurchase] = useState(false);
   const savingPurchaseRef = useRef(false);
@@ -153,6 +154,9 @@ export default function PurchasesPage() {
     from: null,
     to: null,
   });
+  useEffect(() => {
+    if (payError) payErrorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [payError]);
   const [deleteTarget, setDeleteTarget] = useState<Purchase | null>(null);
 
   const productOfPurchase = (p: Purchase) => {
@@ -1039,7 +1043,7 @@ export default function PurchasesPage() {
                   />
                 </div>
                 {payError ? (
-                  <div role="alert" className="rounded-lg border border-[#f0d2cc] bg-[#fdf1ef] text-[#a12b1f] text-[13px] px-4 py-3">
+                  <div ref={payErrorRef} role="alert" className="rounded-lg border border-[#f0d2cc] bg-[#fdf1ef] text-[#a12b1f] text-[13px] px-4 py-3">
                     {payError}
                   </div>
                 ) : null}
