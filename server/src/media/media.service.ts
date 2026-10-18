@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { CloudinaryService } from "./cloudinary.service";
 import { ImageCompressService } from "./image-compress.service";
+import { detectImageType } from "./image-signature";
 
 @Injectable()
 export class MediaService {
@@ -13,6 +14,12 @@ export class MediaService {
   async uploadBusinessLogo(file?: Express.Multer.File) {
     if (!file?.buffer?.length) {
       throw new BadRequestException("Logo image is required");
+    }
+
+    if (detectImageType(file.buffer) === null) {
+      throw new BadRequestException(
+        "Only PNG, JPEG, and WebP images are allowed",
+      );
     }
 
     // Always compress before upload, whatever the original size or format.
