@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BusinessLink } from "@/components/BusinessLink";
-import { useStore, saleTotal, saleDiscount, saleTax, saleGrandTotal, invoiceStatus } from "@/lib/store";
+import { useStore, saleTotal, saleDiscount, saleTax, saleGrandTotal } from "@/lib/store";
 import { Modal } from "@/components/ui";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtTime } from "@/lib/format";
@@ -10,6 +10,10 @@ import { productUsesCategories, resolveDefs } from "@/lib/catalogue";
 
 const statusStyles: Record<string, { label: string; cls: string }> = {
   paid: { label: "Paid", cls: "bg-[#f0f7ef] text-[#2e6b2e] border-[#cfe3cd]" },
+  partially: {
+    label: "Partially paid",
+    cls: "bg-[#fdf6e4] text-[#8a5a00] border-[#ecd9a8]",
+  },
   unpaid: { label: "Unpaid", cls: "bg-[#fdf1ef] text-[#a12b1f] border-[#f0d2cc]" },
 };
 
@@ -71,7 +75,7 @@ export default function SaleDetailModal({
   const paid = salePaid(sale.id);
   const due = Math.max(0, grand - paid);
   const paidPct = grand > 0 ? Math.min(100, (paid / grand) * 100) : 0;
-  const status = invoiceStatus(paid, grand);
+  const status = paid >= grand - 0.001 ? "paid" : paid > 0 ? "partially" : "unpaid";
   const st = statusStyles[status];
   const paymentEntries = payments
     .filter((p) => p.type === "customer")

@@ -220,30 +220,33 @@ export function normalizeBootstrap(raw: ApiBootstrap) {
     return mapped;
   });
 
-  const payments: Payment[] = raw.payments.map((payment) => ({
-    id: payment.id,
-    date: dateOnly(payment.date),
-    createdAt: payment.createdAt,
-    type: payment.type === "CUSTOMER" ? "customer" : "supplier",
-    partyId:
-      payment.type === "CUSTOMER"
-        ? payment.customerId ?? payment.customer?.id ?? ""
-        : payment.supplierId ?? payment.supplier?.id ?? "",
-    partyName:
-      payment.type === "CUSTOMER"
-        ? payment.customer?.name ?? undefined
-        : payment.supplier?.name ?? undefined,
-    amount: parseDecimal(payment.amount),
-    method: titleCase<Payment["method"]>(payment.method),
-    saleId: payment.saleId ?? undefined,
-    purchaseId: payment.purchaseId ?? undefined,
-    note: payment.note ?? undefined,
-    allocations: payment.allocations?.map((a) => ({
-      saleId: a.saleId ?? undefined,
-      purchaseId: a.purchaseId ?? undefined,
-      amount: parseDecimal(a.amount),
-    })),
-  }));
+  const payments: Payment[] = raw.payments.map((payment) => {
+    const isCustomer = String(payment.type).toUpperCase() === "CUSTOMER";
+    return {
+      id: payment.id,
+      date: dateOnly(payment.date),
+      createdAt: payment.createdAt,
+      type: isCustomer ? "customer" : "supplier",
+      partyId:
+        isCustomer
+          ? payment.customerId ?? payment.customer?.id ?? ""
+          : payment.supplierId ?? payment.supplier?.id ?? "",
+      partyName:
+        isCustomer
+          ? payment.customer?.name ?? undefined
+          : payment.supplier?.name ?? undefined,
+      amount: parseDecimal(payment.amount),
+      method: titleCase<Payment["method"]>(payment.method),
+      saleId: payment.saleId ?? undefined,
+      purchaseId: payment.purchaseId ?? undefined,
+      note: payment.note ?? undefined,
+      allocations: payment.allocations?.map((a) => ({
+        saleId: a.saleId ?? undefined,
+        purchaseId: a.purchaseId ?? undefined,
+        amount: parseDecimal(a.amount),
+      })),
+    };
+  });
 
   purchases = hydratePurchasePaymentHistories(purchases, payments);
 

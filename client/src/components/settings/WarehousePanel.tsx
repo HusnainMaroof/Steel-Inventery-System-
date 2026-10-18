@@ -82,9 +82,10 @@ export function WarehousePanel() {
             className="w-full max-w-sm flex gap-2"
             onSubmit={async (e) => {
               e.preventDefault();
-              const v = (e.currentTarget.elements.namedItem("wh") as HTMLInputElement).value.trim();
+              const form = e.currentTarget;
+              const v = (form.elements.namedItem("wh") as HTMLInputElement).value.trim();
               if (v) await addWarehouse(v);
-              e.currentTarget.reset();
+              form.reset();
             }}
           >
             <input name="wh" placeholder="e.g. Main Yard" className="flex-1" aria-label="Warehouse name" />
