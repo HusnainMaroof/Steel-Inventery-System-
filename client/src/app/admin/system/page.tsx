@@ -1,33 +1,67 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AdminOverviewSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/lib/auth";
 import { probeAppHealth } from "@/lib/server-offline";
+import { STATUS_CHECK_MIN_INTERVAL_MS } from "@/lib/server-status-monitor";
 import { Page } from "@/components/ui";
 
 export default function AdminSystemPage() {
   const { user, ready } = useAuth();
+  const isSuperAdmin = ready && user?.role === "SUPERADMIN";
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const inflight = useRef<Promise<void> | null>(null);
+  const lastStartedAt = useRef(Number.NEGATIVE_INFINITY);
+  const mounted = useRef(true);
 
   useEffect(() => {
-    if (!ready || user?.role !== "SUPERADMIN") return;
-    let cancelled = false;
-    const run = async () => {
-      const ok = await probeAppHealth();
-      if (cancelled) return;
-      setApiOk(ok);
-      setCheckedAt(new Date().toLocaleTimeString());
-    };
-    void run();
-    const timer = window.setInterval(() => void run(), 45_000);
+    mounted.current = true;
     return () => {
-      cancelled = true;
-      window.clearInterval(timer);
+      mounted.current = false;
     };
-  }, [ready, user?.role]);
+  }, []);
+
+  // Shares one in-flight probe. Automatic triggers are throttled. Manual refresh is not.
+  const runCheck = useCallback((manual: boolean) => {
+    if (inflight.current) return inflight.current;
+    if (!manual && Date.now() - lastStartedAt.current < STATUS_CHECK_MIN_INTERVAL_MS) {
+      return Promise.resolve();
+    }
+    lastStartedAt.current = Date.now();
+    setChecking(true);
+    const promise = probeAppHealth()
+      .then((ok) => {
+        if (!mounted.current) return;
+        setApiOk(ok);
+        setCheckedAt(new Date().toLocaleTimeString());
+      })
+      .finally(() => {
+        inflight.current = null;
+        if (mounted.current) setChecking(false);
+      });
+    inflight.current = promise;
+    return promise;
+  }, []);
+
+  // No timer. Check on load, then only when the tab regains focus or becomes visible.
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const onFocus = () => void runCheck(false);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void runCheck(false);
+    };
+    void runCheck(false);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isSuperAdmin, runCheck]);
 
   if (ready && user?.role !== "SUPERADMIN") return null;
   if (!ready) return <AdminOverviewSkeleton />;
@@ -51,6 +85,14 @@ export default function AdminSystemPage() {
             Probes <code className="text-[11px] bg-neutral-100 px-1 rounded">/api/health</code>
             {checkedAt ? ` · last check ${checkedAt}` : ""}
           </p>
+          <button
+            type="button"
+            onClick={() => void runCheck(true)}
+            disabled={checking}
+            className="mt-3 text-xs font-medium text-[#145aff] hover:underline disabled:opacity-50 disabled:cursor-wait"
+          >
+            {checking ? "Checking…" : "Check again"}
+          </button>
           {apiOk === false ? (
             <p className="text-sm text-[#a12b1f] mt-3">
               Start the Nest API and ensure the Next proxy can reach it (see server README).

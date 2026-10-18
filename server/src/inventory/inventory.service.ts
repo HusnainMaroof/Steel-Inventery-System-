@@ -1,15 +1,152 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { Prisma, type Purchase, type PurchaseLine } from "@prisma/client";
+import { landedCostPerUnit } from "../domain/money";
+import { lockInventoryKeys, stockLockKey } from "../common/inventory/stock-locks";
 import { PrismaService } from "../prisma/prisma.service";
 import { AdjustInventoryDto } from "./dto/adjust-inventory.dto";
+
+type LotPurchase = Purchase & { supplier: { name: string }; lines: PurchaseLine[] };
+
+const lotGroupKey = (purchaseId: string, productId: string, variantId: string | null) =>
+  `${purchaseId}:${productId}:${variantId ?? ""}`;
+
+/**
+ * Builds lot rows for one purchase.
+ *
+ * Sold qty is recorded per purchase/product/variant, not per line. When a group
+ * has more than one line, the sold qty cannot be attributed to a single line.
+ * Such a group is returned once, with the group remaining and `ambiguous: true`,
+ * and no per-line remaining is invented. Lot-specific fields are left empty for it.
+ */
+export function purchaseLotRows(purchase: LotPurchase, consumedBy: Map<string, Prisma.Decimal>) {
+  const goods = purchase.lines.reduce(
+    (sum, line) => sum.plus(new Prisma.Decimal(line.qty).times(line.rate)),
+    new Prisma.Decimal(0),
+  );
+  const charges = new Prisma.Decimal(purchase.transport)
+    .plus(purchase.loading)
+    .plus(purchase.labour)
+    .plus(purchase.otherCost);
+  const allocatedChargesFor = (line: PurchaseLine) => {
+    const lineGoods = new Prisma.Decimal(line.qty).times(line.rate);
+    return goods.gt(0) ? charges.times(lineGoods).div(goods) : new Prisma.Decimal(0);
+  };
+
+  const groups = new Map<string, PurchaseLine[]>();
+  for (const line of purchase.lines) {
+    const key = lotGroupKey(purchase.id, line.productId, line.variantId);
+    groups.set(key, [...(groups.get(key) ?? []), line]);
+  }
+
+  const rows = [...groups].map(([key, group]) => {
+    const first = group[0];
+    const ambiguous = group.length > 1;
+    const sold = consumedBy.get(key) ?? new Prisma.Decimal(0);
+    const groupQty = group.reduce((sum, line) => sum.plus(line.qty), new Prisma.Decimal(0));
+    const remainingQty = Prisma.Decimal.max(0, groupQty.minus(sold));
+    // Unit cost stays unrounded here. Only the API number is converted below.
+    const landedPerUnit = ambiguous
+      ? groupQty.gt(0)
+        ? group
+            .reduce(
+              (sum, line) =>
+                sum
+                  .plus(new Prisma.Decimal(line.qty).times(line.rate))
+                  .plus(allocatedChargesFor(line)),
+              new Prisma.Decimal(0),
+            )
+            .div(groupQty)
+        : new Prisma.Decimal(0)
+      : landedCostPerUnit({
+          qty: first.qty,
+          rate: first.rate,
+          purchaseCharges: allocatedChargesFor(first),
+        });
+    // Lot-specific fields belong to one line only, so they are dropped for ambiguous groups.
+    const own = <T,>(value: T) => (ambiguous ? undefined : value);
+    return {
+      purchaseId: purchase.id,
+      purchaseLineId: own(first.id),
+      purchaseLineIds: group.map((line) => line.id),
+      ambiguous,
+      item: first.item,
+      product: first.productName ?? undefined,
+      spec: first.spec ?? undefined,
+      quality: first.quality ?? undefined,
+      supplierId: purchase.supplierId,
+      unit: first.unit,
+      remainingQty: remainingQty.toNumber(),
+      landedPerUnit: landedPerUnit.toNumber(),
+      sellPrice: own(first.sellRate == null ? undefined : first.sellRate.toNumber()),
+      purchasedAt: purchase.date,
+      supplierName: purchase.supplier.name,
+      categoryId: first.categoryId ?? undefined,
+      variantId: first.variantId ?? undefined,
+      attributeSnapshot: first.attributeSnapshot ?? undefined,
+      lotNumber: own(first.lotNumber ?? undefined),
+      heatNumber: own(first.heatNumber ?? undefined),
+      batchNumber: own(first.batchNumber ?? undefined),
+      warehouseId: own(first.warehouseId ?? undefined),
+      locationId: own(first.locationId ?? undefined),
+    };
+  });
+  return rows.filter((row) => row.remainingQty > 0);
+}
+
+export type ProductUnitStockRow = {
+  productId: string;
+  unit: string | null;
+  _sum: { qty: Prisma.Decimal | number | null };
+};
+
+/**
+ * Unit-safe product stock. Each product's ledger rows are grouped by unit.
+ * Units are never summed together. The qty of a single-unit product is exact
+ * Decimal. A multi-unit product gets `qty: null` and a per-unit breakdown.
+ * No conversion factor is applied, because none is defined in the system.
+ */
+export function unitSafeProductStock(
+  products: { id: string; name: string; unit: string }[],
+  rows: ProductUnitStockRow[],
+) {
+  return products.map((product) => {
+    const byUnit = new Map<string, Prisma.Decimal>();
+    for (const row of rows) {
+      if (row.productId !== product.id) continue;
+      const unit = row.unit || product.unit;
+      const previous = byUnit.get(unit) ?? new Prisma.Decimal(0);
+      byUnit.set(unit, previous.plus(row._sum.qty ?? 0));
+    }
+    const units = [...byUnit].map(([unit, qty]) => ({ unit, qty }));
+    const base = { productId: product.id, productName: product.name };
+
+    if (units.length > 1) {
+      return { ...base, unit: null, qty: null, mixedUnits: true, units };
+    }
+    // Same shape as before for products with no ledger rows: unit = product unit, qty = 0.
+    return {
+      ...base,
+      unit: units[0]?.unit ?? product.unit,
+      qty: units[0]?.qty ?? 0,
+      mixedUnits: false,
+      units,
+    };
+  });
+}
 
 @Injectable()
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Current stock per product, computed by summing the signed ledger. */
+  /**
+   * Current stock per product, computed by summing the signed ledger.
+   * Quantities are grouped by unit. Units are never added together.
+   * A product with one unit returns that qty. A product with several units
+   * returns `qty: null`, `unit: null`, `mixedUnits: true` and a `units` breakdown.
+   */
   async stock(businessId: string) {
     const grouped = await this.prisma.inventoryTransaction.groupBy({
-      by: ["productId"],
+      by: ["productId", "unit"],
       where: { businessId },
       _sum: { qty: true },
     });
@@ -19,13 +156,7 @@ export class InventoryService {
       select: { id: true, name: true, unit: true },
     });
 
-    const sums = new Map(grouped.map((g) => [g.productId, g._sum.qty ?? 0]));
-    return products.map((p) => ({
-      productId: p.id,
-      productName: p.name,
-      unit: p.unit,
-      qty: sums.get(p.id) ?? 0,
-    }));
+    return unitSafeProductStock(products, grouped);
   }
 
   async stockByVariant(businessId: string) {
@@ -54,7 +185,8 @@ export class InventoryService {
         shortName: variant?.shortName ?? product?.name ?? row.productId,
         attributeSnapshot: variant?.attributes ?? undefined,
         unit: row.unit || product?.unit,
-        stockQty: Number(row._sum.qty ?? 0),
+        // Decimal kept through the service. The JSON serializer writes qty at 3 decimals.
+        stockQty: new Prisma.Decimal(row._sum.qty ?? 0),
       };
     });
   }
@@ -85,53 +217,11 @@ export class InventoryService {
         : [];
     const consumedBy = new Map(
       consumed.map((row) => [
-        `${row.purchaseId}:${row.productId}:${row.variantId ?? ""}`,
-        Number(row._sum.qty ?? 0),
+        lotGroupKey(row.purchaseId ?? "", row.productId, row.variantId),
+        new Prisma.Decimal(row._sum.qty ?? 0),
       ]),
     );
-    return purchases.flatMap((purchase) => {
-      const goods = purchase.lines.reduce(
-        (sum, line) => sum + Number(line.qty) * Number(line.rate),
-        0,
-      );
-      const charges =
-        Number(purchase.transport) +
-        Number(purchase.loading) +
-        Number(purchase.labour) +
-        Number(purchase.otherCost);
-      return purchase.lines
-        .map((line) => {
-          const key = `${purchase.id}:${line.productId}:${line.variantId ?? ""}`;
-          const remainingQty = Math.max(0, Number(line.qty) - (consumedBy.get(key) ?? 0));
-          const lineGoods = Number(line.qty) * Number(line.rate);
-          const allocatedCharges = goods > 0 ? charges * (lineGoods / goods) : 0;
-          return {
-            purchaseId: purchase.id,
-            purchaseLineId: line.id,
-            item: line.item,
-            product: line.productName ?? undefined,
-            spec: line.spec ?? undefined,
-            quality: line.quality ?? undefined,
-            supplierId: purchase.supplierId,
-            unit: line.unit,
-            remainingQty,
-            landedPerUnit:
-              Number(line.qty) > 0 ? (lineGoods + allocatedCharges) / Number(line.qty) : 0,
-            sellPrice: line.sellRate == null ? undefined : Number(line.sellRate),
-            purchasedAt: purchase.date,
-            supplierName: purchase.supplier.name,
-            categoryId: line.categoryId ?? undefined,
-            variantId: line.variantId ?? undefined,
-            attributeSnapshot: line.attributeSnapshot ?? undefined,
-            lotNumber: line.lotNumber ?? undefined,
-            heatNumber: line.heatNumber ?? undefined,
-            batchNumber: line.batchNumber ?? undefined,
-            warehouseId: line.warehouseId ?? undefined,
-            locationId: line.locationId ?? undefined,
-          };
-        })
-        .filter((line) => line.remainingQty > 0.0005);
-    });
+    return purchases.flatMap((purchase) => purchaseLotRows(purchase, consumedBy));
   }
 
   async lotsCount(businessId: string) {
@@ -178,6 +268,23 @@ export class InventoryService {
       if (!product) {
         // Thrown inside the transaction → everything rolls back.
         throw new BadRequestException("Product not found");
+      }
+      // Same product-level key that sales and purchase edits take. The total
+      // read below is therefore settled before this adjustment is checked.
+      await lockInventoryKeys(tx, [stockLockKey(businessId, dto.productId, null)]);
+      if (dto.qty < 0) {
+        const agg = await tx.inventoryTransaction.aggregate({
+          where: { businessId, productId: dto.productId },
+          _sum: { qty: true },
+        });
+        const current = new Prisma.Decimal(agg._sum.qty ?? 0);
+        const resulting = current.plus(dto.qty);
+        if (resulting.lt(0)) {
+          throw new BadRequestException(
+            `Adjustment would make stock negative: available ${current.toString()}, ` +
+              `adjustment ${dto.qty}`,
+          );
+        }
       }
       return tx.inventoryTransaction.create({
         data: {

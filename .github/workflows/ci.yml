@@ -28,6 +28,36 @@ jobs:
     name: Backend CI
     runs-on: ubuntu-latest
 
+    # Disposable databases for the DB-backed E2E suites. Their specs only run
+    # against local scratch databases with these exact names and ports.
+    services:
+      purchase-del-db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: tijaratt_purchase_del_test
+        ports:
+          - 55434:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      stock-lot-db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: tijaratt_stock_lot_scratch
+        ports:
+          - 55435:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     defaults:
       run:
         working-directory: server
@@ -65,8 +95,30 @@ jobs:
       - name: Build backend
         run: npm run build
 
+      - name: Create quantity test database
+        env:
+          PGPASSWORD: ci
+        run: createdb -h 127.0.0.1 -p 55434 -U ci tijaratt_qty_test
+
+      - name: Apply migrations to the E2E databases
+        run: |
+          for url in \
+            postgresql://ci:ci@127.0.0.1:55434/tijaratt_purchase_del_test \
+            postgresql://ci:ci@127.0.0.1:55434/tijaratt_qty_test \
+            postgresql://ci:ci@127.0.0.1:55435/tijaratt_stock_lot_scratch; do
+            DATABASE_URL="$url" DIRECT_URL="$url" npx prisma migrate deploy
+          done
+
       - name: Run tests
-        run: npm test -- --runInBand
+        env:
+          PURCHASE_DEL_TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:55434/tijaratt_purchase_del_test
+          QTY_E2E_DATABASE_URL: postgresql://ci:ci@127.0.0.1:55434/tijaratt_qty_test
+          STOCK_LOT_TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:55435/tijaratt_stock_lot_scratch
+        # Benchmarks also match the test pattern; they are not part of CI.
+        run: npm test -- --runInBand --testPathIgnorePatterns bench --json --outputFile=jest-results.json
+
+      - name: Require the DB-backed E2E suites to have run
+        run: node scripts/assert-db-suites-ran.cjs jest-results.json
 
   frontend:
     name: Frontend CI

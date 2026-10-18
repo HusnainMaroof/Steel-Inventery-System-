@@ -17,6 +17,18 @@ import { PrismaService } from "../prisma/prisma.service";
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Liveness: confirms the Nest process answers HTTP. Never touches the database,
+   * so frequent container healthchecks do not keep the Neon compute awake.
+   */
+  @Get("live")
+  @HttpCode(HttpStatus.OK)
+  @Header("Cache-Control", "no-store")
+  live(): { status: "ok" } {
+    return { status: "ok" };
+  }
+
+  /** Readiness: confirms the app can reach the database. */
   @Get()
   @HttpCode(HttpStatus.OK)
   @Header("Cache-Control", "no-store")

@@ -12,7 +12,7 @@ import {
 import { readCache, writeCache } from "@/lib/query-cache";
 import { fetchServerProfitReport, type ApiProfitReport } from "@/lib/server-report";
 import { userFacingError } from "@/lib/user-error";
-import { fmtCompact, fmtMoney, qtyUnitLabel } from "@/lib/format";
+import { fmtMoney, fmtQtyNumber, qtyUnitLabel } from "@/lib/format";
 
 type Period = "today" | "monthly" | "yearly";
 
@@ -39,9 +39,9 @@ function MoneyFigure({
     );
   }
   const cls = large
-    ? "text-[38px] sm:text-[48px] lg:text-[56px] font-bold leading-none tracking-tight tabular-nums"
+    ? "text-[clamp(2rem,11cqi,3.5rem)] font-bold leading-none tracking-tight tabular-nums"
     : "text-[26px] sm:text-[32px] font-bold tabular-nums leading-none";
-  return <span className={cls}>{fmtCompact(value)}</span>;
+  return <span className={`${cls} whitespace-nowrap`}>{fmtMoney(value)}</span>;
 }
 
 /* ---------- shared primitives (monochrome, 8px radius) ---------- */
@@ -88,7 +88,7 @@ function Kpi({
   return (
     <Card
       dark={dark}
-      className="p-5 h-full flex flex-col justify-between gap-5"
+      className="@container p-5 h-full flex flex-col justify-between gap-5"
     >
       <p
         className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${
@@ -102,14 +102,14 @@ function Kpi({
           {loading ? (
             <Skeleton className={`h-9 w-24 rounded-md ${dark ? "!bg-white/20" : ""}`} />
           ) : money ? (
-            <span className="text-[30px] sm:text-[36px] lg:text-[42px] font-bold leading-none tracking-tight tabular-nums">
+            <span className="text-[clamp(1.25rem,12cqi,2.625rem)] whitespace-nowrap font-bold leading-none tracking-tight tabular-nums">
               {prefix}
-              {fmtCompact(value)}
+              {fmtMoney(value)}
               {suffix}
             </span>
           ) : (
-            <span className="text-[30px] sm:text-[36px] lg:text-[42px] font-bold leading-none tracking-tight tabular-nums">
-              {Math.round(value).toLocaleString()}
+            <span className="text-[clamp(1.25rem,12cqi,2.625rem)] whitespace-nowrap font-bold leading-none tracking-tight tabular-nums">
+              {fmtQtyNumber(value)}
               {suffix}
             </span>
           )}
@@ -137,7 +137,7 @@ function SalesProfitHero({
   loading: boolean;
 }) {
   return (
-    <Card dark className="p-6 sm:p-8 h-full min-h-[220px] flex flex-col justify-between gap-6">
+    <Card dark className="@container p-6 sm:p-8 h-full min-h-[220px] flex flex-col justify-between gap-6">
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
           Net profit
@@ -173,13 +173,13 @@ function DueCard({
   const accent = tone === "in" ? "text-[#2e6b2e]" : "text-[#a12b1f]";
 
   return (
-    <Card className="p-5 h-full flex flex-col justify-between gap-4 min-h-[140px]">
+    <Card className="@container p-5 h-full flex flex-col justify-between gap-4 min-h-[140px]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#171717]">{label}</p>
       <div>
         {loading ? (
           <Skeleton className="h-8 w-32 rounded-md" />
         ) : (
-          <p className={`text-[28px] sm:text-[32px] font-bold tabular-nums leading-none ${value > 0 ? accent : "text-[#171717]"}`}>
+          <p className={`text-[clamp(1.25rem,12cqi,2rem)] whitespace-nowrap font-bold tabular-nums leading-none ${value > 0 ? accent : "text-[#171717]"}`}>
             {value > 0 ? fmtMoney(value) : "—"}
           </p>
         )}

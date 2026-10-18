@@ -10,6 +10,8 @@ import { DateRangePicker, formatRangeLabel } from "@/components/ui/date-range-pi
 import { dateInIsoRange, todayIsoDay } from "@/lib/date-range-filter";
 import PeriodInvoice from "@/components/sales/PeriodInvoice";
 import { fmtMoney } from "@/lib/format";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../lib/decimal";
 
 export function rangeInvoiceNo(from: string | null, to: string | null) {
   if (from && to) return `INV-${from.replaceAll("-", "")}_${to.replaceAll("-", "")}`;
@@ -44,8 +46,8 @@ export default function PrintPack({
       .sort((a, b) => a.date.localeCompare(b.date) || a.invoiceNo.localeCompare(b.invoiceNo));
   }, [sales, from, to]);
 
-  const total = filtered.reduce((a, s) => a + saleGrandTotal(s), 0);
-  const due = filtered.reduce((a, s) => a + Math.max(0, saleGrandTotal(s) - salePaid(s.id)), 0);
+  const total = filtered.reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber();
+  const due = filtered.reduce((a, s) => a.plus(toDecimal(Math.max(0, saleGrandTotal(s) - salePaid(s.id)))), new Decimal(0)).toNumber();
 
   const title = rangeTitle(from, to);
   const invoiceNo = rangeInvoiceNo(from, to);

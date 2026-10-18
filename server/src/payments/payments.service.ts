@@ -1,14 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { AuditService } from "../common/audit/audit.service";
-import {
-  incrementInvoicePaidOrThrow,
-  incrementPurchasePaid,
-} from "../common/payments/invoice-atomic";
-import { assertPositiveMoney, LIMITS } from "../common/security/limits";
+import { newRecordId } from "../common/record-id";
+import { assertMaxDecimals, assertPositiveMoney, LIMITS } from "../common/security/limits";
 import { sanitizeOptionalText } from "../common/security/sanitize-text";
 import { PrismaService } from "../prisma/prisma.service";
-import { openPurchasesForSupplier } from "../common/prisma/query-helpers";
 import { settleFifo, settleSupplierFifo } from "../domain/payment-settlement";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 
@@ -23,6 +19,35 @@ const listOrder: Prisma.PaymentOrderByWithRelationInput[] = [
   { createdAt: "desc" },
 ];
 
+/** One open invoice (customer) or purchase (supplier) as read for settlement. */
+type OpenInvoiceRow = { saleId: string; date: string; invoiceId: string; total: string; paid: string };
+type OpenPurchaseRow = { id: string; paid: string; goods: string };
+
+type PaymentReadRow<T> = {
+  /** Payments already recorded for this business on the payment's day. */
+  dayTotal: string;
+  partyFound: boolean;
+  open: T[];
+};
+
+/** One settlement row, written to PaymentAllocation and applied to its invoice or purchase. */
+type AllocationInput = {
+  id: string;
+  invoiceId: string | null;
+  saleId: string | null;
+  purchaseId: string | null;
+  amount: string;
+  /** Purchase goods total; the purchase `paid` may not go above it. */
+  goods: string | null;
+};
+
+type PaymentWriteRow = {
+  createdAt: Date;
+  invoicesUpdated: number;
+  purchasesUpdated: number;
+  allocations: number;
+};
+
 @Injectable()
 export class PaymentsService {
   constructor(
@@ -31,254 +56,252 @@ export class PaymentsService {
   ) {}
 
   /**
-   * §10 — payments are records, never balance overwrites.
+   * §10: payments are records, never balance overwrites.
    * A customer payment targeted at an invoice settles that invoice only and
    * can never exceed its remaining due; an untargeted payment settles the
    * customer's oldest unpaid invoices first (FIFO), allocations recorded.
    *
    * Supplier payments are the readable journal of what the purchase `paid`
    * column already tracks (the mill is owed the goods amount only).
+   *
+   * Latency: five database round trips (BEGIN, party lock, one read for the
+   * daily cap + party + open documents, one write for the payment, the
+   * invoice/purchase `paid` updates, allocations and audit, COMMIT).
    */
-  private async assertDailyPaymentCap(
-    tx: Prisma.TransactionClient,
-    businessId: string,
-    date: string,
-    amount: number,
-  ) {
-    const day = new Date(date);
-    const start = new Date(day);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(day);
-    end.setHours(23, 59, 59, 999);
-    const agg = await tx.payment.aggregate({
-      where: { businessId, date: { gte: start, lte: end } },
-      _sum: { amount: true },
+  async create(businessId: string, dto: CreatePaymentDto, actorId?: string) {
+    assertPositiveMoney(dto.amount, "Payment amount");
+    // The column stores 2 decimals. Reject extra places instead of letting
+    // Postgres round after the checks ran.
+    assertMaxDecimals(dto.amount, 2, "Payment amount");
+    const amount = new Prisma.Decimal(dto.amount);
+    dto.note = sanitizeOptionalText(dto.note, 300);
+    if (dto.type === "CUSTOMER" && !dto.customerId) {
+      throw new BadRequestException("Customer payments need customerId");
+    }
+    if (dto.type === "SUPPLIER" && !dto.supplierId) {
+      throw new BadRequestException("Supplier payments need supplierId");
+    }
+    // Payment.date is a DATE column stored by its UTC calendar day.
+    const day = new Date(dto.date).toISOString().slice(0, 10);
+
+    return this.prisma.$transaction(async (tx) => {
+      const allocations: AllocationInput[] = [];
+
+      if (dto.type === "CUSTOMER") {
+        const customerId = dto.customerId as string;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`custpay:${businessId}:${customerId}`}))`;
+        const saleId = dto.saleId ?? null;
+        const [read] = await tx.$queryRaw<PaymentReadRow<OpenInvoiceRow>[]>`
+          SELECT
+            (SELECT COALESCE(SUM("amount"), 0)::text FROM "Payment"
+              WHERE "businessId" = ${businessId} AND "date" = ${day}::date) AS "dayTotal",
+            EXISTS (SELECT 1 FROM "Customer" WHERE "id" = ${customerId} AND "businessId" = ${businessId}) AS "partyFound",
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                'saleId', s."id", 'date', to_char(s."date", 'YYYY-MM-DD'), 'invoiceId', i."id",
+                'total', i."total"::text, 'paid', i."paid"::text
+              ) ORDER BY s."date", s."id")
+              FROM "Sale" s
+              INNER JOIN "Invoice" i ON i."saleId" = s."id" AND i."businessId" = ${businessId}
+              WHERE s."businessId" = ${businessId} AND s."customerId" = ${customerId}
+                AND CASE WHEN ${saleId}::text IS NULL THEN i."total" > 0 ELSE s."id" = ${saleId}::text END
+            ), '[]'::json) AS "open"
+        `;
+        this.assertDailyPaymentCap(read.dayTotal, amount);
+        if (!read.partyFound) throw new BadRequestException("Customer not found");
+
+        if (saleId) {
+          // The read is scoped to this customer, so another customer's invoice is "not found".
+          const invoice = read.open[0];
+          if (!invoice) {
+            throw new BadRequestException("Invoice not found for this customer");
+          }
+          const due = new Prisma.Decimal(invoice.total).minus(invoice.paid);
+          if (amount.gt(due)) {
+            throw new BadRequestException(
+              `Payment (${amount.toFixed(2)}) exceeds the remaining due (${Prisma.Decimal.max(due, 0).toFixed(2)})`,
+            );
+          }
+          allocations.push({
+            id: newRecordId(), invoiceId: invoice.invoiceId, saleId, purchaseId: null,
+            amount: amount.toFixed(2), goods: null,
+          });
+        } else {
+          // FIFO across the customer's oldest unpaid invoices.
+          const invoiceBySaleId = new Map(read.open.map((row) => [row.saleId, row.invoiceId]));
+          const { allocations: settled, unallocated } = settleFifo(
+            read.open.map((row) => ({ saleId: row.saleId, total: row.total, paidSoFar: row.paid, date: row.date })),
+            amount,
+          );
+          // Same rule as supplier payments: money that settles nothing is
+          // rejected, never silently dropped from the cash record.
+          if (unallocated > 0) {
+            throw new BadRequestException(
+              `Payment exceeds the remaining due across open invoices by ${unallocated.toFixed(2)}`,
+            );
+          }
+          for (const a of settled) {
+            const invoiceId = invoiceBySaleId.get(a.saleId);
+            if (!invoiceId) throw new BadRequestException("Invoice not found for allocation");
+            allocations.push({
+              id: newRecordId(), invoiceId, saleId: a.saleId, purchaseId: null,
+              amount: new Prisma.Decimal(a.amount).toFixed(2), goods: null,
+            });
+          }
+        }
+      } else {
+        const supplierId = dto.supplierId as string;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`suppay:${businessId}:${supplierId}`}))`;
+        // Purchases oldest first; goods total computed in SQL (charges are on us, never owed).
+        const [read] = await tx.$queryRaw<PaymentReadRow<OpenPurchaseRow>[]>`
+          SELECT
+            (SELECT COALESCE(SUM("amount"), 0)::text FROM "Payment"
+              WHERE "businessId" = ${businessId} AND "date" = ${day}::date) AS "dayTotal",
+            EXISTS (SELECT 1 FROM "Supplier" WHERE "id" = ${supplierId} AND "businessId" = ${businessId}) AS "partyFound",
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                'id', p."id", 'paid', p."paid"::text,
+                'goods', COALESCE((
+                  SELECT ROUND(SUM(pl."qty" * pl."rate"), 2) FROM "PurchaseLine" pl WHERE pl."purchaseId" = p."id"
+                ), 0)::text
+              ) ORDER BY p."date", p."createdAt")
+              FROM "Purchase" p
+              WHERE p."businessId" = ${businessId} AND p."supplierId" = ${supplierId}
+            ), '[]'::json) AS "open"
+        `;
+        this.assertDailyPaymentCap(read.dayTotal, amount);
+        if (!read.partyFound) throw new BadRequestException("Supplier not found");
+        const goodsById = new Map(read.open.map((row) => [row.id, row.goods]));
+
+        if (dto.purchaseId) {
+          const row = read.open.find((r) => r.id === dto.purchaseId);
+          if (!row) {
+            throw new BadRequestException("Purchase not found for this supplier");
+          }
+          const goods = new Prisma.Decimal(row.goods);
+          const due = Prisma.Decimal.max(goods.minus(row.paid), 0);
+          if (amount.gt(due)) {
+            throw new BadRequestException(
+              `Payment (${amount.toFixed(2)}) exceeds the remaining due (${due.toFixed(2)}) on this purchase`,
+            );
+          }
+          allocations.push({
+            id: newRecordId(), invoiceId: null, saleId: null, purchaseId: row.id,
+            amount: amount.toFixed(2), goods: row.goods,
+          });
+        } else {
+          // FIFO across the supplier's oldest unpaid purchases (goods − paid).
+          const settlement = settleSupplierFifo(
+            read.open.map((row) => ({ purchaseId: row.id, goodsTotal: row.goods, paid: row.paid })),
+            amount,
+          );
+          if (settlement.unallocated > 0) {
+            throw new BadRequestException(
+              `Supplier payment exceeds the remaining payable by ${settlement.unallocated.toFixed(2)}`,
+            );
+          }
+          for (const allocation of settlement.allocations) {
+            const goods = goodsById.get(allocation.purchaseId);
+            if (goods === undefined) throw new BadRequestException("Purchase not found for this supplier");
+            allocations.push({
+              id: newRecordId(), invoiceId: null, saleId: null, purchaseId: allocation.purchaseId,
+              amount: new Prisma.Decimal(allocation.amount).toFixed(2), goods,
+            });
+          }
+        }
+      }
+
+      const paymentId = newRecordId();
+      const customerId = dto.type === "CUSTOMER" ? dto.customerId ?? null : null;
+      const supplierId = dto.type === "SUPPLIER" ? dto.supplierId ?? null : null;
+      const saleId = dto.type === "CUSTOMER" ? dto.saleId ?? null : null;
+      const purchaseId = dto.type === "SUPPLIER" ? dto.purchaseId ?? null : null;
+      const method = dto.method ?? "CASH";
+      const auditMeta = JSON.stringify({ type: dto.type, amount: dto.amount });
+
+      // One statement: the payment row, every `paid` increase (each guarded so it can
+      // never pass the invoice total or purchase goods total), the allocations and the audit row.
+      const [written] = await tx.$queryRaw<PaymentWriteRow[]>`
+        WITH new_payment AS (
+          INSERT INTO "Payment" ("id", "businessId", "date", "type", "customerId", "supplierId",
+                                 "amount", "method", "saleId", "purchaseId", "note")
+          VALUES (${paymentId}, ${businessId}, ${day}::date, ${dto.type}::"PaymentType", ${customerId},
+                  ${supplierId}, ${amount.toFixed(2)}::numeric, ${method}::"PaymentMethod", ${saleId},
+                  ${purchaseId}, ${dto.note ?? null})
+          RETURNING "createdAt"
+        ),
+        alloc AS (
+          SELECT * FROM jsonb_to_recordset(${JSON.stringify(allocations)}::jsonb) AS a(
+            "id" text, "invoiceId" text, "saleId" text, "purchaseId" text, "amount" numeric, "goods" numeric
+          )
+        ),
+        invoice_update AS (
+          UPDATE "Invoice" i SET "paid" = i."paid" + a."amount"
+          FROM alloc a
+          WHERE a."invoiceId" IS NOT NULL AND i."id" = a."invoiceId"
+            AND i."businessId" = ${businessId} AND i."paid" + a."amount" <= i."total"
+          RETURNING i."id"
+        ),
+        purchase_update AS (
+          UPDATE "Purchase" p SET "paid" = p."paid" + a."amount"
+          FROM alloc a
+          WHERE a."purchaseId" IS NOT NULL AND p."id" = a."purchaseId"
+            AND p."businessId" = ${businessId} AND p."paid" + a."amount" <= a."goods"
+          RETURNING p."id"
+        ),
+        new_allocation AS (
+          INSERT INTO "PaymentAllocation" ("id", "businessId", "paymentId", "saleId", "purchaseId", "amount")
+          SELECT a."id", ${businessId}, ${paymentId}, a."saleId", a."purchaseId", a."amount"
+          FROM alloc a
+          RETURNING "id"
+        ),
+        new_audit AS (
+          INSERT INTO "AuditLog" ("id", "businessId", "actorId", "action", "entityType", "entityId", "metadata")
+          VALUES (${newRecordId()}, ${businessId}, ${actorId ?? null}, 'payment.created', 'payment',
+                  ${paymentId}, ${auditMeta}::jsonb)
+          RETURNING "id"
+        )
+        SELECT (SELECT "createdAt" FROM new_payment) AS "createdAt",
+               (SELECT COUNT(*)::int FROM invoice_update) AS "invoicesUpdated",
+               (SELECT COUNT(*)::int FROM purchase_update) AS "purchasesUpdated",
+               (SELECT COUNT(*)::int FROM new_allocation) AS "allocations"
+      `;
+      const invoiceAllocations = allocations.filter((a) => a.invoiceId).length;
+      const purchaseAllocations = allocations.filter((a) => a.purchaseId).length;
+      // A guarded update that matched no row means the due changed or the row is gone.
+      // Throwing here rolls the whole transaction back, payment row included.
+      if (written.invoicesUpdated !== invoiceAllocations) {
+        throw new BadRequestException(
+          "Payment exceeds the remaining due on this invoice or the invoice was not found",
+        );
+      }
+      if (written.purchasesUpdated !== purchaseAllocations) {
+        throw new BadRequestException("Supplier payment would exceed the purchase goods total");
+      }
+
+      return {
+        id: paymentId,
+        businessId,
+        date: new Date(day),
+        type: dto.type,
+        customerId,
+        supplierId,
+        amount,
+        method,
+        saleId,
+        purchaseId,
+        note: dto.note ?? null,
+        createdAt: written.createdAt,
+      };
     });
-    const today = Number(agg._sum.amount ?? 0);
-    if (today + amount > LIMITS.MAX_DAILY_PAYMENT_TOTAL + 0.005) {
+  }
+
+  private assertDailyPaymentCap(dayTotal: string, amount: Prisma.Decimal) {
+    if (new Prisma.Decimal(dayTotal).plus(amount).gt(LIMITS.MAX_DAILY_PAYMENT_TOTAL)) {
       throw new BadRequestException(
         `Daily payment limit of ${LIMITS.MAX_DAILY_PAYMENT_TOTAL} exceeded for this business`,
       );
     }
-  }
-
-  async create(businessId: string, dto: CreatePaymentDto, actorId?: string) {
-    assertPositiveMoney(dto.amount, "Payment amount");
-    dto.note = sanitizeOptionalText(dto.note, 300);
-
-    return this.prisma.$transaction(async (tx) => {
-      await this.assertDailyPaymentCap(tx, businessId, dto.date, dto.amount);
-
-      if (dto.type === "CUSTOMER") {
-        if (dto.customerId) {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`custpay:${businessId}:${dto.customerId}`}))`;
-        }
-        if (!dto.customerId) {
-          throw new BadRequestException("Customer payments need customerId");
-        }
-        const customer = await tx.customer.findFirst({
-          where: { id: dto.customerId, businessId },
-          select: { id: true },
-        });
-        if (!customer) throw new BadRequestException("Customer not found");
-
-        const payment = await tx.payment.create({
-          data: {
-            businessId,
-            date: new Date(dto.date),
-            type: "CUSTOMER",
-            customerId: dto.customerId,
-            amount: dto.amount,
-            method: dto.method ?? "CASH",
-            saleId: dto.saleId,
-            note: dto.note,
-          },
-        });
-
-        if (dto.saleId) {
-          const sale = await tx.sale.findFirst({
-            where: { id: dto.saleId, businessId, customerId: dto.customerId },
-            select: {
-              invoice: true,
-            },
-          });
-          const invoice = sale?.invoice;
-          if (!invoice || invoice.businessId !== businessId) {
-            throw new BadRequestException("Invoice not found for this customer");
-          }
-          const due = Number(invoice.total) - Number(invoice.paid);
-          if (dto.amount > due + 0.005) {
-            throw new BadRequestException(
-              `Payment (${dto.amount}) exceeds the remaining due (${Math.max(0, due)})`,
-            );
-          }
-          await incrementInvoicePaidOrThrow(tx, businessId, invoice.id, dto.amount);
-          await tx.paymentAllocation.create({
-            data: {
-              businessId,
-              paymentId: payment.id,
-              saleId: dto.saleId,
-              amount: dto.amount,
-            },
-          });
-        } else {
-          // FIFO across the customer's oldest unpaid invoices.
-          const sales = await tx.sale.findMany({
-            where: {
-              businessId,
-              customerId: dto.customerId,
-              invoice: { total: { gt: 0 } },
-            },
-            select: {
-              id: true,
-              date: true,
-              invoice: { select: { total: true, paid: true } },
-            },
-            orderBy: { date: "asc" },
-          });
-          const open = sales
-            .filter((s) => s.invoice)
-            .map((s) => ({
-              saleId: s.id,
-              total: Number(s.invoice!.total),
-              paidSoFar: Number(s.invoice!.paid),
-              date: s.date.toISOString().slice(0, 10),
-            }));
-          const { allocations } = settleFifo(open, dto.amount);
-          if (allocations.length > 0) {
-            const invoices = await tx.invoice.findMany({
-              where: {
-                businessId,
-                saleId: { in: allocations.map((a) => a.saleId) },
-              },
-              select: { id: true, saleId: true },
-            });
-            const invoiceBySaleId = new Map(invoices.map((row) => [row.saleId, row.id]));
-            for (const a of allocations) {
-              const invoiceId = invoiceBySaleId.get(a.saleId);
-              if (!invoiceId) {
-                throw new BadRequestException("Invoice not found for allocation");
-              }
-              await incrementInvoicePaidOrThrow(tx, businessId, invoiceId, a.amount);
-              await tx.paymentAllocation.create({
-                data: {
-                  businessId,
-                  paymentId: payment.id,
-                  saleId: a.saleId,
-                  amount: a.amount,
-                },
-              });
-            }
-          }
-        }
-        await this.audit.logTx(tx, {
-          businessId,
-          actorId: actorId ?? null,
-          action: "payment.created",
-          entityType: "payment",
-          entityId: payment.id,
-          metadata: { type: "CUSTOMER", amount: dto.amount },
-        });
-        return payment;
-      }
-
-      if (!dto.supplierId) {
-        throw new BadRequestException("Supplier payments need supplierId");
-      }
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`suppay:${businessId}:${dto.supplierId}`}))`;
-      const supplier = await tx.supplier.findFirst({
-        where: { id: dto.supplierId, businessId },
-        select: { id: true },
-      });
-      if (!supplier) throw new BadRequestException("Supplier not found");
-
-      const payment = await tx.payment.create({
-        data: {
-          businessId,
-          date: new Date(dto.date),
-          type: "SUPPLIER",
-          supplierId: dto.supplierId,
-          amount: dto.amount,
-          method: dto.method ?? "CASH",
-          note: dto.note,
-          purchaseId: dto.purchaseId,
-        },
-      });
-
-      const applyToPurchase = async (purchaseId: string, take: number, goods: number) => {
-        const ok = await incrementPurchasePaid(tx, businessId, purchaseId, take, goods);
-        if (!ok) {
-          throw new BadRequestException(
-            "Supplier payment would exceed the purchase goods total",
-          );
-        }
-        await tx.paymentAllocation.create({
-          data: {
-            businessId,
-            paymentId: payment.id,
-            purchaseId,
-            amount: take,
-          },
-        });
-      };
-
-      if (dto.purchaseId) {
-        const row = await openPurchasesForSupplier(tx, businessId, dto.supplierId).then(
-          (rows) => rows.find((r) => r.id === dto.purchaseId),
-        );
-        if (!row) {
-          throw new BadRequestException("Purchase not found for this supplier");
-        }
-        const goods = Number(row.goods);
-        const due = Math.max(0, goods - Number(row.paid));
-        if (dto.amount > due + 0.005) {
-          throw new BadRequestException(
-            `Payment (${dto.amount}) exceeds the remaining due (${Math.max(0, due)}) on this purchase`,
-          );
-        }
-        await applyToPurchase(dto.purchaseId, dto.amount, goods);
-      } else {
-        // FIFO across the supplier's oldest unpaid purchases (goods − paid).
-        const openPurchases = await openPurchasesForSupplier(
-          tx,
-          businessId,
-          dto.supplierId,
-        );
-        const settlement = settleSupplierFifo(
-          openPurchases.map((purchase) => ({
-            purchaseId: purchase.id,
-            goodsTotal: Number(purchase.goods),
-            paid: Number(purchase.paid),
-          })),
-          dto.amount,
-        );
-        if (settlement.unallocated > 0.005) {
-          throw new BadRequestException(
-            `Supplier payment exceeds the remaining payable by ${settlement.unallocated.toFixed(2)}`,
-          );
-        }
-        const goodsByPurchaseId = new Map(
-          openPurchases.map((purchase) => [purchase.id, Number(purchase.goods)]),
-        );
-        for (const allocation of settlement.allocations) {
-          const goods = goodsByPurchaseId.get(allocation.purchaseId);
-          if (goods === undefined) {
-            throw new BadRequestException("Purchase not found for this supplier");
-          }
-          await applyToPurchase(allocation.purchaseId, allocation.amount, goods);
-        }
-      }
-
-      await this.audit.logTx(tx, {
-        businessId,
-        actorId: actorId ?? null,
-        action: "payment.created",
-        entityType: "payment",
-        entityId: payment.id,
-        metadata: { type: "SUPPLIER", amount: dto.amount },
-      });
-      return payment;
-    });
   }
 
   async list(

@@ -8,6 +8,8 @@ import { dateInIsoRange } from "@/lib/date-range-filter";
 import { fmtQtyWithUnit, fmtRateWithUnit, fmtMoney, fmtDate } from "@/lib/format";
 import { productUsesCategories, resolveDefs, attrsValuesLine } from "@/lib/catalogue";
 import { purchaseParentId } from "@/lib/purchase-utils";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../../lib/decimal";
 
 type Group = {
   product: string;
@@ -116,7 +118,7 @@ export default function InventoryPage() {
         unit: rows[0]?.unit ?? "",
         rows,
         qty: rows.reduce((a, r) => a + r.stockQty, 0),
-        value: rows.reduce((a, r) => a + r.stockValue, 0),
+        value: rows.reduce((a, r) => a.plus(toDecimal(r.stockValue)), new Decimal(0)).toNumber(),
       }));
   }, [filtered]);
 

@@ -225,6 +225,7 @@ export function SubscriptionPlanModal({
   };
 
   const close = () => {
+    if (pending) return;
     reset(null);
     onClose();
   };
@@ -258,17 +259,17 @@ export function SubscriptionPlanModal({
       active,
       allowedPages,
     };
-    const result = plan
-      ? await updateSubscriptionPlanAction(plan.id, payload)
-      : await createSubscriptionPlanAction(payload);
-    setPending(false);
+    const result = await (plan
+      ? updateSubscriptionPlanAction(plan.id, payload)
+      : createSubscriptionPlanAction(payload)
+    ).finally(() => setPending(false));
     if (!result.ok) return setError(result.error);
     await onSaved();
     close();
   };
 
   return (
-    <Modal open={open} onClose={close} title={plan ? `Edit — ${plan.label}` : "New subscription plan"} size="lg">
+    <Modal open={open} onClose={close} busy={pending} title={plan ? `Edit — ${plan.label}` : "New subscription plan"} size="lg">
       {error ? <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p> : null}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>

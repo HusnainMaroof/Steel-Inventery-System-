@@ -34,7 +34,16 @@ import type {
 } from "./types";
 import type { StaffPage } from "./staff-access";
 import { createCoalescedRefresh } from "./refresh-coalesce";
+import {
+  commitThenReconcile,
+  createSequenceGuard,
+  createWriteLog,
+  overlayWrites,
+  upsertById,
+} from "./collection-merge";
 import { purchaseParentId, steelAmount as purchaseSteelAmount } from "./purchase-utils";
+import Decimal from "decimal.js";
+import { sumDecimal, toDecimal } from "./decimal";
 import {
   round2,
   saleChargesTotal,
@@ -53,7 +62,41 @@ import type { ProductTemplate } from "./templates";
 import { useAuth } from "./auth";
 import { apiFetch, jsonBody } from "./api";
 import { userFacingError } from "./user-error";
-import { normalizeBootstrap, type ApiBootstrap } from "./backend-adapters";
+import { mapApiSale, normalizeBootstrap, type ApiBootstrap } from "./backend-adapters";
+import { businessSlugFromPath } from "./business-path";
+
+type BootstrapResponse = { data: ApiBootstrap };
+
+/** An early bootstrap older than this is not trusted for the first load. */
+const EARLY_BOOTSTRAP_MAX_AGE_MS = 15_000;
+
+let earlyBootstrap: { startedAt: number; request: Promise<BootstrapResponse | null> } | null = null;
+
+/**
+ * On a full page load of a tenant page, the bootstrap request starts right
+ * away, in parallel with /api/auth/me, instead of after it. Both requests
+ * carry the same session cookie, so they describe the same user. The first
+ * load adopts the response once; any failure falls back to a normal fetch.
+ */
+function startEarlyBootstrap(): void {
+  if (typeof window === "undefined" || earlyBootstrap) return;
+  const { pathname } = window.location;
+  if (pathname.split("/").filter(Boolean).length < 2 || !businessSlugFromPath(pathname)) return;
+  earlyBootstrap = {
+    startedAt: Date.now(),
+    request: apiFetch<BootstrapResponse>("/ledger/bootstrap").catch(() => null),
+  };
+}
+
+/** Hands out the early bootstrap at most once. */
+function takeEarlyBootstrap(): Promise<BootstrapResponse | null> | null {
+  const early = earlyBootstrap;
+  earlyBootstrap = null;
+  if (!early || Date.now() - early.startedAt > EARLY_BOOTSTRAP_MAX_AGE_MS) return null;
+  return early.request;
+}
+
+startEarlyBootstrap();
 
 export type CreatePurchaseLineInput = {
   productId: string;
@@ -85,18 +128,22 @@ export type CreatePurchaseInput = {
 };
 
 export const purchaseTotal = (p: Purchase) =>
-  p.qty * p.rate +
-  p.transport +
-  (p.loadingCharges ?? 0) +
-  (p.labourCharges ?? 0) +
-  p.otherCost;
+  round2(
+    sumDecimal([
+      toDecimal(p.qty).times(toDecimal(p.rate)),
+      p.transport,
+      p.loadingCharges ?? 0,
+      p.labourCharges ?? 0,
+      p.otherCost,
+    ]),
+  );
 
 // what we owe the MILL: steel amount only — transport & other costs are on us
 export const steelAmount = purchaseSteelAmount;
 
 /* subtotal = goods total before discount & tax */
 export const saleTotal = (s: Sale) =>
-  s.lines.reduce((sum, l) => sum + l.qty * l.rate, 0);
+  round2(sumDecimal(s.lines.map((l) => toDecimal(l.qty).times(toDecimal(l.rate)))));
 
 /* invoice-wide money helpers — round at same boundaries as the server */
 export const saleDiscount = (s: Sale) =>
@@ -357,29 +404,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const hasBootstrappedRef = useRef(false);
+  // Local merges applied after a server response; overlaid on fetches that started earlier.
+  const writeLogRef = useRef(createWriteLog());
+  const bootstrapGuardRef = useRef(createSequenceGuard());
+  const transactionsGuardRef = useRef(createSequenceGuard());
   const lastTenantRef = useRef<string | null>(null);
   const lastReloadKeyRef = useRef(0);
 
-  const applyBootstrap = useCallback((raw: ApiBootstrap) => {
+  const applyBootstrap = useCallback((raw: ApiBootstrap, startGen: number) => {
     const data = normalizeBootstrap(raw);
-    setSuppliers(data.suppliers);
-    setCustomers(data.customers);
-    setPurchases(data.purchases);
-    setSales(data.sales);
-    setPayments(data.payments);
-    setExpenses(data.expenses);
-    setStockChecks(data.stockChecks);
+    // Catalogue only. The bootstrap response carries empty transaction arrays,
+    // so transaction collections are left untouched here (see loadTransactions).
     setProducts(data.products);
     setProductItems(data.productItems);
     setQualities(data.qualities);
     setCategories(data.categories);
     setAttributeDefs(data.attributeDefs);
     setAttributeOptions(data.attributeOptions);
-    setVariants(data.variants);
+    setVariants(overlayWrites(data.variants, writeLogRef.current.since(startGen, "variants")));
     setWarehouses(data.warehouses);
     setLocations(data.locations);
     setStaff(data.staff);
     setUiPrefs(data.settings);
+  }, []);
+
+  const clearTransactions = useCallback(() => {
+    setCustomers([]);
+    setSuppliers([]);
+    setPurchases([]);
+    setSales([]);
+    setPayments([]);
+    setExpenses([]);
+    setStockChecks([]);
   }, []);
 
   const applyTransactions = useCallback(
@@ -392,7 +448,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       | "payments"
       | "expenses"
       | "stockChecks"
-    >) => {
+    >, startGen: number) => {
       const data = normalizeBootstrap({
         version: 3,
         customers: raw.customers,
@@ -411,10 +467,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         warehouses,
         locations,
       });
-      setCustomers(data.customers);
-      setSuppliers(data.suppliers);
+      const writes = writeLogRef.current;
+      setCustomers(overlayWrites(data.customers, writes.since(startGen, "customers")));
+      setSuppliers(overlayWrites(data.suppliers, writes.since(startGen, "suppliers")));
       setPurchases(data.purchases);
-      setSales(data.sales);
+      // A sale merged from its create response stays visible even if this fetch started before it.
+      setSales(overlayWrites(data.sales, writes.since(startGen, "sales")));
       setPayments(data.payments);
       setExpenses(data.expenses);
       setStockChecks(data.stockChecks);
@@ -436,6 +494,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const loadTransactions = useCallback(async () => {
+    // Only the newest transactions request may apply; older responses are dropped.
+    const token = transactionsGuardRef.current.start();
+    const startGen = writeLogRef.current.generation();
     const payload = await apiFetch<{
       data: Pick<
         ApiBootstrap,
@@ -448,14 +509,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         | "stockChecks"
       >;
     }>("/ledger/transactions");
-    applyTransactions(payload.data);
+    if (!transactionsGuardRef.current.isLatest(token)) return;
+    applyTransactions(payload.data, startGen);
     setDataReady(true);
   }, [applyTransactions]);
 
   const refreshCore = useCallback(async () => {
+    const token = bootstrapGuardRef.current.start();
+    const startGen = writeLogRef.current.generation();
     setTransactionsReady(false);
-    const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
-    applyBootstrap(response.data);
+    const early = takeEarlyBootstrap();
+    const response =
+      (early && (await early)) ?? (await apiFetch<BootstrapResponse>("/ledger/bootstrap"));
+    // A newer bootstrap started meanwhile; its response is the one to keep.
+    if (!bootstrapGuardRef.current.isLatest(token)) return;
+    applyBootstrap(response.data, startGen);
     setDataVersion((v) => v + 1);
     void loadTransactions().catch((reason: unknown) => {
       setTransactionsReady(false);
@@ -464,17 +532,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [applyBootstrap, loadTransactions]);
 
   const refreshFull = useCallback(async () => {
+    const token = bootstrapGuardRef.current.start();
+    const startGen = writeLogRef.current.generation();
     setTransactionsReady(false);
     const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
-    applyBootstrap(response.data);
-    setDataVersion((v) => v + 1);
+    // A newer catalogue request owns the catalogue; transactions still reload.
+    if (bootstrapGuardRef.current.isLatest(token)) {
+      applyBootstrap(response.data, startGen);
+      setDataVersion((v) => v + 1);
+    }
     await loadTransactions();
   }, [applyBootstrap, loadTransactions]);
 
-  const refresh = useMemo(
-    () => createCoalescedRefresh(refreshFull),
-    [refreshFull],
-  );
+  /** Catalogue/settings/staff only. Never touches transaction collections. */
+  const refreshCatalogue = useCallback(async () => {
+    const token = bootstrapGuardRef.current.start();
+    const startGen = writeLogRef.current.generation();
+    const response = await apiFetch<{ data: ApiBootstrap }>("/ledger/bootstrap");
+    if (!bootstrapGuardRef.current.isLatest(token)) return;
+    applyBootstrap(response.data, startGen);
+    setDataVersion((v) => v + 1);
+  }, [applyBootstrap]);
+
+  // Coalescer is built at call time so refs are never read during render.
+  const coalescedRef = useRef<{ source: () => Promise<void>; run: () => Promise<void> } | null>(null);
+  const refresh = useCallback(() => {
+    if (!coalescedRef.current || coalescedRef.current.source !== refreshFull) {
+      coalescedRef.current = { source: refreshFull, run: createCoalescedRefresh(refreshFull) };
+    }
+    return coalescedRef.current.run();
+  }, [refreshFull]);
   const refreshLedger = useCallback(async () => {
     await loadTransactions();
     setDataVersion((v) => v + 1);
@@ -483,7 +570,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authReady) return;
     if (!user || user.role === "SUPERADMIN") {
+      // No tenant session for this page load: the early bootstrap must never be reused later.
+      takeEarlyBootstrap();
       if (!user) {
+        clearTransactions();
+        writeLogRef.current.clear();
         hasBootstrappedRef.current = false;
         lastTenantRef.current = null;
         lastReloadKeyRef.current = 0;
@@ -503,6 +594,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       lastTenantRef.current = tenantKey;
       hasBootstrappedRef.current = false;
       setDataReady(false);
+      // Bootstrap no longer clears transactions, so drop the previous tenant's rows here.
+      clearTransactions();
     }
 
     if (hasBootstrappedRef.current && !retryRequested) return;
@@ -522,7 +615,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
     }, 0);
     return () => window.clearTimeout(task);
-  }, [authReady, user?.id, user?.businessId, user?.role, reloadKey, refreshCore]);
+  }, [authReady, user?.id, user?.businessId, user?.role, reloadKey, refreshCore, clearTransactions]);
 
   const updateUiPrefs = useCallback(
     async (patch: Partial<UiPreferences>) => {
@@ -543,11 +636,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [uiPrefs, user],
   );
 
-  const mutate = async <T,>(key: string, operation: () => Promise<T>): Promise<T> => {
+  /** A reconcile failure after a committed write is shown, not thrown as a failed write. */
+  const reportReconcileError = (reason: unknown) =>
+    setError(userFacingError(reason, "Saved, but the ledger could not refresh. Try again."));
+
+  const commitWrite = async <T,>(
+    key: string,
+    operation: () => Promise<T>,
+    reconcile: () => Promise<unknown>,
+  ): Promise<T> => {
+    setPending(key);
+    try {
+      return await commitThenReconcile(operation, reconcile, reportReconcileError);
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const mutate = <T,>(key: string, operation: () => Promise<T>): Promise<T> =>
+    commitWrite(key, operation, () => refresh());
+
+  /** Catalogue-only writes: reload the catalogue bootstrap, skip transactions. */
+  const mutateCatalogue = <T,>(key: string, operation: () => Promise<T>): Promise<T> =>
+    commitWrite(key, operation, () => refreshCatalogue());
+
+  /** Merge an authoritative row into a local list and record it for overlay. */
+  const mergeLocal = <T extends { id: string }>(
+    collection: string,
+    row: T,
+    update: (apply: (prev: T[]) => T[]) => void,
+  ) => {
+    writeLogRef.current.record(collection, row);
+    update((prev) => upsertById(prev, row));
+  };
+
+  /** Transaction-only writes: reload transactions, skip the catalogue bootstrap. */
+  const mutateLedger = <T,>(key: string, operation: () => Promise<T>): Promise<T> =>
+    commitWrite(key, operation, () => refreshLedger());
+
+  /** Writes whose response is merged locally by the caller; no reload. */
+  const mutateMerged = async <T,>(
+    key: string,
+    operation: () => Promise<T>,
+    apply: (result: T) => void,
+  ): Promise<T> => {
     setPending(key);
     try {
       const result = await operation();
-      await refresh();
+      apply(result);
       return result;
     } finally {
       setPending(null);
@@ -564,22 +700,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   } = useMemo(() => {
     const map: Record<
       string,
-      { pq: number; cost: number; sq: number; rev: number; sr: number; srq: number }
+      { pq: number; cost: Decimal; sq: number; rev: Decimal; sr: Decimal; srq: number }
     > = {};
     for (const p of purchases) {
-      const m = (map[p.item] ??= { pq: 0, cost: 0, sq: 0, rev: 0, sr: 0, srq: 0 });
+      const m = (map[p.item] ??= { pq: 0, cost: new Decimal(0), sq: 0, rev: new Decimal(0), sr: new Decimal(0), srq: 0 });
       m.pq += p.qty;
-      m.cost += purchaseTotal(p);
+      m.cost = m.cost.plus(purchaseTotal(p));
       if (p.sellRate) {
-        m.sr += p.qty * p.sellRate;
+        m.sr = m.sr.plus(toDecimal(p.qty).times(p.sellRate));
         m.srq += p.qty;
       }
     }
     for (const s of sales) {
       for (const l of s.lines) {
-        const m = (map[l.item] ??= { pq: 0, cost: 0, sq: 0, rev: 0, sr: 0, srq: 0 });
+        const m = (map[l.item] ??= { pq: 0, cost: new Decimal(0), sq: 0, rev: new Decimal(0), sr: new Decimal(0), srq: 0 });
         m.sq += l.qty;
-        m.rev += l.qty * l.rate;
+        m.rev = m.rev.plus(toDecimal(l.qty).times(l.rate));
       }
     }
     const rows: InventoryRow[] = [];
@@ -602,7 +738,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
     }
     for (const [item, m] of Object.entries(map)) {
-      const landedAvg = m.pq > 0 ? m.cost / m.pq : 0;
+      const landedAvg = m.pq > 0 ? m.cost.div(m.pq).toNumber() : 0;
       const stockQty = m.pq - m.sq;
       rows.push({
         item,
@@ -610,11 +746,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         purchasedQty: m.pq,
         soldQty: m.sq,
         stockQty,
-        totalCost: m.cost,
+        totalCost: round2(m.cost),
         landedAvg,
-        stockValue: stockQty * landedAvg,
-        avgSellRate: m.sq > 0 ? m.rev / m.sq : 0,
-        sellRate: m.srq > 0 ? m.sr / m.srq : 0,
+        stockValue: round2(toDecimal(stockQty).times(landedAvg)),
+        avgSellRate: m.sq > 0 ? m.rev.div(m.sq).toNumber() : 0,
+        sellRate: m.srq > 0 ? m.sr.div(m.srq).toNumber() : 0,
       });
       itemMap[item] = landedAvg;
     }
@@ -641,17 +777,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // cost per unit actually consumed, or -1 if nothing was consumed
     const consume = (elig: Lot[], qty: number): number => {
       let left = qty;
-      let total = 0;
+      let total = new Decimal(0);
       for (const lot of elig) {
         if (left <= 0) break;
         if (lot.remaining <= 0.000001) continue;
         const take = Math.min(lot.remaining, left);
-        total += take * lot.landed;
+        total = total.plus(toDecimal(take).times(lot.landed));
         lot.remaining -= take;
         left -= take;
       }
       const taken = qty - left;
-      return taken > 0 ? total / taken : -1;
+      return taken > 0 ? total.div(taken).toNumber() : -1;
     };
 
     // per sale line, the landed unit cost of the stock it consumed
@@ -681,7 +817,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     /* ---- per-source rows from the remaining lots ---- */
     const srcAgg: Record<
       string,
-      InventoryRow & { pq: number; cost: number; remain: number; remainVal: number; sellW: number; sellQ: number }
+      InventoryRow & { pq: number; cost: Decimal; remain: number; remainVal: Decimal; sellW: Decimal; sellQ: number }
     > = {};
     const srcKey = (item: string, spec: string | undefined, supplierId: string) =>
       `${item}\u0000${spec ?? ""}\u0000${supplierId}`;
@@ -702,14 +838,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         stockValue: 0,
         avgSellRate: 0,
         pq: 0,
-        cost: 0,
+        cost: new Decimal(0),
         remain: 0,
-        remainVal: 0,
-        sellW: 0,
+        remainVal: new Decimal(0),
+        sellW: new Decimal(0),
         sellQ: 0,
       });
       a.pq += p.qty;
-      a.cost += purchaseTotal(p);
+      a.cost = a.cost.plus(purchaseTotal(p));
       if (p.spec) a.spec = p.spec;
       if (p.quality) a.quality = p.quality;
     }
@@ -719,17 +855,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const a = srcAgg[srcKey(lot.p.item, lot.p.spec, lot.p.supplierId)];
       if (a) {
         a.remain += lot.remaining;
-        a.remainVal += lot.remaining * lot.landed;
+        a.remainVal = a.remainVal.plus(toDecimal(lot.remaining).times(lot.landed));
         if (lot.p.sellRate) {
-          a.sellW += lot.remaining * lot.p.sellRate;
+          a.sellW = a.sellW.plus(toDecimal(lot.remaining).times(lot.p.sellRate));
           a.sellQ += lot.remaining;
         }
       }
     }
     const inventoryBySource: InventoryRow[] = Object.values(srcAgg).map((a) => {
-      const landedAvg = a.pq > 0 ? a.cost / a.pq : 0;
+      const landedAvg = a.pq > 0 ? a.cost.div(a.pq).toNumber() : 0;
       const stockQty = a.remain;
-      const avgSellRate = a.sellQ > 0 ? a.sellW / a.sellQ : 0;
+      const avgSellRate = a.sellQ > 0 ? a.sellW.div(a.sellQ).toNumber() : 0;
       return {
         item: a.item,
         ...meta[a.item],
@@ -739,9 +875,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         purchasedQty: a.pq,
         soldQty: a.pq - stockQty,
         stockQty,
-        totalCost: a.cost,
+        totalCost: round2(a.cost),
         landedAvg,
-        stockValue: a.remainVal,
+        stockValue: round2(a.remainVal),
         avgSellRate: 0,
         sellRate: avgSellRate,
       };
@@ -802,7 +938,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       categoryId?: string;
       snapshot?: Record<string, string>;
       unit: string;
-      pq: number; cost: number; sq: number; rev: number; sr: number; srq: number;
+      pq: number; cost: Decimal; sq: number; rev: Decimal; sr: Decimal; srq: number;
     };
     const acc: Record<string, Acc> = {};
     const productNameOfItem: Record<string, string> = {};
@@ -814,7 +950,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         categoryId: from.categoryId,
         snapshot: from.snapshot,
         unit: from.unit ?? "",
-        pq: 0, cost: 0, sq: 0, rev: 0, sr: 0, srq: 0,
+        pq: 0, cost: new Decimal(0), sq: 0, rev: new Decimal(0), sr: new Decimal(0), srq: 0,
       };
       return acc[variantId];
     };
@@ -822,15 +958,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const k = p.variantId ?? `item:${p.item}`;
       const a = ensure(k, { item: p.item, categoryId: p.categoryId, snapshot: p.attributeSnapshot, unit: p.unit });
       a.pq += p.qty;
-      a.cost += purchaseTotal(p);
-      if (p.sellRate) { a.sr += p.qty * p.sellRate; a.srq += p.qty; }
+      a.cost = a.cost.plus(purchaseTotal(p));
+      if (p.sellRate) { a.sr = a.sr.plus(toDecimal(p.qty).times(p.sellRate)); a.srq += p.qty; }
     }
     for (const s of sales)
       for (const l of s.lines) {
         const k = l.variantId ?? `item:${l.item}`;
         const a = ensure(k, { item: l.item, categoryId: l.categoryId, snapshot: l.attributeSnapshot, unit: l.unit });
         a.sq += l.qty;
-        a.rev += l.qty * l.rate;
+        a.rev = a.rev.plus(toDecimal(l.qty).times(l.rate));
       }
     const rows: VariantStockRow[] = Object.values(acc).map((a) => {
       const v = a.variantId.startsWith("item:") ? undefined : varById.get(a.variantId);
@@ -838,7 +974,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const prod =
         (v?.productId ? productById.get(v.productId) : undefined) ??
         (cat ? productById.get(cat.productId) : undefined);
-      const landedAvg = a.pq > 0 ? a.cost / a.pq : 0;
+      const landedAvg = a.pq > 0 ? a.cost.div(a.pq).toNumber() : 0;
       const stockQty = a.pq - a.sq;
       const showCat = prod?.usesCategories === true;
       return {
@@ -854,11 +990,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         purchasedQty: a.pq,
         soldQty: a.sq,
         stockQty,
-        totalCost: a.cost,
+        totalCost: round2(a.cost),
         landedAvg,
-        stockValue: stockQty * landedAvg,
-        avgSellRate: a.sq > 0 ? a.rev / a.sq : 0,
-        sellRate: a.srq > 0 ? a.sr / a.srq : undefined,
+        stockValue: round2(toDecimal(stockQty).times(landedAvg)),
+        avgSellRate: a.sq > 0 ? a.rev.div(a.sq).toNumber() : 0,
+        sellRate: a.srq > 0 ? a.sr.div(a.srq).toNumber() : undefined,
       };
     });
     rows.sort(
@@ -976,66 +1112,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [sales, payments]);
 
   const customerBalance = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, Decimal> = {};
     for (const s of sales) {
       const paid = s.invoicePaid ?? salePaidMap[s.id] ?? 0;
-      const due = Math.max(0, saleGrandTotal(s) - paid);
-      map[s.customerId] = (map[s.customerId] ?? 0) + due;
+      const due = Decimal.max(0, toDecimal(saleGrandTotal(s)).minus(paid));
+      map[s.customerId] = (map[s.customerId] ?? new Decimal(0)).plus(due);
     }
-    return (id: string) => map[id] ?? 0;
+    return (id: string) => round2(map[id] ?? 0);
   }, [sales, salePaidMap]);
 
 
   const supplierBalance = useMemo(() => {
-    const map: Record<string, number> = {};
-    const byPurchase = new Map<string, { supplierId: string; goods: number; paid: number }>();
+    const map: Record<string, Decimal> = {};
+    const byPurchase = new Map<string, { supplierId: string; goods: Decimal; paid: number }>();
     for (const p of purchases) {
       const pid = purchaseParentId(p);
       const row = byPurchase.get(pid) ?? {
         supplierId: p.supplierId,
-        goods: 0,
+        goods: new Decimal(0),
         paid: p.paid ?? 0,
       };
-      row.goods += steelAmount(p);
+      row.goods = row.goods.plus(steelAmount(p));
       byPurchase.set(pid, row);
     }
     for (const row of byPurchase.values()) {
-      map[row.supplierId] =
-        (map[row.supplierId] ?? 0) + Math.max(0, row.goods - row.paid);
+      map[row.supplierId] = (map[row.supplierId] ?? new Decimal(0)).plus(
+        Decimal.max(0, row.goods.minus(row.paid)),
+      );
     }
-    return (id: string) => map[id] ?? 0;
+    return (id: string) => round2(map[id] ?? 0);
   }, [purchases]);
 
   const stats = useMemo<DashboardStats>(() => {
-    let revenue = 0;
-    let cogs = 0;
-    for (const s of sales) {
-      revenue += saleGrandTotal(s);
-      for (const [i, l] of s.lines.entries())
-        cogs += l.qty * (lineUnitCost(s.id, i) || byItem[l.item] || 0);
-    }
-    const totalExpenses = expenses.reduce((a, e) => a + e.amount, 0);
-    const customerDues = customers.reduce(
-      (a, c) => a + Math.max(0, customerBalance(c.id)),
-      0
+    const revenueD = sumDecimal(sales.map((s) => saleGrandTotal(s)));
+    const cogsD = sumDecimal(
+      sales.flatMap((s) =>
+        s.lines.map((l, i) =>
+          toDecimal(l.qty).times(lineUnitCost(s.id, i) || byItem[l.item] || 0),
+        ),
+      ),
     );
-    const supplierDues = suppliers.reduce(
-      (a, s) => a + Math.max(0, supplierBalance(s.id)),
-      0
-    );
-    const stockValue = inventory.reduce((a, r) => a + r.stockValue, 0);
+    const expensesD = sumDecimal(expenses.map((e) => e.amount));
+    const customerDuesD = sumDecimal(customers.map((c) => Math.max(0, customerBalance(c.id))));
+    const supplierDuesD = sumDecimal(suppliers.map((s) => Math.max(0, supplierBalance(s.id))));
+    const stockValueD = sumDecimal(inventory.map((r) => r.stockValue));
     const stockQty = inventory.reduce((a, r) => a + r.stockQty, 0);
-    const grossProfit = revenue - cogs;
+    const grossProfitD = revenueD.minus(cogsD);
     return {
       stockQty,
-      stockValue,
-      revenue,
-      cogs,
-      grossProfit,
-      expenses: totalExpenses,
-      netProfit: grossProfit - totalExpenses,
-      customerDues,
-      supplierDues,
+      stockValue: round2(stockValueD),
+      revenue: round2(revenueD),
+      cogs: round2(cogsD),
+      grossProfit: round2(grossProfitD),
+      expenses: round2(expensesD),
+      netProfit: round2(grossProfitD.minus(expensesD)),
+      customerDues: round2(customerDuesD),
+      supplierDues: round2(supplierDuesD),
     };
   }, [sales, lineUnitCost, byItem, expenses, customers, customerBalance, suppliers, supplierBalance, inventory]);
 
@@ -1085,7 +1217,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateUiPrefs,
     staff,
     addStaff: async (input) => {
-      await mutate("staff:create", () =>
+      await mutateCatalogue("staff:create", () =>
         apiFetch("/users", {
           method: "POST",
           ...jsonBody({
@@ -1105,12 +1237,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (input.title !== undefined) body.title = input.title.trim();
       if (input.access !== undefined) body.access = input.access;
       if (input.password) body.password = input.password;
-      await mutate(`staff:update:${id}`, () =>
+      await mutateCatalogue(`staff:update:${id}`, () =>
         apiFetch(`/users/${id}`, { method: "PATCH", ...jsonBody(body) }),
       );
     },
     removeStaff: async (id) => {
-      await mutate(`staff:delete:${id}`, () =>
+      await mutateCatalogue(`staff:delete:${id}`, () =>
         apiFetch(`/users/${id}`, { method: "DELETE" }),
       );
     },
@@ -1151,7 +1283,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             })),
           }),
         });
-        await refreshLedger();
+        try {
+          await refreshLedger();
+        } catch (reason) {
+          reportReconcileError(reason);
+        }
         return created.id;
       } finally {
         setPending(null);
@@ -1226,8 +1362,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
     },
     addSale: async (s) => {
-      const result = await mutate<{ sale: { id: string } }>("sale:create", () =>
-        apiFetch("/sales", {
+      setPending("sale:create");
+      try {
+        const result = await apiFetch<{ sale: ApiBootstrap["sales"][number] }>("/sales", {
           method: "POST",
           ...jsonBody({
             date: s.date,
@@ -1256,12 +1393,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               };
             }),
           }),
-        }),
-      );
-      return result.sale.id;
+        });
+        // The create response carries the stored sale (lines + invoice), so the sale shows at
+        // once. The full ledger reload (payments, dues, other tabs) runs in the background
+        // instead of holding the save for another round of requests.
+        const sale = mapApiSale(result.sale);
+        sale.lines = sale.lines.map((line) => ({
+          ...line,
+          supplierId: line.purchaseId
+            ? purchases.find((purchase) => purchase.purchaseId === line.purchaseId)?.supplierId
+            : undefined,
+        }));
+        mergeLocal("sales", sale, setSales);
+        void refreshLedger().catch(reportReconcileError);
+        return sale.id;
+      } finally {
+        setPending(null);
+      }
     },
     addPayment: async (p) => {
-      await mutate("payment:create", () => apiFetch("/payments", {
+      await mutateLedger("payment:create", () => apiFetch("/payments", {
         method: "POST",
         ...jsonBody({
           date: p.date,
@@ -1277,19 +1428,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }));
     },
     deleteSale: async (id) => {
-      await mutate(`sale:delete:${id}`, () => apiFetch(`/sales/${id}`, { method: "DELETE" }));
+      setPending(`sale:delete:${id}`);
+      try {
+        await apiFetch(`/sales/${id}`, { method: "DELETE" });
+        // Mirror what the server removed, so the list and stock update at once:
+        // the sale, receipts recorded against it, and FIFO receipts that only settled it.
+        // The full reload (dues, invoices, other tabs) runs in the background.
+        setSales((prev) => prev.filter((sale) => sale.id !== id));
+        setPayments((prev) =>
+          prev.flatMap((payment) => {
+            if (payment.saleId === id) return [];
+            if (!payment.allocations?.some((a) => a.saleId === id)) return [payment];
+            const rest = payment.allocations.filter((a) => a.saleId !== id);
+            return rest.length > 0 ? [{ ...payment, allocations: rest }] : [];
+          }),
+        );
+        void refreshLedger().catch(reportReconcileError);
+      } finally {
+        setPending(null);
+      }
     },
     addCustomer: async (c) => {
-      const created = await mutate<{ id: string }>("customer:create", () =>
+      const created = await mutateMerged<Customer>("customer:create", () =>
         apiFetch("/customers", { method: "POST", ...jsonBody(c) }),
+        (row) => mergeLocal("customers", row, setCustomers),
       );
       return created.id;
     },
     addSupplier: async (s) => {
-      await mutate("supplier:create", () => apiFetch("/suppliers", { method: "POST", ...jsonBody(s) }));
+      await mutateMerged<Supplier>("supplier:create", () => apiFetch("/suppliers", { method: "POST", ...jsonBody(s) }),
+        (row) => mergeLocal("suppliers", row, setSuppliers),
+      );
     },
     addExpense: async (e) => {
-      await mutate("expense:create", () => apiFetch("/expenses", {
+      await mutateLedger("expense:create", () => apiFetch("/expenses", {
         method: "POST",
         ...jsonBody({ ...e, category: e.category.toUpperCase() }),
       }));
@@ -1298,7 +1470,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await mutate(`expense:delete:${id}`, () => apiFetch(`/expenses/${id}`, { method: "DELETE" }));
     },
     recordStockCheck: async (c) => {
-      await mutate("stock-check:create", () =>
+      await mutateLedger("stock-check:create", () =>
         apiFetch("/stock-checks", { method: "POST", ...jsonBody(c) }),
       );
     },
@@ -1307,7 +1479,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!clean) return "";
       const existing = products.find((p) => p.name.toLowerCase() === clean.toLowerCase());
       if (existing) return existing.id;
-      const created = await mutate<{ id: string }>("product:create", () =>
+      const created = await mutateCatalogue<{ id: string }>("product:create", () =>
         apiFetch("/products", {
           method: "POST",
           ...jsonBody({ name: clean, unit, description: description?.trim() || undefined, usesCategories: !!usesCategories }),
@@ -1316,12 +1488,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return created.id;
     },
     updateProduct: async (id, patch) => {
-      await mutate(`product:update:${id}`, () => apiFetch(`/products/${id}`, { method: "PATCH", ...jsonBody(patch) }));
+      await mutateCatalogue(`product:update:${id}`, () => apiFetch(`/products/${id}`, { method: "PATCH", ...jsonBody(patch) }));
     },
     addProductItem: async () => undefined,
     addQuality: async () => undefined,
     deleteProduct: async (id) => {
-      await mutate(`product:delete:${id}`, () => apiFetch(`/products/${id}`, { method: "DELETE" }));
+      await mutateCatalogue(`product:delete:${id}`, () => apiFetch(`/products/${id}`, { method: "DELETE" }));
     },
     deleteProductItem: async () => undefined,
     deleteQuality: async () => undefined,
@@ -1334,7 +1506,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         (c) => c.productId === productId && c.name.toLowerCase() === clean.toLowerCase()
       );
       if (existing) return existing.id;
-      const created = await mutate<{ id: string }>("category:create", () =>
+      const created = await mutateCatalogue<{ id: string }>("category:create", () =>
         apiFetch(`/products/${productId}/categories`, {
           method: "POST",
           ...jsonBody({ name: clean, description: description?.trim() || undefined }),
@@ -1343,20 +1515,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return created.id;
     },
     updateCategory: async (id, patch) => {
-      await mutate(`category:update:${id}`, () =>
+      await mutateCatalogue(`category:update:${id}`, () =>
         apiFetch(`/products/categories/${id}`, { method: "PATCH", ...jsonBody(patch) }),
       );
     },
     renameCategory: async (id, name) => {
-      await mutate(`category:rename:${id}`, () =>
+      await mutateCatalogue(`category:rename:${id}`, () =>
         apiFetch(`/products/categories/${id}`, { method: "PATCH", ...jsonBody({ name }) }),
       );
     },
     deleteCategory: async (id) => {
-      await mutate(`category:delete:${id}`, () => apiFetch(`/products/categories/${id}`, { method: "DELETE" }));
+      await mutateCatalogue(`category:delete:${id}`, () => apiFetch(`/products/categories/${id}`, { method: "DELETE" }));
     },
     setCategoryActive: async (id, active) => {
-      await mutate(`category:active:${id}`, () =>
+      await mutateCatalogue(`category:active:${id}`, () =>
         apiFetch(`/products/categories/${id}`, { method: "PATCH", ...jsonBody({ active }) }),
       );
     },
@@ -1372,7 +1544,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!clean) return "";
       const existing = products.find((p) => p.name.toLowerCase() === clean.toLowerCase());
       if (existing) return existing.id;
-      return mutate("product:template", async () => {
+      return mutateCatalogue("product:template", async () => {
         const product = await apiFetch<{ id: string }>("/products", {
           method: "POST",
           ...jsonBody({
@@ -1438,7 +1610,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let n = 2;
       while (taken.has(k)) k = `${key}_${n++}`;
       const sortOrder = siblings.reduce((mx, d) => Math.max(mx, d.sortOrder), 0) + 1;
-      return mutate("attribute:create", async () => {
+      return mutateCatalogue("attribute:create", async () => {
         const created = await apiFetch<{ id: string }>(`/products/${productId}/attributes`, {
           method: "POST",
           ...jsonBody({
@@ -1463,7 +1635,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     },
     patchAttribute: async (id, patch) => {
-      await mutate(`attribute:update:${id}`, () =>
+      await mutateCatalogue(`attribute:update:${id}`, () =>
         apiFetch(`/products/attributes/${id}`, { method: "PATCH", ...jsonBody(patch) }),
       );
     },
@@ -1474,7 +1646,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         (o) => o.attributeDefId === attributeDefId && o.label.toLowerCase() === clean.toLowerCase()
       );
       if (existing) return existing.id;
-      const created = await mutate<{ id: string }>("option:create", () =>
+      const created = await mutateCatalogue<{ id: string }>("option:create", () =>
         apiFetch(`/products/attributes/${attributeDefId}/options`, {
           method: "POST",
           ...jsonBody({
@@ -1488,7 +1660,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return created.id;
     },
     patchOption: async (id, patch) => {
-      await mutate(`option:update:${id}`, () =>
+      await mutateCatalogue(`option:update:${id}`, () =>
         apiFetch(`/products/options/${id}`, { method: "PATCH", ...jsonBody(patch) }),
       );
     },
@@ -1511,11 +1683,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...sales.flatMap((s) => s.lines.map((l) => l.attributeSnapshot)),
       ];
       if (optionAppearsIn(opt, def, variants, snaps)) return false;
-      await mutate(`option:delete:${id}`, () => apiFetch(`/products/options/${id}`, { method: "DELETE" }));
+      await mutateCatalogue(`option:delete:${id}`, () => apiFetch(`/products/options/${id}`, { method: "DELETE" }));
       return true;
     },
     reorderOptions: async (attributeDefId, orderedIds) => {
-      await mutate(`option:order:${attributeDefId}`, () =>
+      await mutateCatalogue(`option:order:${attributeDefId}`, () =>
         apiFetch(`/products/attributes/${attributeDefId}/options/order`, {
           method: "PUT",
           ...jsonBody({ ids: orderedIds }),
@@ -1530,10 +1702,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return sales.some((s) => s.lines.some((l) => l.attributeSnapshot?.[def.key]));
     },
     deleteAttribute: async (id) => {
-      await mutate(`attribute:delete:${id}`, () => apiFetch(`/products/attributes/${id}`, { method: "DELETE" }));
+      await mutateCatalogue(`attribute:delete:${id}`, () => apiFetch(`/products/attributes/${id}`, { method: "DELETE" }));
     },
     reorderAttributes: async (productId, _categoryId, orderedIds) => {
-      await mutate(`attribute:order:${productId}`, () =>
+      await mutateCatalogue(`attribute:order:${productId}`, () =>
         apiFetch(`/products/${productId}/attributes/order`, {
           method: "PUT",
           ...jsonBody({ ids: orderedIds }),
@@ -1544,17 +1716,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const clean = name.trim();
       if (!clean) return;
       if (warehouses.some((warehouse) => warehouse.name.toLowerCase() === clean.toLowerCase())) return;
-      await mutate("warehouse:create", () =>
+      await mutateCatalogue("warehouse:create", () =>
         apiFetch("/warehouses", { method: "POST", ...jsonBody({ name: clean }) }),
       );
     },
     renameWarehouse: async (id, name) => {
-      await mutate(`warehouse:rename:${id}`, () =>
+      await mutateCatalogue(`warehouse:rename:${id}`, () =>
         apiFetch(`/warehouses/${id}`, { method: "PATCH", ...jsonBody({ name }) }),
       );
     },
     setWarehouseActive: async (id, active) => {
-      await mutate(`warehouse:active:${id}`, () =>
+      await mutateCatalogue(`warehouse:active:${id}`, () =>
         apiFetch(`/warehouses/${id}`, { method: "PATCH", ...jsonBody({ active }) }),
       );
     },
@@ -1562,17 +1734,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const clean = name.trim();
       if (!clean) return;
       if (locations.some((location) => location.warehouseId === warehouseId && location.name.toLowerCase() === clean.toLowerCase())) return;
-      await mutate("location:create", () =>
+      await mutateCatalogue("location:create", () =>
         apiFetch(`/warehouses/${warehouseId}/locations`, { method: "POST", ...jsonBody({ name: clean }) }),
       );
     },
     renameLocation: async (id, name) => {
-      await mutate(`location:rename:${id}`, () =>
+      await mutateCatalogue(`location:rename:${id}`, () =>
         apiFetch(`/warehouses/locations/${id}`, { method: "PATCH", ...jsonBody({ name }) }),
       );
     },
     setLocationActive: async (id, active) => {
-      await mutate(`location:active:${id}`, () =>
+      await mutateCatalogue(`location:active:${id}`, () =>
         apiFetch(`/warehouses/locations/${id}`, { method: "PATCH", ...jsonBody({ active }) }),
       );
     },
@@ -1596,7 +1768,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         (!categoryId ? variants.find((v) => ofProduct(v) && attrsEqual(v.attributes, clean)) : undefined);
       if (existing) {
         if (!existing.active) {
-          await mutate(`variant:active:${existing.id}`, () =>
+          await mutateCatalogue(`variant:active:${existing.id}`, () =>
             apiFetch(`/products/variants/${existing.id}`, { method: "PATCH", ...jsonBody({ active: true }) }),
           );
         }
@@ -1604,29 +1776,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       const category = categoryId ? categories.find((item) => item.id === categoryId) : undefined;
       const product = products.find((item) => item.id === productId);
-      return mutate<Variant>("variant:create", () =>
-        apiFetch(`/products/${productId}/variants`, {
+      // Only the variant list changes on the server, so merge the created row
+      // locally instead of reloading the whole ledger before the purchase/sale.
+      setPending("variant:create");
+      try {
+        const created = await apiFetch<Variant>(`/products/${productId}/variants`, {
           method: "POST",
           ...jsonBody({
             categoryId,
             attributes: clean,
             shortName: shortName?.trim() || defaultShortName(category?.name ?? product?.name ?? "Item", clean, defs),
           }),
-        }),
-      );
+        });
+        mergeLocal("variants", created, setVariants);
+        return created;
+      } finally {
+        setPending(null);
+      }
     },
     setVariantShortName: async (id, shortName) => {
-      await mutate(`variant:rename:${id}`, () =>
+      await mutateCatalogue(`variant:rename:${id}`, () =>
         apiFetch(`/products/variants/${id}`, { method: "PATCH", ...jsonBody({ shortName }) }),
       );
     },
     setVariantActive: async (id, active) => {
-      await mutate(`variant:active:${id}`, () =>
+      await mutateCatalogue(`variant:active:${id}`, () =>
         apiFetch(`/products/variants/${id}`, { method: "PATCH", ...jsonBody({ active }) }),
       );
     },
     deleteVariant: async (id) => {
-      await mutate(`variant:delete:${id}`, () => apiFetch(`/products/variants/${id}`, { method: "DELETE" }));
+      await mutateCatalogue(`variant:delete:${id}`, () => apiFetch(`/products/variants/${id}`, { method: "DELETE" }));
     },
     deleteCustomer: async (id) => {
       await mutate(`customer:delete:${id}`, () => apiFetch(`/customers/${id}`, { method: "DELETE" }));

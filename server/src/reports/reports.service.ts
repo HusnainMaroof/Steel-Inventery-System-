@@ -2,7 +2,8 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { computeProfit, SaleForProfit } from "../domain/profit";
-import { landedCostPerUnit, saleGrandTotal } from "../domain/money";
+import { landedCostPerUnit, roundMoneyDecimal, saleGrandTotalDecimal } from "../domain/money";
+import { businessValue as businessValueOf, cashInHand as cashInHandOf } from "../domain/report-money";
 
 export type ReportMode = "month" | "year" | "range";
 
@@ -125,7 +126,7 @@ export class ReportsService {
       ),
       goods AS (
         SELECT pl."purchaseId" AS purchase_id,
-          COALESCE(SUM(pl."qty" * pl."rate"), 0) AS all_goods,
+          COALESCE(ROUND(SUM(pl."qty" * pl."rate"), 2), 0) AS all_goods,
           COALESCE(SUM(pl."qty" * pl."rate") FILTER (WHERE pl."productId" = ${productId ?? ""}), 0) AS product_goods
         FROM "PurchaseLine" pl
         INNER JOIN "Purchase" p ON p."id" = pl."purchaseId"
@@ -246,38 +247,53 @@ export class ReportsService {
     ]);
 
     // ---- landed cost per unit keyed by source purchase + product ----
-    const unitCostByPurchaseProduct = new Map<string, number>();
-    const weightedByProduct = new Map<string, { qty: number; cost: number }>();
+    // Unit cost stays exact Decimal here: never rounded before multiplying by qty.
+    const unitCostByPurchaseProduct = new Map<string, Prisma.Decimal>();
+    const weightedByProduct = new Map<string, { qty: Prisma.Decimal; cost: Prisma.Decimal }>();
     for (const p of costPurchases) {
-      const goods = p.lines.reduce((sum, l) => sum + Number(l.qty) * Number(l.rate), 0);
-      if (goods <= 0) continue;
-      const charges =
-        Number(p.transport) + Number(p.loading) + Number(p.labour) + Number(p.otherCost);
+      const goods = p.lines.reduce(
+        (sum, l) => sum.plus(new Prisma.Decimal(l.qty).times(l.rate)),
+        new Prisma.Decimal(0),
+      );
+      if (goods.lte(0)) continue;
+      const charges = new Prisma.Decimal(p.transport)
+        .plus(p.loading)
+        .plus(p.labour)
+        .plus(p.otherCost);
       for (const line of p.lines) {
-        const lineGoods = Number(line.qty) * Number(line.rate);
-        const lineCharges = charges * (lineGoods / goods);
+        const lineGoods = new Prisma.Decimal(line.qty).times(line.rate);
+        const lineCharges = charges.times(lineGoods).div(goods);
         const key = `${p.id}:${line.productId}`;
         const unitCost = landedCostPerUnit({
-            qty: Number(line.qty),
-            rate: Number(line.rate),
-            purchaseCharges: lineCharges,
-          });
+          qty: line.qty,
+          rate: line.rate,
+          purchaseCharges: lineCharges,
+        });
         const existing = unitCostByPurchaseProduct.get(key);
         if (existing == null) {
           unitCostByPurchaseProduct.set(key, unitCost);
         } else {
           const sameProduct = p.lines.filter((candidate) => candidate.productId === line.productId);
-          const totalQty = sameProduct.reduce((sum, candidate) => sum + Number(candidate.qty), 0);
+          const totalQty = sameProduct.reduce(
+            (sum, candidate) => sum.plus(candidate.qty),
+            new Prisma.Decimal(0),
+          );
           const totalCost = sameProduct.reduce((sum, candidate) => {
-            const candidateGoods = Number(candidate.qty) * Number(candidate.rate);
-            const candidateCharges = charges * (candidateGoods / goods);
-            return sum + candidateGoods + candidateCharges;
-          }, 0);
-          unitCostByPurchaseProduct.set(key, totalQty > 0 ? totalCost / totalQty : existing);
+            const candidateGoods = new Prisma.Decimal(candidate.qty).times(candidate.rate);
+            const candidateCharges = charges.times(candidateGoods).div(goods);
+            return sum.plus(candidateGoods).plus(candidateCharges);
+          }, new Prisma.Decimal(0));
+          unitCostByPurchaseProduct.set(
+            key,
+            totalQty.gt(0) ? totalCost.div(totalQty) : existing,
+          );
         }
-        const weighted = weightedByProduct.get(line.productId) ?? { qty: 0, cost: 0 };
-        weighted.qty += Number(line.qty);
-        weighted.cost += Number(line.qty) * unitCost;
+        const weighted = weightedByProduct.get(line.productId) ?? {
+          qty: new Prisma.Decimal(0),
+          cost: new Prisma.Decimal(0),
+        };
+        weighted.qty = weighted.qty.plus(line.qty);
+        weighted.cost = weighted.cost.plus(new Prisma.Decimal(line.qty).times(unitCost));
         weightedByProduct.set(line.productId, weighted);
       }
     }
@@ -287,32 +303,35 @@ export class ReportsService {
       saleId: s.id,
       lines: s.lines.map((l) => ({
         productId: l.productId,
-        qty: Number(l.qty),
-        rate: Number(l.rate),
+        qty: l.qty,
+        rate: l.rate,
         unitCost:
           l.purchaseId
-            ? unitCostByPurchaseProduct.get(`${l.purchaseId}:${l.productId}`) ?? 0
+            ? unitCostByPurchaseProduct.get(`${l.purchaseId}:${l.productId}`) ?? new Prisma.Decimal(0)
             : (() => {
                 const weighted = weightedByProduct.get(l.productId);
-                return weighted && weighted.qty > 0 ? weighted.cost / weighted.qty : 0;
+                return weighted && weighted.qty.gt(0)
+                  ? weighted.cost.div(weighted.qty)
+                  : new Prisma.Decimal(0);
               })(),
       })),
-      discountPct: Number(s.discountPct),
-      taxPct: Number(s.taxPct),
-      loading: Number(s.loadingCharges),
-      transport: Number(s.transportCharges),
-      labour: Number(s.labourCharges),
+      discountPct: s.discountPct,
+      taxPct: s.taxPct,
+      loading: s.loadingCharges,
+      transport: s.transportCharges,
+      labour: s.labourCharges,
     }));
 
     const profit = computeProfit(
       salesForProfit,
-      expenses.map((e) => ({ productId: e.productId ?? undefined, amount: Number(e.amount) })),
+      expenses.map((e) => ({ productId: e.productId ?? undefined, amount: e.amount })),
       { productId },
     );
 
     // ---- stock flow (per product, own unit) from the inventory ledger ----
     const openingBy = new Map(stockRows.map((r) => [r.productId, Number(r.opening)]));
     const closingBy = new Map(stockRows.map((r) => [r.productId, Number(r.closing)]));
+    const closingExactBy = new Map(stockRows.map((r) => [r.productId, r.closing]));
     const stock = products.map((p) => ({
       productId: p.id,
       productName: p.name,
@@ -322,52 +341,70 @@ export class ReportsService {
     }));
 
     // ---- dues (balances are derived, never stored — §27) ----
-    const customerDue = Number(customerDueRows[0]?.due ?? 0);
-    const supplierDue = Number(supplierDueRows[0]?.due ?? 0);
+    const customerDue = roundMoneyDecimal(customerDueRows[0]?.due ?? 0);
+    const supplierDue = roundMoneyDecimal(supplierDueRows[0]?.due ?? 0);
 
-    // ---- cash ----
-    const cashReceived = Number(customerCash._sum.amount ?? 0);
-    const cashPaid = Number(supplierCash._sum.amount ?? 0);
-    const expensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
-    const cashInHand = cashReceived - cashPaid - expensesTotal;
+    // ---- cash (Decimal end to end, rounded at the money boundary) ----
+    const cashReceived = roundMoneyDecimal(customerCash._sum.amount ?? 0);
+    const cashPaid = roundMoneyDecimal(supplierCash._sum.amount ?? 0);
+    const expensesTotal = roundMoneyDecimal(
+      expenses.reduce((s, e) => s.plus(e.amount), new Prisma.Decimal(0)),
+    );
+    const cashInHand = cashInHandOf({
+      received: cashReceived,
+      paid: cashPaid,
+      expenses: expensesTotal,
+    });
 
     // ---- business value = remaining stock valuation + customer due + cash ----
     const weight = new Map(
       lineWeights.map((row) => [
         row.productId,
-        { qty: Number(row.qty), value: Number(row.goods) },
+        { qty: new Prisma.Decimal(row.qty), value: new Prisma.Decimal(row.goods) },
       ]),
     );
-    const totalCharges = Number(chargeTotals[0]?.totalCharges ?? 0);
-    const totalGoods = Number(chargeTotals[0]?.totalGoods ?? 0);
-    const remainingValuation = products.reduce((sum, p) => {
+    const totalCharges = new Prisma.Decimal(chargeTotals[0]?.totalCharges ?? 0);
+    const totalGoods = new Prisma.Decimal(chargeTotals[0]?.totalGoods ?? 0);
+    const remainingValuationExact = products.reduce((sum, p) => {
       const w = weight.get(p.id);
-      if (!w || w.qty <= 0) return sum;
-      const avgLanded = (w.value + totalCharges * (w.value / (totalGoods || 1))) / w.qty;
-      return sum + (closingBy.get(p.id) ?? 0) * avgLanded;
-    }, 0);
-    const businessValue = remainingValuation + customerDue + cashInHand;
+      if (!w || w.qty.lte(0)) return sum;
+      // avg landed = (goods + charges × goods share) / qty, kept exact until the final rounding
+      const share = totalGoods.gt(0) ? w.value.div(totalGoods) : new Prisma.Decimal(0);
+      const avgLanded = w.value.plus(totalCharges.times(share)).div(w.qty);
+      return sum.plus(new Prisma.Decimal(closingExactBy.get(p.id) ?? 0).times(avgLanded));
+    }, new Prisma.Decimal(0));
+    const remainingValuation = roundMoneyDecimal(remainingValuationExact);
+    const businessValue = businessValueOf({
+      remainingValuation,
+      customerDue,
+      cashInHand,
+    });
 
     return {
       period: period.label,
       productScope: productId ?? "ALL_PRODUCTS",
       profit,
       stock,
-      dues: { customerDue, supplierDue },
-      cash: { cashReceived, cashPaid, expenses: expensesTotal, cashInHand },
-      remainingValuation,
-      businessValue,
+      dues: { customerDue: customerDue.toNumber(), supplierDue: supplierDue.toNumber() },
+      cash: {
+        cashReceived: cashReceived.toNumber(),
+        cashPaid: cashPaid.toNumber(),
+        expenses: expensesTotal.toNumber(),
+        cashInHand: cashInHand.toNumber(),
+      },
+      remainingValuation: remainingValuation.toNumber(),
+      businessValue: businessValue.toNumber(),
       salesGrandTotals: sales.map((s) =>
-        saleGrandTotal(
-          s.lines.map((l) => ({ qty: Number(l.qty), rate: Number(l.rate) })),
+        saleGrandTotalDecimal(
+          s.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
           {
-            discountPct: Number(s.discountPct),
-            taxPct: Number(s.taxPct),
-            loading: Number(s.loadingCharges),
-            transport: Number(s.transportCharges),
-            labour: Number(s.labourCharges),
+            discountPct: s.discountPct,
+            taxPct: s.taxPct,
+            loading: s.loadingCharges,
+            transport: s.transportCharges,
+            labour: s.labourCharges,
           },
-        ).grandTotal,
+        ).grandTotal.toNumber(),
       ),
     };
   }

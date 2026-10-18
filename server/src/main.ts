@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./load-env";
 import {
   Logger,
   RequestMethod,
@@ -53,7 +53,10 @@ async function bootstrap() {
         done(null, payload);
       });
     app.setGlobalPrefix("api", {
-      exclude: [{ path: "health", method: RequestMethod.GET }],
+      exclude: [
+        { path: "health", method: RequestMethod.GET },
+        { path: "health/live", method: RequestMethod.GET },
+      ],
     });
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
 

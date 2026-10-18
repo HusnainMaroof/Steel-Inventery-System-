@@ -24,6 +24,7 @@ export const LIMITS = {
 } as const;
 
 import { BadRequestException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
 export function assertMoney(
   value: number,
@@ -42,6 +43,20 @@ export function assertPositiveMoney(
 ): void {
   if (!Number.isFinite(value) || value <= 0 || value > max + 0.005) {
     throw new BadRequestException(`${label} must be between 0.01 and ${max}`);
+  }
+}
+
+/**
+ * Rejects values with more decimal places than the database column stores.
+ * Without this, Postgres rounds on write and the stored value drifts from the
+ * value that was checked (stock check, invoice total).
+ */
+export function assertMaxDecimals(value: number, places: number, label: string): void {
+  if (!Number.isFinite(value)) {
+    throw new BadRequestException(`${label} must be a number`);
+  }
+  if (new Prisma.Decimal(value).decimalPlaces() > places) {
+    throw new BadRequestException(`${label} can have at most ${places} decimal places`);
   }
 }
 

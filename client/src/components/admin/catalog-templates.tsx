@@ -163,6 +163,7 @@ export function AddCatalogTemplateModal({
   const [pending, setPending] = useState(false);
 
   const close = () => {
+    if (pending) return;
     setLabel("");
     setProductName("");
     setProductUnit("kg");
@@ -193,15 +194,14 @@ export function AddCatalogTemplateModal({
       productUnit,
       description,
       attributes: parsed,
-    });
-    setPending(false);
+    }).finally(() => setPending(false));
     if (!result.ok) return setError(result.error);
     await onCreated();
     close();
   };
 
   return (
-    <Modal open={open} onClose={close} title="New product template" size="lg">
+    <Modal open={open} onClose={close} busy={pending} title="New product template" size="lg">
       {error ? <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p> : null}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>

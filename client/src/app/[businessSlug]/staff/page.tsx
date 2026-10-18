@@ -218,6 +218,7 @@ function StaffModal({
     <Modal
       open={open}
       onClose={close}
+      busy={pending}
       title={editing ? "Edit staff member" : "Add staff member"}
       size="lg"
     >
@@ -351,7 +352,7 @@ function StaffModal({
         </fieldset>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-neutral-100">
-          <button type="button" className="btn-ghost" onClick={close}>
+          <button type="button" className="btn-ghost" onClick={close} disabled={pending}>
             Cancel
           </button>
           <BusyButton type="submit" loading={pending}>

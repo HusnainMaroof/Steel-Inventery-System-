@@ -1,3 +1,6 @@
+import Decimal from "decimal.js";
+import { toDecimal, type DecimalInput } from "./decimal.ts";
+
 /** Plain number with thousands separators — e.g. 1,234,567 */
 export const fmtNum = (n: number, decimals = 0) => {
   if (!Number.isFinite(n)) return "0";
@@ -7,18 +10,37 @@ export const fmtNum = (n: number, decimals = 0) => {
       maximumFractionDigits: decimals,
     });
   }
-  return Math.round(n).toLocaleString("en-US");
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 };
 
-export const fmtMoney = (n: number) => "₨ " + fmtNum(n);
+/**
+ * Money display: full amount, thousands separators, up to 2 decimals (paisa).
+ * Display only. Never feed this string back into a calculation.
+ */
+export const fmtMoney = (n: number) => {
+  if (!Number.isFinite(n)) return "₨ 0";
+  return (
+    "₨ " +
+    n.toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })
+  );
+};
+
+/** Per-unit money (landed cost/kg, profit/kg, rate): always exactly 2 decimals. */
+export const fmtUnitMoney = (n: number) => {
+  if (!Number.isFinite(n)) return "₨ 0.00";
+  return (
+    "₨ " +
+    n.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  );
+};
 
 export const fmtSignedMoney = (n: number) => (n < 0 ? "−" + fmtMoney(Math.abs(n)) : fmtMoney(n));
-
-export const fmtCompact = (n: number) => {
-  if (Math.abs(n) >= 1_000_000) return "₨ " + (n / 1_000_000).toFixed(2) + "M";
-  if (Math.abs(n) >= 1_000) return "₨ " + (n / 1_000).toFixed(1) + "K";
-  return fmtMoney(n);
-};
 
 export const fmtPct = (n: number) => {
   if (!Number.isFinite(n)) return "0%";
@@ -31,9 +53,43 @@ export const qtyUnitLabel = (u?: string) =>
     ? `${u}s`
     : u ?? "";
 
+/**
+ * Quantity display. Rounds HALF-UP to `maxDecimals` with Decimal (no float math),
+ * drops trailing zeros (20.000 → 20, 20.100 → 20.1), and keeps thousands separators.
+ * Display only: the stored value and every calculation keep full precision.
+ */
+export const fmtQtyDecimal = (value: DecimalInput, maxDecimals: number): string => {
+  const d = toDecimal(value);
+  if (!d.isFinite()) return "0";
+  const rounded = d.toDecimalPlaces(maxDecimals, Decimal.ROUND_HALF_UP);
+  if (rounded.isZero()) return "0";
+  const [intPart, frac] = rounded.abs().toFixed().split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const body = frac ? `${grouped}.${frac}` : grouped;
+  return rounded.isNegative() ? `-${body}` : body;
+};
+
+// Default quantity display: one decimal place (20.567 → 20.6, 0.5 → 0.5).
+// If one decimal would hide a real value (0.04 → 0.0), widen to 2, then 3 decimals,
+// so small quantities stay visible (0.04 stays 0.04). Display only.
+export const fmtQtyNumber = (n: number) => {
+  const d = toDecimal(n);
+  if (!d.isFinite() || d.isZero()) return "0";
+  for (const places of [1, 2, 3]) {
+    if (!d.toDecimalPlaces(places, Decimal.ROUND_HALF_UP).isZero()) {
+      return fmtQtyDecimal(d, places);
+    }
+  }
+  return "0";
+};
+
+// Reconciliation values (stock check system/physical/difference): keep 3 decimals,
+// so a small real difference (e.g. 0.04) is never shown as 0.
+export const fmtQtyExact = (n: number) => fmtQtyDecimal(n, 3);
+
 // quantities are stored and shown directly in the product's own unit (kg, bag, …)
 export const fmtQtyWithUnit = (qty: number, unit?: string) => {
-  const n = (Math.round(qty * 100) / 100).toLocaleString("en-US");
+  const n = fmtQtyNumber(qty);
   return unit ? `${n} ${qtyUnitLabel(unit)}` : n;
 };
 

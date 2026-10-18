@@ -133,14 +133,9 @@ export function CountUp({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const prevRef = useRef(0);
+  // Full amounts with separators (no K/M abbreviation), up to 2 decimals.
   const fmt = (n: number) =>
-    compact
-      ? Math.abs(n) >= 1e6
-        ? (n / 1e6).toFixed(2) + "M"
-        : Math.abs(n) >= 1e3
-          ? (n / 1e3).toFixed(1) + "K"
-          : Math.round(n).toLocaleString()
-      : Math.round(n).toLocaleString("en-US");
+    n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -325,7 +320,9 @@ export function OptionalSection({
   );
 }
 
-/* Modal with spring animation */
+/* Modal with spring animation.
+   Pass `busy` while an action is running. While busy, the backdrop and
+   the X button cannot close the modal, so the user always sees the result. */
 export function Modal({
   open,
   onClose,
@@ -335,6 +332,7 @@ export function Modal({
   footer,
   size = "md",
   full = false,
+  busy = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -344,7 +342,11 @@ export function Modal({
   footer?: ReactNode;
   size?: "md" | "lg" | "2xl" | "3xl" | "4xl" | "6xl";
   full?: boolean;
+  busy?: boolean;
 }) {
+  const guardedClose = () => {
+    if (!busy) onClose();
+  };
   const maxW =
     size === "6xl"
       ? "max-w-6xl"
@@ -369,7 +371,7 @@ export function Modal({
         >
           <div
             className="absolute inset-0 bg-black/45 backdrop-blur-[1px]"
-            onClick={onClose}
+            onClick={guardedClose}
           />
           <motion.div
             className={`relative bg-white border border-neutral-200 shadow-2xl w-full flex flex-col overflow-hidden ${
@@ -389,8 +391,9 @@ export function Modal({
               </div>
               <button
                 type="button"
-                onClick={onClose}
-                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-neutral-400 hover:text-black hover:bg-neutral-100 transition-colors"
+                onClick={guardedClose}
+                disabled={busy}
+                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-neutral-400 hover:text-black hover:bg-neutral-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 aria-label="Close"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -436,7 +439,7 @@ export function ConfirmModal({
 }) {
   const busy = Boolean(loading);
   return (
-    <Modal open={open} onClose={busy ? () => undefined : onClose} title={title}>
+    <Modal open={open} onClose={onClose} busy={busy} title={title}>
       <div className="mb-6">{children}</div>
       <div className="flex justify-end gap-3">
         <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>
@@ -506,7 +509,7 @@ export function BarChart({
           <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-center">
             <div className="text-[11px] text-neutral-500 tabular-nums">
               {d.value >= 0
-                ? (d.value >= 1e6 ? (d.value / 1e6).toFixed(1) + "M" : Math.round(d.value).toLocaleString())
+                ? d.value.toLocaleString("en-US", { maximumFractionDigits: 2 })
                 : ""}
             </div>
             {d.value >= 0 ? (
@@ -527,7 +530,7 @@ export function BarChart({
             <div className="w-full border-t border-neutral-300" />
             {d.value < 0 && (
               <div className="text-[11px] text-red-500 tabular-nums">
-                −{Math.abs(d.value) >= 1e6 ? (Math.abs(d.value) / 1e6).toFixed(1) + "M" : Math.round(Math.abs(d.value)).toLocaleString()}
+                −{Math.abs(d.value).toLocaleString("en-US", { maximumFractionDigits: 2 })}
               </div>
             )}
             <div className="text-[11px] text-neutral-500 truncate w-full text-center">
@@ -544,7 +547,7 @@ export function BarChart({
       {data.map((d, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
           <div className="text-[11px] text-neutral-500 tabular-nums">
-            {d.value >= 1e6 ? (d.value / 1e6).toFixed(1) + "M" : Math.round(d.value).toLocaleString()}
+            {d.value.toLocaleString("en-US", { maximumFractionDigits: 2 })}
           </div>
           <motion.div
             className="w-full bg-black"

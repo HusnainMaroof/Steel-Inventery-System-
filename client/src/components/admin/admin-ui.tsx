@@ -487,6 +487,7 @@ export function AddOwnerModal({
   const [pending, setPending] = useState(false);
 
   const close = () => {
+    if (pending) return;
     setForm({
       businessName: "",
       name: "",
@@ -513,18 +514,22 @@ export function AddOwnerModal({
     if (pending) return;
     setPending(true);
     setError(null);
-
-    const result = await createOwnerAction({ ...form });
-    setPending(false);
-    if (!result.ok) return setError(result.error);
-    await onCreated();
-    close();
+    try {
+      const result = await createOwnerAction({ ...form });
+      if (!result.ok) return setError(result.error);
+      await onCreated();
+      setPending(false);
+      close();
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
     <Modal
       open={open}
       onClose={close}
+      busy={pending}
       title="Register business owner"
       subtitle="Set up login, subscription, and optional catalogue templates. The owner adds their logo later in Settings."
       size="lg"
@@ -698,6 +703,7 @@ export function SubscriptionModal({
   }, [owner]);
 
   const close = () => {
+    if (pending) return;
     setError(null);
     onClose();
   };
@@ -711,15 +717,14 @@ export function SubscriptionModal({
       planId,
       status,
       endsAt: selected?.billingCycle === "LIFETIME" ? undefined : endsAt || undefined,
-    });
-    setPending(false);
+    }).finally(() => setPending(false));
     if (!result.ok) return setError(result.error);
     await onUpdated();
     close();
   };
 
   return (
-    <Modal open={Boolean(owner)} onClose={close} title={`Subscription — ${owner?.business.name ?? ""}`}>
+    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Subscription — ${owner?.business.name ?? ""}`}>
       {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
@@ -787,6 +792,7 @@ export function TemplatesModal({
   }, [owner]);
 
   const close = () => {
+    if (pending) return;
     setError(null);
     onClose();
   };
@@ -802,8 +808,7 @@ export function TemplatesModal({
     if (!owner || pending) return;
     if (!selected.length) return setError("Select at least one template.");
     setPending(true);
-    const result = await applyOwnerTemplatesAction(owner.id, selected);
-    setPending(false);
+    const result = await applyOwnerTemplatesAction(owner.id, selected).finally(() => setPending(false));
     if (!result.ok) return setError(result.error);
     await onUpdated();
     close();
@@ -812,7 +817,7 @@ export function TemplatesModal({
   const assigned = owner?.business.assignedTemplateIds ?? [];
 
   return (
-    <Modal open={Boolean(owner)} onClose={close} title={`Product templates — ${owner?.business.name ?? ""}`} size="lg">
+    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Product templates — ${owner?.business.name ?? ""}`} size="lg">
       {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
       <p className="text-xs text-neutral-500 mb-4">
         Add catalogue templates to an existing business. Products that already exist (same name) are skipped.
@@ -862,6 +867,7 @@ export function ResetPasswordModal({
   const [pending, setPending] = useState(false);
 
   const close = () => {
+    if (pending) return;
     setPassword("");
     setError(null);
     onClose();
@@ -871,15 +877,14 @@ export function ResetPasswordModal({
     event.preventDefault();
     if (!owner || pending) return;
     setPending(true);
-    const result = await updateOwnerAction(owner.id, { password });
-    setPending(false);
+    const result = await updateOwnerAction(owner.id, { password }).finally(() => setPending(false));
     if (!result.ok) return setError(result.error);
     await onUpdated();
     close();
   };
 
   return (
-    <Modal open={Boolean(owner)} onClose={close} title={`Reset password — ${owner?.name ?? ""}`}>
+    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Reset password — ${owner?.name ?? ""}`}>
       {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>

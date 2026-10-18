@@ -27,3 +27,6 @@ nest.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local test runs, reports and scratch builds
+.e2e-tmp/

@@ -43,6 +43,11 @@ function buildConfig(phase: string): NextConfig {
   return {
     output: "standalone",
     outputFileTracingRoot: __dirname,
+    // Dev only: allow HMR and chunks requested from 127.0.0.1, and keep server
+    // function arguments (for example passwords) out of the dev log.
+    ...(isDev
+      ? { allowedDevOrigins: ["127.0.0.1", "localhost"], logging: { serverFunctions: false } }
+      : {}),
     async headers() {
       return [
         {

@@ -13,6 +13,8 @@ import {
 import { invoiceLineDetail } from "@/lib/invoiceDetail";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate } from "@/lib/format";
 import { InvoiceBrandHeader } from "@/components/invoice/InvoiceBrandHeader";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../lib/decimal";
 
 export default function PeriodInvoice({
   sales,
@@ -36,15 +38,15 @@ export default function PeriodInvoice({
   const dateLabel =
     from && to && from !== to ? `${fmtDate(from)} – ${fmtDate(to)}` : from ? fmtDate(from) : title;
 
-  const subtotal = sales.reduce((a, s) => a + saleTotal(s), 0);
+  const subtotal = sales.reduce((a, s) => a.plus(toDecimal(saleTotal(s))), new Decimal(0)).toNumber();
   const discount = sales.reduce((a, s) => a + saleDiscount(s), 0);
   const tax = sales.reduce((a, s) => a + saleTax(s), 0);
-  const loadingCharges = sales.reduce((a, s) => a + (s.loadingCharges ?? 0), 0);
-  const transportCharges = sales.reduce((a, s) => a + (s.transportCharges ?? 0), 0);
-  const labourCharges = sales.reduce((a, s) => a + (s.labourCharges ?? 0), 0);
-  const grandTotal = sales.reduce((a, s) => a + saleGrandTotal(s), 0);
-  const paid = sales.reduce((a, s) => a + salePaid(s.id), 0);
-  const due = sales.reduce((a, s) => a + Math.max(0, saleGrandTotal(s) - salePaid(s.id)), 0);
+  const loadingCharges = sales.reduce((a, s) => a.plus(toDecimal((s.loadingCharges ?? 0))), new Decimal(0)).toNumber();
+  const transportCharges = sales.reduce((a, s) => a.plus(toDecimal((s.transportCharges ?? 0))), new Decimal(0)).toNumber();
+  const labourCharges = sales.reduce((a, s) => a.plus(toDecimal((s.labourCharges ?? 0))), new Decimal(0)).toNumber();
+  const grandTotal = sales.reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber();
+  const paid = sales.reduce((a, s) => a.plus(toDecimal(salePaid(s.id))), new Decimal(0)).toNumber();
+  const due = sales.reduce((a, s) => a.plus(toDecimal(Math.max(0, saleGrandTotal(s) - salePaid(s.id)))), new Decimal(0)).toNumber();
 
   const hasAdjustments = discount > 0 || tax > 0;
   const hasPaid = paid > 0.001;

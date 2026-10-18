@@ -7,20 +7,39 @@ import { RefreshCw } from "lucide-react";
 import { TijarattBrand } from "@/components/marketing/PublicChrome";
 import { probeAppHealth } from "@/lib/server-offline";
 
+const OFFLINE_RETRY_INTERVAL_MS = 60_000;
+
 export function OfflineClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/login";
   const [checking, setChecking] = useState(false);
   const autoTried = useRef(false);
+  const inflightRef = useRef<Promise<void> | null>(null);
+  const mountedRef = useRef(true);
 
-  const retry = useCallback(async () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  /** One probe at a time; a click or timer while one is running reuses it. */
+  const retry = useCallback(() => {
+    if (inflightRef.current) return inflightRef.current;
     setChecking(true);
-    const ok = await probeAppHealth();
-    setChecking(false);
-    if (ok) {
-      router.replace(next.startsWith("/offline") ? "/login" : next);
-    }
+    inflightRef.current = probeAppHealth()
+      .then((ok) => {
+        if (ok && mountedRef.current) {
+          router.replace(next.startsWith("/offline") ? "/login" : next);
+        }
+      })
+      .finally(() => {
+        inflightRef.current = null;
+        if (mountedRef.current) setChecking(false);
+      });
+    return inflightRef.current;
   }, [next, router]);
 
   useEffect(() => {
@@ -30,9 +49,14 @@ export function OfflineClient() {
     return () => window.clearTimeout(timer);
   }, [retry]);
 
+  // Slow fallback poll. The browser's online event triggers an immediate retry.
   useEffect(() => {
-    const timer = window.setInterval(() => void retry(), 30_000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(() => void retry(), OFFLINE_RETRY_INTERVAL_MS);
+    window.addEventListener("online", retry);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", retry);
+    };
   }, [retry]);
 
   return (
@@ -83,7 +107,7 @@ export function OfflineClient() {
       </div>
 
       <p className="relative z-10 text-center font-mono text-[10px] text-[#6b7280]">
-        AUTOMATIC RETRY RUNS EVERY 30 SECONDS
+        AUTOMATIC RETRY RUNS EVERY 60 SECONDS
       </p>
     </main>
   );

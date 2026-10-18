@@ -5,7 +5,7 @@ import { useStore, type CreatePurchaseInput } from "@/lib/store";
 import { productUsesCategories, scopedDefs } from "@/lib/catalogue";
 import { validateAttributes } from "@/components/catalogue/AttributeFields";
 import { fmtMoney } from "@/lib/format";
-import { lineCharges, lineGoods } from "./purchase-draft-utils";
+import { purchaseLiveTotals } from "./purchase-draft-utils";
 
 export interface PurchaseDraftPick {
   productId: string;
@@ -104,12 +104,16 @@ export function usePurchaseDraft() {
   const warehouse = warehouses.find((w) => w.id === pick.warehouseId && w.active);
   const whLocations = locations.filter((l) => l.warehouseId === pick.warehouseId && l.active);
 
-  const goodsTotal = lineGoods(pick.qty, pick.rate);
-  const chargesTotal = lineCharges(pick);
-  const landedTotal = goodsTotal + chargesTotal;
-  const landedPerUnit = pick.qty > 0.001 ? landedTotal / pick.qty : 0;
-  const marginPerUnit = pick.sellRate > 0 ? pick.sellRate - landedPerUnit : 0;
-  const dueToSupplier = Math.max(0, goodsTotal - pick.paidToSupplier);
+  // Exact Decimal math shared with the tested helper (purchase-draft-utils).
+  const {
+    goodsTotal,
+    chargesTotal,
+    landedTotal,
+    landedPerUnit,
+    marginPerUnit,
+    expectedTotalProfit,
+    dueToSupplier,
+  } = purchaseLiveTotals(pick);
 
   const payError =
     goodsTotal > 0.001 && pick.paidToSupplier > goodsTotal + 0.001
@@ -192,6 +196,7 @@ export function usePurchaseDraft() {
     landedTotal,
     landedPerUnit,
     marginPerUnit,
+    expectedTotalProfit,
     dueToSupplier,
     payError,
     canSave,

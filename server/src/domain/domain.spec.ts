@@ -1,4 +1,5 @@
-import { landedCostPerUnit, saleGrandTotal } from "./money";
+import { Prisma } from "@prisma/client";
+import { landedCostPerUnit, round2, saleGrandTotal } from "./money";
 import { findShortages, stockLevelsFromLedger } from "./sale-availability";
 import { settleFifo, settleSupplierFifo, supplierPayable } from "./payment-settlement";
 import { computeProfit } from "./profit";
@@ -7,8 +8,32 @@ describe("money", () => {
   it("computes landed cost per unit with charges spread by quantity", () => {
     // 1000 kg @ 265 = 265000 goods + 24000 charges → 289 per kg
     expect(
-      landedCostPerUnit({ qty: 1000, rate: 265, purchaseCharges: 24000 }),
+      landedCostPerUnit({ qty: 1000, rate: 265, purchaseCharges: 24000 }).toNumber(),
     ).toBe(289);
+  });
+
+  it("keeps landed cost per kg exact: 10,000 kg @ 380 + 25,000 charges = 382.50/kg", () => {
+    const perKg = landedCostPerUnit({
+      qty: 10000,
+      rate: 380,
+      purchaseCharges: 25000,
+    });
+    expect(perKg.toString()).toBe("382.5");
+    // expected profit per kg uses the exact unit cost, not a rounded Rs 383
+    expect(new Prisma.Decimal(450).minus(perKg).toNumber()).toBe(67.5);
+    expect(new Prisma.Decimal(450).minus(perKg).times(10000).toNumber()).toBe(675000);
+  });
+
+  it("keeps fractional unit cost exact across repeating decimals", () => {
+    // 3 kg @ 100 + 1 charge = 301 / 3 = 100.333... (not rounded to 100.33 before use)
+    const perKg = landedCostPerUnit({ qty: 3, rate: 100, purchaseCharges: 1 });
+    expect(perKg.times(3).toNumber()).toBe(301);
+  });
+
+  it("rounds money totals half-up, not via float Math.round", () => {
+    expect(round2("1.005")).toBe(1.01);
+    expect(round2("382.495")).toBe(382.5);
+    expect(round2("0.994")).toBe(0.99);
   });
 
   it("computes invoice grand total: subtotal − discount + tax + flat charges", () => {
@@ -40,18 +65,14 @@ describe("sale availability (§22)", () => {
       { productId: "cement", qty: 450 },
     ]);
     expect(shortages).toHaveLength(2);
-    expect(shortages[0]).toMatchObject({
-      productId: "steel",
-      available: 4000,
-      requested: 4500,
-      missing: 500,
-    });
-    expect(shortages[1]).toMatchObject({
-      productId: "cement",
-      available: 400,
-      requested: 450,
-      missing: 50,
-    });
+    expect(shortages[0]).toMatchObject({ productId: "steel" });
+    expect(shortages[0].available.toNumber()).toBe(4000);
+    expect(shortages[0].requested.toNumber()).toBe(4500);
+    expect(shortages[0].missing.toNumber()).toBe(500);
+    expect(shortages[1]).toMatchObject({ productId: "cement" });
+    expect(shortages[1].available.toNumber()).toBe(400);
+    expect(shortages[1].requested.toNumber()).toBe(450);
+    expect(shortages[1].missing.toNumber()).toBe(50);
   });
 
   it("accepts a sale that exactly empties the yard", () => {
@@ -118,6 +139,46 @@ describe("supplier payment FIFO settlement", () => {
       ],
       unallocated: 10,
     });
+  });
+});
+
+describe("payment settlement precision (Decimal, no float drift)", () => {
+  it("settles exact paisa where float64 would drift (0.1 + 0.2)", () => {
+    const result = settleFifo(
+      [{ saleId: "a", total: "0.30", paidSoFar: "0.10", date: "2026-05-01" }],
+      "0.20",
+    );
+    expect(result.allocations).toEqual([{ saleId: "a", amount: 0.2 }]);
+    expect(result.unallocated).toBe(0);
+  });
+
+  it("accepts Decimal-string inputs without Number conversion", () => {
+    const result = settleSupplierFifo(
+      [{ purchaseId: "p", goodsTotal: "1234.56", paid: "1234.55" }],
+      "0.01",
+    );
+    expect(result).toEqual({
+      allocations: [{ purchaseId: "p", amount: 0.01 }],
+      unallocated: 0,
+    });
+  });
+
+  it("reports an overpayment of one paisa as unallocated, not as a rounding gap", () => {
+    const result = settleFifo(
+      [{ saleId: "a", total: "100.00", paidSoFar: "99.99", date: "2026-05-01" }],
+      "0.02",
+    );
+    expect(result.allocations).toEqual([{ saleId: "a", amount: 0.01 }]);
+    expect(result.unallocated).toBe(0.01);
+  });
+
+  it("supplier payable ignores over-paid purchases and keeps paisa exact", () => {
+    expect(
+      supplierPayable([
+        { goodsTotal: "100.10", paid: "100.00" },
+        { goodsTotal: "50.00", paid: "60.00" },
+      ]),
+    ).toBe(0.1);
   });
 });
 

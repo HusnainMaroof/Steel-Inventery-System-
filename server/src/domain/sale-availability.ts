@@ -2,30 +2,38 @@
  * Sale availability (§9, §22): a sale line can only take stock that the
  * inventory ledger says exists. Overselling is rejected with a per-product
  * shortage list — the caller rolls the whole transaction back.
+ *
+ * Quantities are Decimal end to end. Stored quantities have 3 decimals, so
+ * comparisons are exact and need no tolerance.
  */
+import { Prisma } from "@prisma/client";
+
+type D = Prisma.Decimal.Value;
+const Dec = (v: D) => new Prisma.Decimal(v);
+
 export interface StockLevel {
   productId: string;
-  available: number;
+  available: Prisma.Decimal;
 }
 
 export interface RequestedLine {
   productId: string;
-  qty: number;
+  qty: D;
 }
 
 export interface Shortage {
   productId: string;
-  available: number;
-  requested: number;
-  missing: number;
+  available: Prisma.Decimal;
+  requested: Prisma.Decimal;
+  missing: Prisma.Decimal;
 }
 
 export function stockLevelsFromLedger(
-  tx: { productId: string; qty: number }[],
-): Map<string, number> {
-  const levels = new Map<string, number>();
+  tx: { productId: string; qty: D }[],
+): Map<string, Prisma.Decimal> {
+  const levels = new Map<string, Prisma.Decimal>();
   for (const t of tx) {
-    levels.set(t.productId, (levels.get(t.productId) ?? 0) + t.qty);
+    levels.set(t.productId, (levels.get(t.productId) ?? Dec(0)).plus(Dec(t.qty)));
   }
   return levels;
 }
@@ -35,25 +43,21 @@ export function stockLevelsFromLedger(
  * An empty result means the sale may proceed.
  */
 export function findShortages(
-  levels: Map<string, number>,
+  levels: Map<string, Prisma.Decimal>,
   requested: RequestedLine[],
 ): Shortage[] {
   const shortages: Shortage[] = [];
   for (const line of requested) {
-    const available = levels.get(line.productId) ?? 0;
-    const missing = round3(line.qty - available);
-    if (missing > 0.0005) {
+    const available = levels.get(line.productId) ?? Dec(0);
+    const qty = Dec(line.qty);
+    if (qty.gt(available)) {
       shortages.push({
         productId: line.productId,
         available,
-        requested: line.qty,
-        missing,
+        requested: qty,
+        missing: qty.minus(available),
       });
     }
   }
   return shortages;
-}
-
-function round3(n: number): number {
-  return Math.round(n * 1000) / 1000;
 }

@@ -6,6 +6,8 @@ import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
 import type { Sale } from "@/lib/types";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../../lib/decimal";
 
 type DateGroup = {
   date: string;
@@ -60,8 +62,8 @@ export default function CustomersPage() {
       .map(([date, items]) => ({
         date,
         sales: items,
-        dayTotal: items.reduce((a, s) => a + saleGrandTotal(s), 0),
-        dayPaid: items.reduce((a, s) => a + salePaid(s.id), 0),
+        dayTotal: items.reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber(),
+        dayPaid: items.reduce((a, s) => a.plus(toDecimal(salePaid(s.id))), new Decimal(0)).toNumber(),
       }));
   }, [sales, viewCustomerId, salePaid]);
 
@@ -327,13 +329,13 @@ export default function CustomersPage() {
         )}
       </Modal>
 
-      <Modal open={open} onClose={onClose} title="New Customer">
+      <Modal open={open} onClose={onClose} busy={savingCustomer || isPending("customer:create")} title="New Customer">
         <form onSubmit={save} className="grid gap-4">
           <div><label>Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ahmed Steel Mart" required autoFocus /></div>
           <div><label>Shop / Area</label><input value={form.shop} onChange={(e) => setForm({ ...form, shop: e.target.value })} placeholder="e.g. Bilal Gunj, Lahore" /></div>
           <div><label>Phone</label><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" /></div>
           <div className="flex justify-end gap-3">
-            <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={onClose} disabled={savingCustomer || isPending("customer:create")}>Cancel</button>
             <BusyButton type="submit" loading={savingCustomer || isPending("customer:create")} disabled={!form.name.trim()}>
               Add Customer
             </BusyButton>
@@ -353,8 +355,8 @@ export default function CustomersPage() {
         {deleteTarget && (() => {
           const t = deleteTarget;
           const inv = sales.filter((s) => s.customerId === t.id);
-          const total = inv.reduce((a, s) => a + saleGrandTotal(s), 0);
-          const paid = inv.reduce((a, s) => a + salePaid(s.id), 0);
+          const total = inv.reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber();
+          const paid = inv.reduce((a, s) => a.plus(toDecimal(salePaid(s.id))), new Decimal(0)).toNumber();
           const due = Math.max(0, total - paid);
           return (
             <>

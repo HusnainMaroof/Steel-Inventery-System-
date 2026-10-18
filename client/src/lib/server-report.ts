@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import { round2, round3, sumDecimal, toDecimal } from "./decimal";
 import {
   buildProfitReport,
   type ProfitReport,
@@ -112,13 +113,13 @@ export function mergeServerReport(
   const stock = local.stock.map((row) => {
     const server = stockByProduct.get(row.productId);
     if (!server) return row;
-    const soldQty = Math.max(0, row.totalQty - server.remainingQty);
+    const soldQty = Math.max(0, round3(toDecimal(row.totalQty).minus(server.remainingQty)));
     return {
       ...row,
       openingQty: server.openingQty,
       remainingQty: server.remainingQty,
       soldQty,
-      totalQty: server.openingQty + row.purchaseQty,
+      totalQty: round3(toDecimal(server.openingQty).plus(row.purchaseQty)),
     };
   });
 
@@ -126,9 +127,11 @@ export function mergeServerReport(
     ...local,
     periodLabel: api.period,
     stock,
-    openingValue: stock.reduce((a, r) => a + r.openingValue, 0),
+    openingValue: round2(sumDecimal(stock.map((r) => r.openingValue))),
     remainingValue: api.remainingValuation,
-    totalStockValue: stock.reduce((a, r) => a + r.openingValue + r.purchaseValue, 0),
+    totalStockValue: round2(
+      sumDecimal(stock.map((r) => toDecimal(r.openingValue).plus(r.purchaseValue))),
+    ),
     salesRevenue: api.profit.salesRevenue,
     stockCost: api.profit.stockCost,
     profitOnSales: api.profit.profitOnSales,

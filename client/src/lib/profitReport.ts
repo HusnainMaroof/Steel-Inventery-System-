@@ -1,11 +1,8 @@
 import { monthLabel } from "./format";
+import Decimal from "decimal.js";
 import { purchaseParentId } from "./purchase-utils";
-import {
-  purchaseTotal,
-  saleGrandTotal,
-  saleTotal,
-  steelAmount,
-} from "./store";
+import { round2, round3, sumDecimal, toDecimal } from "./decimal";
+import { purchaseTotal, saleGrandTotal, steelAmount } from "./store";
 import type {
   Customer,
   Expense,
@@ -264,7 +261,7 @@ export function lotsAsOf(purchases: Purchase[], sales: Sale[], asOf: string): Lo
     .map((p) => ({
       p,
       remaining: p.qty,
-      landed: p.qty > 0 ? purchaseTotal(p) / p.qty : 0,
+      landed: p.qty > 0 ? toDecimal(purchaseTotal(p)).div(p.qty).toNumber() : 0,
     }));
 
   for (const s of [...sales].reverse()) {
@@ -285,21 +282,32 @@ export function lotsAsOf(purchases: Purchase[], sales: Sale[], asOf: string): Lo
 }
 
 function lotValue(lots: Lot[]) {
-  return lots.reduce((a, l) => a + l.remaining * l.landed, 0);
+  return round2(sumDecimal(lots.map((l) => toDecimal(l.remaining).times(l.landed))));
 }
 
-function productShareOfSale(s: Sale, match: (l: SaleLine) => boolean) {
-  const sub = saleTotal(s);
-  if (sub <= 0) return s.lines.some(match) ? 1 : 0;
-  let part = 0;
-  for (const l of s.lines) if (match(l)) part += l.qty * l.rate;
-  return part / sub;
+/** Exact goods value of one sale line (qty x rate, unrounded). */
+function lineGoodsExact(l: SaleLine): Decimal {
+  return toDecimal(l.qty).times(l.rate);
 }
 
-function attributedLineRevenue(s: Sale, l: SaleLine) {
-  const sub = saleTotal(s);
-  if (sub <= 0) return 0;
-  return ((l.qty * l.rate) / sub) * saleGrandTotal(s);
+/** Exact goods subtotal of a sale, before discount and tax. */
+function saleGoodsExact(s: Sale): Decimal {
+  return sumDecimal(s.lines.map(lineGoodsExact));
+}
+
+function productShareOfSale(s: Sale, match: (l: SaleLine) => boolean): Decimal {
+  const sub = saleGoodsExact(s);
+  if (sub.lte(0)) return new Decimal(s.lines.some(match) ? 1 : 0);
+  let part = new Decimal(0);
+  for (const l of s.lines) if (match(l)) part = part.plus(lineGoodsExact(l));
+  return part.div(sub);
+}
+
+/** Invoice grand total share of one line, unrounded. Callers round the final sum. */
+function attributedLineRevenue(s: Sale, l: SaleLine): Decimal {
+  const sub = saleGoodsExact(s);
+  if (sub.lte(0)) return new Decimal(0);
+  return lineGoodsExact(l).div(sub).times(toDecimal(saleGrandTotal(s)));
 }
 
 function cashReceivedInPeriod(
@@ -310,28 +318,29 @@ function cashReceivedInPeriod(
   productId: string,
   match: (l: SaleLine) => boolean
 ) {
-  const due: Record<string, number> = {};
+  const due: Record<string, Decimal> = {};
   const byId: Record<string, Sale> = {};
   for (const s of sales) {
-    due[s.id] = saleGrandTotal(s);
+    due[s.id] = toDecimal(saleGrandTotal(s));
     byId[s.id] = s;
   }
 
-  let received = 0;
-  const credit = (sale: Sale | undefined, amount: number, date: string) => {
-    if (amount <= 0.000001 || !inDateRange(date, from, to)) return;
+  let received = new Decimal(0);
+  const credit = (sale: Sale | undefined, amount: Decimal, date: string) => {
+    if (amount.lte(0.000001) || !inDateRange(date, from, to)) return;
     if (!sale) {
-      if (!productId) received += amount;
+      if (!productId) received = received.plus(amount);
       return;
     }
-    received += amount * (productId ? productShareOfSale(sale, match) : 1);
+    const share = productId ? productShareOfSale(sale, match) : new Decimal(1);
+    received = received.plus(amount.times(share));
   };
 
-  const settle = (saleId: string, amount: number) => {
-    const cap = Math.max(0, due[saleId] ?? 0);
-    const take = Math.min(amount, cap);
-    due[saleId] = cap - take;
-    return amount - take;
+  const settle = (saleId: string, amount: Decimal) => {
+    const cap = Decimal.max(0, due[saleId] ?? 0);
+    const take = Decimal.min(amount, cap);
+    due[saleId] = cap.minus(take);
+    return amount.minus(take);
   };
 
   const pmts = payments
@@ -339,26 +348,27 @@ function cashReceivedInPeriod(
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 
   for (const p of pmts) {
+    const amount = toDecimal(p.amount);
     if (p.saleId) {
-      credit(byId[p.saleId], p.amount, p.date);
-      settle(p.saleId, p.amount);
+      credit(byId[p.saleId], amount, p.date);
+      settle(p.saleId, amount);
       continue;
     }
-    let left = p.amount;
+    let left = amount;
     const oldest = sales
       .filter((s) => s.customerId === p.partyId)
       .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     for (const s of oldest) {
-      if (left <= 0.001) break;
-      const cap = Math.max(0, due[s.id] ?? 0);
-      const take = Math.min(left, cap);
-      due[s.id] = cap - take;
+      if (left.lte(0.001)) break;
+      const cap = Decimal.max(0, due[s.id] ?? 0);
+      const take = Decimal.min(left, cap);
+      due[s.id] = cap.minus(take);
       credit(s, take, p.date);
-      left -= take;
+      left = left.minus(take);
     }
-    if (left > 0.001) credit(undefined, left, p.date);
+    if (left.gt(0.001)) credit(undefined, left, p.date);
   }
-  return received;
+  return round2(received);
 }
 
 function cashPaidInPeriod(
@@ -369,24 +379,24 @@ function cashPaidInPeriod(
   productId: string,
   match: (p: Purchase) => boolean
 ) {
-  let paid = 0;
+  let paid = new Decimal(0);
   for (const p of payments) {
     if (p.type !== "supplier" || !inDateRange(p.date, from, to)) continue;
     if (!productId) {
-      paid += p.amount;
+      paid = paid.plus(p.amount);
       continue;
     }
-    let all = 0;
-    let part = 0;
+    let all = new Decimal(0);
+    let part = new Decimal(0);
     for (const pur of purchases) {
       if (pur.supplierId !== p.partyId) continue;
-      const amt = steelAmount(pur);
-      all += amt;
-      if (match(pur)) part += amt;
+      const amt = toDecimal(steelAmount(pur));
+      all = all.plus(amt);
+      if (match(pur)) part = part.plus(amt);
     }
-    paid += all > 0 ? p.amount * (part / all) : 0;
+    if (all.gt(0)) paid = paid.plus(toDecimal(p.amount).times(part).div(all));
   }
-  return paid;
+  return round2(paid);
 }
 
 function expensesInRange(expenses: Expense[], from: string, to: string) {
@@ -434,17 +444,18 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     const buys = input.purchases.filter(
       (p) => inDateRange(p.date, from, to) && ofProd(p)
     );
-    let soldQty = 0;
+    const soldParts: Decimal[] = [];
     for (const s of input.sales) {
       if (!inDateRange(s.date, from, to)) continue;
-      for (const l of s.lines) if (ofProd(l)) soldQty += l.qty;
+      for (const l of s.lines) if (ofProd(l)) soldParts.push(toDecimal(l.qty));
     }
-    const openingQty = open.reduce((a, l) => a + l.remaining, 0);
-    const purchaseQty = buys.reduce((a, p) => a + p.qty, 0);
-    const totalQty = openingQty + purchaseQty;
-    let salesAmount = 0;
+    const soldQty = round3(sumDecimal(soldParts));
+    const openingQty = round3(sumDecimal(open.map((l) => l.remaining)));
+    const purchaseQty = round3(sumDecimal(buys.map((p) => p.qty)));
+    const totalQty = round3(toDecimal(openingQty).plus(purchaseQty));
+    let salesAmount = new Decimal(0);
     for (const { sale, line } of periodSaleLines)
-      if (ofProd(line)) salesAmount += attributedLineRevenue(sale, line);
+      if (ofProd(line)) salesAmount = salesAmount.plus(attributedLineRevenue(sale, line));
     return {
       productId: prod.id,
       productName: prod.name,
@@ -453,26 +464,31 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
       purchaseQty,
       totalQty,
       soldQty,
-      remainingQty: totalQty - soldQty,
+      remainingQty: round3(toDecimal(totalQty).minus(soldQty)),
       openingValue: lotValue(open),
-      purchaseValue: buys.reduce((a, p) => a + purchaseTotal(p), 0),
+      purchaseValue: round2(sumDecimal(buys.map((p) => purchaseTotal(p)))),
       remainingValue: lotValue(remain),
-      salesAmount,
+      salesAmount: round2(salesAmount),
     };
   });
 
-  const openingValue = stock.reduce((a, r) => a + r.openingValue, 0);
-  const purchaseValue = stock.reduce((a, r) => a + r.purchaseValue, 0);
-  const remainingValue = stock.reduce((a, r) => a + r.remainingValue, 0);
+  const openingValue = round2(sumDecimal(stock.map((r) => r.openingValue)));
+  const purchaseValue = round2(sumDecimal(stock.map((r) => r.purchaseValue)));
+  const remainingValue = round2(sumDecimal(stock.map((r) => r.remainingValue)));
 
-  let salesRevenue = 0;
-  let stockCost = 0;
+  const revenueParts: Decimal[] = [];
+  const costParts: Decimal[] = [];
   for (const { sale, line, idx } of periodSaleLines) {
-    salesRevenue += attributedLineRevenue(sale, line);
-    stockCost +=
-      line.qty * (input.lineUnitCost(sale.id, idx) || input.byItem[line.item] || 0);
+    revenueParts.push(attributedLineRevenue(sale, line));
+    costParts.push(
+      toDecimal(line.qty).times(input.lineUnitCost(sale.id, idx) || input.byItem[line.item] || 0),
+    );
   }
-  const profitOnSales = salesRevenue - stockCost;
+  const salesRevenueExact = sumDecimal(revenueParts);
+  const stockCostExact = sumDecimal(costParts);
+  const salesRevenue = round2(salesRevenueExact);
+  const stockCost = round2(stockCostExact);
+  const profitOnSales = round2(salesRevenueExact.minus(stockCostExact));
 
   const expenseOfProduct = (e: Expense) =>
     productId ? e.productId === productId : true;
@@ -480,29 +496,48 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     expenseOfProduct
   );
   const expensesApplied = periodExpenses.length > 0;
-  const expenses = periodExpenses.reduce((a, e) => a + e.amount, 0);
+  const expenses = round2(sumDecimal(periodExpenses.map((e) => e.amount)));
 
-  const purchaseCharges = { transport: 0, loading: 0, labour: 0, other: 0 };
+  const pcTransport: Decimal[] = [];
+  const pcLoading: Decimal[] = [];
+  const pcLabour: Decimal[] = [];
+  const pcOther: Decimal[] = [];
   for (const p of input.purchases) {
     if (!inDateRange(p.date, from, to)) continue;
     if (!match(p)) continue;
-    purchaseCharges.transport += p.transport;
-    purchaseCharges.loading += p.loadingCharges ?? 0;
-    purchaseCharges.labour += p.labourCharges ?? 0;
-    purchaseCharges.other += p.otherCost;
+    pcTransport.push(toDecimal(p.transport));
+    pcLoading.push(toDecimal(p.loadingCharges));
+    pcLabour.push(toDecimal(p.labourCharges));
+    pcOther.push(toDecimal(p.otherCost));
   }
+  const purchaseCharges = {
+    transport: round2(sumDecimal(pcTransport)),
+    loading: round2(sumDecimal(pcLoading)),
+    labour: round2(sumDecimal(pcLabour)),
+    other: round2(sumDecimal(pcOther)),
+  };
 
-  const saleCharges = { loading: 0, transport: 0, labour: 0 };
+  const scLoading: Decimal[] = [];
+  const scTransport: Decimal[] = [];
+  const scLabour: Decimal[] = [];
   for (const s of input.sales) {
     if (!inDateRange(s.date, from, to)) continue;
     if (productId && !s.lines.some(match)) continue;
-    const share = productId ? productShareOfSale(s, match) : 1;
-    saleCharges.loading += (s.loadingCharges ?? 0) * share;
-    saleCharges.transport += (s.transportCharges ?? 0) * share;
-    saleCharges.labour += (s.labourCharges ?? 0) * share;
+    const share = productId ? productShareOfSale(s, match) : new Decimal(1);
+    scLoading.push(toDecimal(s.loadingCharges).times(share));
+    scTransport.push(toDecimal(s.transportCharges).times(share));
+    scLabour.push(toDecimal(s.labourCharges).times(share));
   }
-  const netProfit = profitOnSales - expenses;
-  const profitPctValue = salesRevenue > 0 ? (netProfit / salesRevenue) * 100 : 0;
+  const saleCharges = {
+    loading: round2(sumDecimal(scLoading)),
+    transport: round2(sumDecimal(scTransport)),
+    labour: round2(sumDecimal(scLabour)),
+  };
+  const netProfitExact = toDecimal(profitOnSales).minus(expenses);
+  const netProfit = round2(netProfitExact);
+  const profitPctValue = salesRevenue > 0
+    ? netProfitExact.div(salesRevenue).times(100).toNumber()
+    : 0;
 
   const dawn = "2000-01-01";
   const cashReceived = cashReceivedInPeriod(
@@ -537,31 +572,41 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     productId,
     match
   );
-  const openingExp = expensesInRange(input.expenses, dawn, openAsOf)
-    .filter(expenseOfProduct)
-    .reduce((a, e) => a + e.amount, 0);
+  const openingExp = round2(
+    sumDecimal(
+      expensesInRange(input.expenses, dawn, openAsOf)
+        .filter(expenseOfProduct)
+        .map((e) => e.amount),
+    ),
+  );
   const cashExpenses = expenses;
-  const openingCash = openingReceived - openingPaid - openingExp;
-  const cashInHand = openingCash + cashReceived - cashPaid - cashExpenses;
+  const openingCash = toDecimal(openingReceived).minus(openingPaid).minus(openingExp);
+  const cashInHand = round2(
+    openingCash.plus(cashReceived).minus(cashPaid).minus(cashExpenses),
+  );
 
   const suppliers: PartyDue[] = [];
   const bySup: Record<string, number> = {};
-  const purchaseDue = new Map<string, { supplierId: string; goods: number; paid: number }>();
+  const purchaseDue = new Map<string, { supplierId: string; goods: Decimal; paid: number }>();
   for (const p of input.purchases) {
     if (!inDateRange(p.date, from, to)) continue;
     if (!match(p)) continue;
     const pid = purchaseParentId(p);
     const row = purchaseDue.get(pid) ?? {
       supplierId: p.supplierId,
-      goods: 0,
+      goods: new Decimal(0),
       paid: p.paid ?? 0,
     };
-    row.goods += steelAmount(p);
+    row.goods = row.goods.plus(toDecimal(steelAmount(p)));
     purchaseDue.set(pid, row);
   }
+  const bySupExact: Record<string, Decimal> = {};
   for (const row of purchaseDue.values()) {
-    bySup[row.supplierId] =
-      (bySup[row.supplierId] ?? 0) + Math.max(0, row.goods - row.paid);
+    const owed = Decimal.max(0, row.goods.minus(row.paid));
+    bySupExact[row.supplierId] = (bySupExact[row.supplierId] ?? new Decimal(0)).plus(owed);
+  }
+  for (const [supplierKey, dueExact] of Object.entries(bySupExact)) {
+    bySup[supplierKey] = round2(dueExact);
   }
   for (const [id, due] of Object.entries(bySup)) {
     if (due <= 0.001) continue;
@@ -574,49 +619,51 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     });
   }
   suppliers.sort((a, b) => b.due - a.due);
-  const supplierDue = suppliers.reduce((a, r) => a + r.due, 0);
+  const supplierDue = round2(sumDecimal(suppliers.map((r) => r.due)));
 
-  const aging: Aging = { d0_30: 0, d31_60: 0, d61_90: 0, d90: 0 };
-  const byCust: Record<string, { due: number; days: number }> = {};
+  const agingExact: Record<keyof Aging, Decimal[]> = { d0_30: [], d31_60: [], d61_90: [], d90: [] };
+  const byCust: Record<string, { due: Decimal[]; days: number }> = {};
   for (const s of input.sales) {
     if (!inDateRange(s.date, from, to)) continue;
     if (productId && !s.lines.some(match)) continue;
-    const due = Math.max(0, saleGrandTotal(s) - input.salePaid(s.id));
-    if (due <= 0.001) continue;
+    const due = Decimal.max(0, toDecimal(saleGrandTotal(s)).minus(input.salePaid(s.id)));
+    if (due.lte(0.001)) continue;
     const days = daysBetween(s.date, to);
-    aging[agingBucket(days)] += due;
-    const row = (byCust[s.customerId] ??= { due: 0, days: 0 });
-    row.due += due;
+    agingExact[agingBucket(days)].push(due);
+    const row = (byCust[s.customerId] ??= { due: [], days: 0 });
+    row.due.push(due);
     row.days = Math.max(row.days, days);
   }
+  const aging: Aging = {
+    d0_30: round2(sumDecimal(agingExact.d0_30)),
+    d31_60: round2(sumDecimal(agingExact.d31_60)),
+    d61_90: round2(sumDecimal(agingExact.d61_90)),
+    d90: round2(sumDecimal(agingExact.d90)),
+  };
   const customers: PartyDue[] = Object.entries(byCust)
-    .filter(([, r]) => r.due > 0.001)
-    .map(([id, r]) => {
-      const c = input.customers.find((x) => x.id === id);
+    .map(([id, r]) => ({ id, dueExact: sumDecimal(r.due), days: r.days }))
+    .filter((r) => r.dueExact.gt(0.001))
+    .map((r) => {
+      const c = input.customers.find((x) => x.id === r.id);
       return {
-        id,
-        name: c?.name?.trim() || id,
+        id: r.id,
+        name: c?.name?.trim() || r.id,
         place: c?.shop?.trim() || undefined,
-        due: r.due,
+        due: round2(r.dueExact),
         days: r.days,
       };
     })
     .sort((a, b) => b.due - a.due);
-  const customerDue = customers.reduce((a, r) => a + r.due, 0);
+  const customerDue = round2(sumDecimal(customers.map((r) => r.due)));
 
-  const expenseRows: ExpenseLine[] = Object.entries(
-    periodExpenses.reduce<Record<string, number>>((acc, e) => {
-      const key = e.label.trim() || e.category;
-      acc[key] = (acc[key] ?? 0) + e.amount;
-      return acc;
-    }, {})
-  )
-    .filter(([, amount]) => amount > 0.000001)
-    .map(([key, amount]) => ({
-      key,
-      label: key,
-      amount,
-    }))
+  const expenseByKey: Record<string, Decimal> = {};
+  for (const e of periodExpenses) {
+    const key = e.label.trim() || e.category;
+    expenseByKey[key] = (expenseByKey[key] ?? new Decimal(0)).plus(toDecimal(e.amount));
+  }
+  const expenseRows: ExpenseLine[] = Object.entries(expenseByKey)
+    .map(([key, amountExact]) => ({ key, label: key, amount: round2(amountExact) }))
+    .filter((r) => r.amount > 0)
     .sort((a, b) => b.amount - a.amount);
 
   const stockChecks: StockCheckView[] = stock.map((b) => {
@@ -645,7 +692,7 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     stock,
     openingValue,
     purchaseValue,
-    totalStockValue: openingValue + purchaseValue,
+    totalStockValue: round2(sumDecimal([openingValue, purchaseValue])),
     remainingValue,
     salesRevenue,
     stockCost,
@@ -655,14 +702,14 @@ export function buildProfitReport(input: ProfitReportInput): ProfitReport {
     hasExpenses: input.expenses.length > 0,
     netProfit,
     profitPct: profitPctValue,
-    openingCash,
+    openingCash: round2(openingCash),
     cashReceived,
     cashPaid,
     cashExpenses,
     cashInHand,
     customerDue,
     supplierDue,
-    businessValue: remainingValue + customerDue + cashInHand,
+    businessValue: round2(sumDecimal([remainingValue, customerDue, cashInHand])),
     suppliers,
     customers,
     aging,

@@ -67,6 +67,7 @@ export default function NewSaleModal({
     <Modal
       open={open}
       onClose={onClose}
+      busy={submitting}
       title="New Sale"
       subtitle="Build an invoice — stock is deducted when you save"
       full
@@ -74,7 +75,7 @@ export default function NewSaleModal({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-[12px] text-neutral-400 tabular-nums">{itemsCount} item{itemsCount === 1 ? "" : "s"} on invoice</span>
           <div className="flex gap-2.5">
-            <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
             <BusyButton type="submit" form="new-sale-form" loading={submitting} disabled={!entSummary.canSave}>
               Save Sale
             </BusyButton>

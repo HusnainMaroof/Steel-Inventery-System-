@@ -40,12 +40,13 @@ export default function NewPurchaseModal({
     <Modal
       open={open}
       onClose={onClose}
+      busy={submitting}
       title="Add purchase"
       subtitle="One item per purchase — stock updates when you save"
       full
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2.5">
-          <button type="button" className="btn-ghost" onClick={onClose}>
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={submitting}>
             Cancel
           </button>
           <BusyButton type="submit" form="new-purchase-form" loading={submitting} disabled={!api.canSave}>

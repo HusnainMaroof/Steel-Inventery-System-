@@ -32,23 +32,13 @@ function validEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-async function sessionFromToken(token: string, fallback: TokenResponse["user"]): Promise<AuthActionResult> {
+/**
+ * The login response already carries the full user (same fields as /auth/me:
+ * role, access, planPages, business name and slug), so no second call is made.
+ */
+async function sessionFromToken(token: string, user: TokenResponse["user"]): Promise<AuthActionResult> {
   await createSession(token);
-  const me = await tijarattFetch<{
-    id: string;
-    email: string;
-    name: string;
-    role: TijarattRole;
-    businessId: string;
-    business?: { name: string; slug?: string } | null;
-    title?: string | null;
-    access?: string[];
-    planPages?: string[];
-  }>("/api/v1/auth/me", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (me.ok) return { ok: true, user: toPublicUser(me.data) };
-  return { ok: true, user: toPublicUser(fallback) };
+  return { ok: true, user: toPublicUser(user) };
 }
 
 export async function loginAction(

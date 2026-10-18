@@ -76,7 +76,8 @@ daily payment total per business ≤ 500 000 000.
 
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| GET | `/health` | Public | `{ status: "ok", database: "connected" }`. 503 if Postgres is down. `Cache-Control: no-store`. |
+| GET | `/health` | Public | Readiness. `{ status: "ok", database: "connected" }`. 503 if Postgres is down. `Cache-Control: no-store`. |
+| GET | `/health/live` | Public | Liveness. `{ status: "ok" }`. Does not touch the database. Used by the Docker healthcheck. `Cache-Control: no-store`. |
 
 ---
 
@@ -223,7 +224,7 @@ Staff page: `inventory`. Stock is **derived** — never a stored balance.
 
 | Method | Path | Query / body | Purpose |
 |--------|------|--------------|---------|
-| GET | `/inventory/stock` | — | Qty per product (ledger sum) |
+| GET | `/inventory/stock` | — | Qty per product (ledger sum). Mixed-unit products return `qty: null`, `unit: null`, `mixedUnits: true` and a `units` breakdown |
 | GET | `/inventory/variants` | — | Qty per variant |
 | GET | `/inventory/lots` | paginated | Remaining FIFO lots (purchase lines − consumed) |
 | GET | `/inventory/movements` | `productId`, `from`, `to`, paginated | Signed `InventoryTransaction` history |

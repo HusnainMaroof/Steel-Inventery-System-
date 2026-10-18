@@ -17,7 +17,8 @@ import type {
   Warehouse,
   WarehouseLocation,
 } from "./types";
-import { parseDecimal } from "./decimal";
+import Decimal from "decimal.js";
+import { parseDecimal, toDecimal } from "./decimal";
 import { hydratePurchasePaymentHistories } from "./purchase-utils";
 import { sanitizeAccess } from "./staff-access";
 import { mergeUiPreferences, type UiPreferences } from "./ui-preferences";
@@ -127,20 +128,18 @@ function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
   const lines = purchase.lines;
   if (lines.length === 0) return [];
 
-  const goodsTotal = lines.reduce(
-    (sum, line) => sum + parseDecimal(line.qty) * parseDecimal(line.rate),
-    0,
-  );
-  const chargeTotal =
-    parseDecimal(purchase.transport) +
-    parseDecimal(purchase.loading) +
-    parseDecimal(purchase.labour) +
-    parseDecimal(purchase.otherCost);
-  const paid = parseDecimal(purchase.paid);
+  // Exact Decimal split of document charges and paid amount across lines.
+  // Converted to number only at the Purchase row boundary.
+  const lineGoodsDec = (line: ApiLine) => toDecimal(line.qty).times(toDecimal(line.rate));
+  const goodsTotal = lines.reduce((sum, line) => sum.plus(lineGoodsDec(line)), new Decimal(0));
+  const paid = toDecimal(purchase.paid);
 
   return lines.map((line, index) => {
-    const lineGoods = parseDecimal(line.qty) * parseDecimal(line.rate);
-    const share = goodsTotal > 0 ? lineGoods / goodsTotal : 1 / lines.length;
+    const lineGoods = lineGoodsDec(line);
+    const share = goodsTotal.gt(0)
+      ? lineGoods.div(goodsTotal)
+      : new Decimal(1).div(lines.length);
+    const shareOf = (value: number | string) => toDecimal(value).times(share).toNumber();
     const lineId = line.id ?? `${purchase.id}:${index}`;
     const rowId = lines.length === 1 ? purchase.id : `${purchase.id}::${lineId}`;
 
@@ -166,12 +165,12 @@ function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
       qty: parseDecimal(line.qty),
       unit: line.unit,
       rate: parseDecimal(line.rate),
-      transport: parseDecimal(purchase.transport) * share,
-      loadingCharges: parseDecimal(purchase.loading) * share,
-      labourCharges: parseDecimal(purchase.labour) * share,
-      otherCost: parseDecimal(purchase.otherCost) * share,
+      transport: shareOf(purchase.transport),
+      loadingCharges: shareOf(purchase.loading),
+      labourCharges: shareOf(purchase.labour),
+      otherCost: shareOf(purchase.otherCost),
       sellRate: line.sellRate == null ? undefined : parseDecimal(line.sellRate),
-      paid: paid * share,
+      paid: paid.times(share).toNumber(),
     };
   });
 }

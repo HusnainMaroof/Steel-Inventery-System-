@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { purchaseGoodsTotal } from "../domain/money";
+import { supplierPayable } from "../domain/payment-settlement";
 import { CreateSupplierDto } from "./dto/create-supplier.dto";
 import { UpdateSupplierDto } from "./dto/update-supplier.dto";
 
@@ -81,7 +83,7 @@ export class SuppliersService {
           GREATEST(
             0,
             COALESCE((
-              SELECT SUM(pl."qty" * pl."rate")
+              SELECT ROUND(SUM(pl."qty" * pl."rate"), 2)
               FROM "PurchaseLine" pl
               WHERE pl."purchaseId" = p."id"
             ), 0) - p."paid"
@@ -92,10 +94,8 @@ export class SuppliersService {
       `,
     ]);
     const rows = purchases.map((p) => {
-      const goodsTotal = Number(
-        p.lines.reduce((sum, l) => sum + Number(l.qty) * Number(l.rate), 0),
-      );
-      const due = Math.max(0, goodsTotal - Number(p.paid));
+      const goodsTotal = purchaseGoodsTotal(p.lines);
+      const due = supplierPayable([{ goodsTotal, paid: p.paid }]);
       return {
         purchaseId: p.id,
         date: p.date,

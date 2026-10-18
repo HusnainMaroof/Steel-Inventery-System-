@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { roundMoneyDecimal } from "../domain/money";
+import { openBalance } from "../domain/report-money";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
 
@@ -89,9 +91,9 @@ export class CustomersService {
       saleId: s.id,
       invoiceNo: s.invoice?.number,
       date: s.date,
-      total: Number(s.invoice?.total ?? 0),
-      paid: Number(s.invoice?.paid ?? 0),
-      due: Number(s.invoice?.total ?? 0) - Number(s.invoice?.paid ?? 0),
+      total: roundMoneyDecimal(s.invoice?.total ?? 0).toNumber(),
+      paid: roundMoneyDecimal(s.invoice?.paid ?? 0).toNumber(),
+      due: openBalance(s.invoice?.total ?? 0, s.invoice?.paid ?? 0).toNumber(),
     }));
     return { rows, totalDue: Number(dueRows[0]?.due ?? 0), total };
   }

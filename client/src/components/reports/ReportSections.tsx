@@ -2,17 +2,20 @@
 
 import { BusinessLink } from "@/components/BusinessLink";
 import { useAuth } from "@/lib/auth";
-import { fmtCompact, fmtMoney, fmtPct, fmtQtyWithUnit, qtyUnitLabel } from "@/lib/format";
+import { fmtMoney, fmtPct, fmtQtyExact, fmtQtyWithUnit, qtyUnitLabel } from "@/lib/format";
 import { pagesFor } from "@/lib/staff-access";
 import type { ProfitReport, QtyBlock, StockCheckView } from "@/lib/profitReport";
 import { Section, StatementRow, StatementRule, StatementTotal } from "./shared";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../lib/decimal";
 
 function stockQty(n: number, unit: string) {
   return fmtQtyWithUnit(n, unit);
 }
 
+// Stock check values keep 3 decimals so a real difference (e.g. 0.04) is never hidden.
 function checkQty(n: number, unit: string) {
-  const v = n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+  const v = fmtQtyExact(n);
   const u = qtyUnitLabel(unit);
   return u ? `${v} ${u}` : v;
 }
@@ -203,7 +206,7 @@ function PartyList({
             ) : null}
           </span>
           <span className={`tabular-nums font-semibold ${r.due > 0 ? "text-[#a12b1f]" : "text-[#171717]"}`}>
-            {fmtCompact(r.due)}
+            {fmtMoney(r.due)}
           </span>
         </li>
       ))}
@@ -299,7 +302,7 @@ export function Expenses({
             ))}
             <StatementTotal
               label="Subtotal"
-              value={purchaseRows.reduce((a, r) => a + r.v, 0)}
+              value={purchaseRows.reduce((a, r) => a.plus(toDecimal(r.v)), new Decimal(0)).toNumber()}
             />
           </>
         ) : null}
@@ -314,7 +317,7 @@ export function Expenses({
             ))}
             <StatementTotal
               label="Subtotal"
-              value={saleRows.reduce((a, r) => a + r.v, 0)}
+              value={saleRows.reduce((a, r) => a.plus(toDecimal(r.v)), new Decimal(0)).toNumber()}
             />
           </>
         ) : null}

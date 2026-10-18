@@ -17,6 +17,8 @@ import {
 } from "@/lib/purchase-utils";
 import { buildProfitReport } from "@/lib/profitReport";
 import { Page, PageTitle } from "@/components/ui";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../../lib/decimal";
 
 const eps = 0.01;
 const money = (n: number) => "₨ " + Math.round(n).toLocaleString("en-US");
@@ -67,13 +69,13 @@ export default function AuditPage() {
 
     L.push("== STOCK ==");
     let stockOk = true;
-    let stockWorth = 0;
+    let stockWorth = new Decimal(0);
     for (const r of inventory) {
       const left = (purchasedByItem[r.item] ?? 0) - (soldByItem[r.item] ?? 0);
       const ident = Math.abs(left - r.stockQty) < eps;
       const rowValOk = Math.abs(r.stockQty * r.landedAvg - r.stockValue) < 0.5;
       if (!ident || !rowValOk || r.stockQty < -eps) stockOk = false;
-      stockWorth += r.stockValue;
+      stockWorth = stockWorth.plus(toDecimal(r.stockValue));
       check(
         `${r.item}: purchased−sold (${qty(purchasedByItem[r.item] ?? 0)}−${qty(soldByItem[r.item] ?? 0)}=${qty(left)}) = stock ${qty(r.stockQty)}`,
         ident && r.stockQty >= -eps
@@ -82,7 +84,7 @@ export default function AuditPage() {
     const boughtTotal = purchases.reduce((a, p) => a + p.qty, 0);
     const soldTotal = sales.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0);
     check("Total qty in = total qty out + stock left", stockOk);
-    check("Σ stock worth = Σ row stockValue", Math.abs(stockWorth - stats.stockValue) < 0.5, `${money(stockWorth)} vs ${money(stats.stockValue)}`);
+    check("Σ stock worth = Σ row stockValue", Math.abs(stockWorth.toNumber() - stats.stockValue) < 0.5, `${money(stockWorth.toNumber())} vs ${money(stats.stockValue)}`);
     check(
       "Whole ledger balances",
       Math.abs(boughtTotal - soldTotal - inventory.reduce((a, r) => a + r.stockQty, 0)) < 0.5,
@@ -176,44 +178,44 @@ export default function AuditPage() {
     }
     check("All invoice grand totals reconcile", invoiceTotalsOk);
 
-    const billed = customers.reduce((a, c) => a + sales.filter((s) => s.customerId === c.id).reduce((b, s) => b + saleGrandTotal(s), 0), 0);
-    const received = payments.filter((p) => p.type === "customer").reduce((a, p) => a + p.amount, 0);
-    const totalDues = customers.reduce((a, c) => a + Math.max(0, customerBalance(c.id)), 0);
+    const billed = customers.reduce((a, c) => a.plus(toDecimal(sales.filter((s) => s.customerId === c.id).reduce((b, s) => b.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber())), new Decimal(0)).toNumber();
+    const received = payments.filter((p) => p.type === "customer").reduce((a, p) => a.plus(toDecimal(p.amount)), new Decimal(0)).toNumber();
+    const totalDues = customers.reduce((a, c) => a.plus(toDecimal(Math.max(0, customerBalance(c.id)))), new Decimal(0)).toNumber();
     check("Billed = received + outstanding", Math.abs(billed - received - totalDues) < eps, `${money(billed)} = ${money(received)} + ${money(totalDues)}`);
     check("Dashboard customer dues = Σ customer balances", Math.abs(totalDues - stats.customerDues) < eps, `${money(totalDues)} vs ${money(stats.customerDues)}`);
     for (const c of customers) {
       const bal = customerBalance(c.id);
       check(
         `${c.name} balance ${money(bal)}`,
-        Math.abs(bal - (sales.filter((s) => s.customerId === c.id).reduce((a, s) => a + saleGrandTotal(s), 0) - payments.filter((p) => p.type === "customer" && p.partyId === c.id).reduce((a, p) => a + p.amount, 0))) < eps
+        Math.abs(bal - (sales.filter((s) => s.customerId === c.id).reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber() - payments.filter((p) => p.type === "customer" && p.partyId === c.id).reduce((a, p) => a.plus(toDecimal(p.amount)), new Decimal(0)).toNumber())) < eps
       );
     }
 
     /* ---------- SUPPLIERS ---------- */
     L.push("== SUPPLIERS ==");
-    let millBilled = 0;
-    let millPaid = 0;
-    let millDue = 0;
+    let millBilled = new Decimal(0);
+    let millPaid = new Decimal(0);
+    let millDue = new Decimal(0);
     for (const lines of groupPurchasesByParent(purchases).values()) {
       const t = purchaseDocumentTotals(lines);
-      millBilled += t.goods;
-      millPaid += t.paid;
-      millDue += t.remaining;
+      millBilled = millBilled.plus(toDecimal(t.goods));
+      millPaid = millPaid.plus(toDecimal(t.paid));
+      millDue = millDue.plus(toDecimal(t.remaining));
     }
-    check("Mill dues = billed − paid", Math.abs(millBilled - millPaid - millDue) < eps, `${money(millDue)}`);
-    const supplierDues = suppliers.reduce((a, s) => a + Math.max(0, supplierBalance(s.id)), 0);
-    check("Dashboard mills dues = Σ purchase dues", Math.abs(supplierDues - stats.supplierDues) < eps && Math.abs(supplierDues - millDue) < eps, `${money(supplierDues)}`);
+    check("Mill dues = billed − paid", Math.abs(millBilled.toNumber() - millPaid.toNumber() - millDue.toNumber()) < eps, `${money(millDue.toNumber())}`);
+    const supplierDues = suppliers.reduce((a, s) => a.plus(toDecimal(Math.max(0, supplierBalance(s.id)))), new Decimal(0)).toNumber();
+    check("Dashboard mills dues = Σ purchase dues", Math.abs(supplierDues - stats.supplierDues) < eps && Math.abs(supplierDues - millDue.toNumber()) < eps, `${money(supplierDues)}`);
     for (const s of suppliers) {
       const ownDue = [...groupPurchasesByParent(purchases.filter((p) => p.supplierId === s.id)).values()]
-        .reduce((a, lines) => a + purchaseDocumentTotals(lines).remaining, 0);
+        .reduce((a, lines) => a.plus(toDecimal(purchaseDocumentTotals(lines).remaining)), new Decimal(0)).toNumber();
       check(`${s.name} due ${money(ownDue)}`, Math.abs(ownDue - Math.max(0, supplierBalance(s.id))) < eps);
     }
-    const journalToMills = payments.filter((p) => p.type === "supplier").reduce((a, p) => a + p.amount, 0);
-    const historiesToMills = purchases.reduce((a, p) => a + (p.paymentHistory ?? []).reduce((b, h) => b + h.amount, 0), 0);
+    const journalToMills = payments.filter((p) => p.type === "supplier").reduce((a, p) => a.plus(toDecimal(p.amount)), new Decimal(0)).toNumber();
+    const historiesToMills = purchases.reduce((a, p) => a.plus(toDecimal((p.paymentHistory ?? []).reduce((b, h) => b.plus(toDecimal(h.amount)), new Decimal(0)).toNumber())), new Decimal(0)).toNumber();
     check(
       "Paid-to-mills (Payments page) = purchase payment histories",
-      Math.abs(journalToMills - historiesToMills) < eps && Math.abs(journalToMills - millPaid) < eps,
-      `${money(journalToMills)} = ${money(historiesToMills)} = ${money(millPaid)}`
+      Math.abs(journalToMills - historiesToMills) < eps && Math.abs(journalToMills - millPaid.toNumber()) < eps,
+      `${money(journalToMills)} = ${money(historiesToMills)} = ${money(millPaid.toNumber())}`
     );
 
     /* ---------- PAYMENTS / CASH ---------- */
@@ -230,18 +232,18 @@ export default function AuditPage() {
 
     /* ---------- PROFIT & LOSS ---------- */
     L.push("== PROFIT & LOSS ==");
-    let revenue = 0;
-    let cogs = 0;
+    let revenue = new Decimal(0);
+    let cogs = new Decimal(0);
     for (const s of sales) {
-      revenue += saleGrandTotal(s);
+      revenue = revenue.plus(toDecimal(saleGrandTotal(s)));
       for (const [i, l] of s.lines.entries())
-        cogs += l.qty * (lineUnitCost(s.id, i) || byItem[l.item] || 0);
+        cogs = cogs.plus(toDecimal(l.qty).times(lineUnitCost(s.id, i) || byItem[l.item] || 0));
     }
-    const expenseTotal = expenses.reduce((a, e) => a + e.amount, 0);
-    check("Revenue = Σ invoice grand totals", Math.abs(revenue - stats.revenue) < eps, money(revenue));
-    check("COGS uses the actual landed cost of consumed stock", Math.abs(cogs - stats.cogs) < 0.5, money(cogs));
+    const expenseTotal = expenses.reduce((a, e) => a.plus(toDecimal(e.amount)), new Decimal(0)).toNumber();
+    check("Revenue = Σ invoice grand totals", Math.abs(revenue.toNumber() - stats.revenue) < eps, money(revenue.toNumber()));
+    check("COGS uses the actual landed cost of consumed stock", Math.abs(cogs.toNumber() - stats.cogs) < 0.5, money(cogs.toNumber()));
     check("Expenses = Σ expense rows", Math.abs(expenseTotal - stats.expenses) < eps, money(expenseTotal));
-    check("Net profit = revenue − cogs − expenses", Math.abs(revenue - cogs - expenseTotal - stats.netProfit) < 0.5, money(revenue - cogs - expenseTotal));
+    check("Net profit = revenue.toNumber() − cogs.toNumber() − expenses", Math.abs(revenue.toNumber() - cogs.toNumber() - expenseTotal - stats.netProfit) < 0.5, money(revenue.toNumber() - cogs.toNumber() - expenseTotal));
 
     /* ---------- PROFIT & REPORTS ENGINE ---------- */
     L.push("== PROFIT & REPORTS ==");
@@ -303,7 +305,7 @@ export default function AuditPage() {
       Math.abs(yearly.remainingValue + yearly.customerDue + yearly.cashInHand - yearly.businessValue) < 0.5,
       money(yearly.businessValue)
     );
-    const lotWorth = stockLots.reduce((a, l) => a + l.remainingQty * l.landedPerUnit, 0);
+    const lotWorth = stockLots.reduce((a, l) => a.plus(toDecimal(l.remainingQty).times(l.landedPerUnit)), new Decimal(0)).toNumber();
     check(
       "Yearly remaining stock value ≈ current FIFO lots",
       Math.abs(yearly.remainingValue - lotWorth) < 1,
@@ -325,12 +327,12 @@ export default function AuditPage() {
     L.push("");
     L.push("== MASTER NUMBERS (single source, printed for the report) ==");
     L.push(`Suppliers: ${suppliers.length} · Customers: ${customers.length} · Purchases: ${purchases.length} · Sales: ${sales.length}`);
-    L.push(`Stock purchased total (mill amount): ${money(purchases.reduce((a, p) => a + steelAmount(p), 0))}`);
-    L.push(`Stock in hand worth (${money(stockWorth)}) · landed COGS (${money(stats.cogs)})`);
+    L.push(`Stock purchased total (mill amount): ${money(purchases.reduce((a, p) => a.plus(toDecimal(steelAmount(p))), new Decimal(0)).toNumber())}`);
+    L.push(`Stock in hand worth (${money(stockWorth.toNumber())}) · landed COGS (${money(stats.cogs)})`);
     L.push(`Billed to customers: ${money(billed)} · Received: ${money(received)} · Customer dues: ${money(totalDues)}`);
-    L.push(`Owed to mills: ${money(millDue)} · Paid to mills: ${money(journalToMills)}`);
-    L.push(`Revenue ${money(revenue)} − COGS ${money(cogs)} − Expenses ${money(expenseTotal)} = Net ${money(revenue - cogs - expenseTotal)}`);
-    L.push(`Stock value ${money(stockWorth)} + customer dues ${money(totalDues)} − mill dues ${money(millDue)} = ${money(stockWorth + totalDues - millDue)}`);
+    L.push(`Owed to mills: ${money(millDue.toNumber())} · Paid to mills: ${money(journalToMills)}`);
+    L.push(`Revenue ${money(revenue.toNumber())} − COGS ${money(cogs.toNumber())} − Expenses ${money(expenseTotal)} = Net ${money(revenue.toNumber() - cogs.toNumber() - expenseTotal)}`);
+    L.push(`Stock value ${money(stockWorth.toNumber())} + customer dues ${money(totalDues)} − mill dues ${money(millDue.toNumber())} = ${money(stockWorth.toNumber() + totalDues - millDue.toNumber())}`);
 
     const fails = L.filter((x) => x.startsWith("[FAIL]")).length;
     L.unshift(`AUDIT SUMMARY: ${fails === 0 ? "ALL CHECKS PASSED" : fails + " CHECK(S) FAILED"} (${L.length} lines)`);

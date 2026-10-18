@@ -1,5 +1,10 @@
 import { BadRequestException } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+
+/** Exact string for SQL binding. Avoids float64 conversion of money values. */
+function decimalParam(amount: Prisma.Decimal.Value): string {
+  return new Prisma.Decimal(amount).toFixed();
+}
 
 /**
  * Atomically increase invoice.paid; rejects if payment would exceed total.
@@ -9,14 +14,15 @@ export async function incrementInvoicePaid(
   tx: Prisma.TransactionClient,
   businessId: string,
   invoiceId: string,
-  amount: number,
+  amount: Prisma.Decimal.Value,
 ): Promise<boolean> {
+  const value = decimalParam(amount);
   const rows = await tx.$queryRaw<{ id: string }[]>`
     UPDATE "Invoice"
-    SET "paid" = "paid" + ${amount}::decimal
+    SET "paid" = "paid" + ${value}::decimal
     WHERE "id" = ${invoiceId}
       AND "businessId" = ${businessId}
-      AND ("paid" + ${amount}::decimal) <= "total"
+      AND ("paid" + ${value}::decimal) <= "total"
     RETURNING "id"
   `;
   return rows.length > 0;
@@ -26,7 +32,7 @@ export async function incrementInvoicePaidOrThrow(
   tx: Prisma.TransactionClient,
   businessId: string,
   invoiceId: string,
-  amount: number,
+  amount: Prisma.Decimal.Value,
 ): Promise<void> {
   const ok = await incrementInvoicePaid(tx, businessId, invoiceId, amount);
   if (!ok) {
@@ -43,15 +49,17 @@ export async function incrementPurchasePaid(
   tx: Prisma.TransactionClient,
   businessId: string,
   purchaseId: string,
-  amount: number,
-  goodsTotal: number,
+  amount: Prisma.Decimal.Value,
+  goodsTotal: Prisma.Decimal.Value,
 ): Promise<boolean> {
+  const value = decimalParam(amount);
+  const goods = decimalParam(goodsTotal);
   const rows = await tx.$queryRaw<{ id: string }[]>`
     UPDATE "Purchase"
-    SET "paid" = "paid" + ${amount}::decimal
+    SET "paid" = "paid" + ${value}::decimal
     WHERE "id" = ${purchaseId}
       AND "businessId" = ${businessId}
-      AND ("paid" + ${amount}::decimal) <= ${goodsTotal}::decimal
+      AND ("paid" + ${value}::decimal) <= ${goods}::decimal
     RETURNING "id"
   `;
   return rows.length > 0;

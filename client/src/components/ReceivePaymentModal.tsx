@@ -30,7 +30,7 @@ export default function ReceivePaymentModal({
   const cust = customers.find((c) => c.id === sale.customerId);
 
   return (
-    <Modal open={!!sale} onClose={onClose} title="Receive Payment" subtitle={sale ? `${sale.invoiceNo} · ${cust?.name ?? ""}` : undefined} size="lg">
+    <Modal open={!!sale} onClose={onClose} busy={isPending("payment:create")} title="Receive Payment" subtitle={sale ? `${sale.invoiceNo} · ${cust?.name ?? ""}` : undefined} size="lg">
       {/* key remounts the form per invoice so Amount starts at the due */}
       <PaymentForm key={sale.id} saleId={sale.id} due={due} defaultAmount={due} custName={cust?.name ?? ""} onClose={onClose} submitting={isPending("payment:create")} />
     </Modal>
@@ -144,7 +144,7 @@ function PaymentForm({
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={`Payment on ${sale.invoiceNo}`} />
         </div>
         <div className="col-span-2 flex justify-end gap-3">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
           <BusyButton type="submit" loading={busy} disabled={!(Number(amount) > 0)}>
             Save Payment
           </BusyButton>

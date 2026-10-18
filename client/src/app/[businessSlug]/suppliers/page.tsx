@@ -11,6 +11,8 @@ import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
 import { attrsValuesLine } from "@/lib/catalogue";
 import type { Purchase, Supplier } from "@/lib/types";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../../lib/decimal";
 
 type DateGroup = {
   date: string;
@@ -72,8 +74,8 @@ export default function SuppliersPage() {
       .map(([date, items]) => ({
         date,
         purchases: items,
-        dayTotal: items.reduce((a, p) => a + purchaseTotal(p), 0),
-        dayPaid: items.reduce((a, p) => a + (p.paid ?? 0), 0),
+        dayTotal: items.reduce((a, p) => a.plus(toDecimal(purchaseTotal(p))), new Decimal(0)).toNumber(),
+        dayPaid: items.reduce((a, p) => a.plus(toDecimal((p.paid ?? 0))), new Decimal(0)).toNumber(),
       }));
   }, [purchases, viewSupplierId]);
 
@@ -255,13 +257,13 @@ export default function SuppliersPage() {
       )}
 
       {/* New Supplier Modal */}
-      <Modal open={open} onClose={onClose} title="New Supplier">
+      <Modal open={open} onClose={onClose} busy={savingSupplier || isPending("supplier:create")} title="New Supplier">
         <form onSubmit={save} className="grid gap-4">
           <div><label>Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Malik Traders" required autoFocus /></div>
           <div><label>City</label><input value={form.mill} onChange={(e) => setForm({ ...form, mill: e.target.value })} placeholder="e.g. Lahore" /></div>
           <div><label>Phone</label><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" /></div>
           <div className="flex justify-end gap-3">
-            <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={onClose} disabled={savingSupplier || isPending("supplier:create")}>Cancel</button>
             <BusyButton type="submit" loading={savingSupplier || isPending("supplier:create")} disabled={!form.name.trim()}>
               Add Supplier
             </BusyButton>

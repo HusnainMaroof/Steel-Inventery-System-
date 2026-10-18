@@ -1,4 +1,4 @@
-import { fmtDate, fmtMoney, fmtPct } from "./format";
+import { fmtDate, fmtMoney, fmtPct, fmtQtyExact, fmtQtyNumber } from "./format";
 import { ymd, type ProfitReport } from "./profitReport";
 
 function escapeHtml(value: string): string {
@@ -29,7 +29,13 @@ function fileStamp(ex: ProfitReport) {
 }
 
 function qty(n: number, unit: string) {
-  const v = (Math.round(n * 1000) / 1000).toLocaleString("en-US");
+  const v = fmtQtyNumber(n);
+  return unit ? `${v} ${unit}` : v;
+}
+
+// Stock check rows (system, physical, difference) keep 3 decimals so a real difference is visible.
+function qtyExact(n: number, unit: string) {
+  const v = fmtQtyExact(n);
   return unit ? `${v} ${unit}` : v;
 }
 
@@ -197,9 +203,9 @@ export function printReportPdf(ex: ProfitReport) {
     .map(
       (r) => `<tr>
         <td>${escapeHtml(r.productName)}</td>
-        <td>${qty(r.systemQty, r.unit)}</td>
-        <td>${r.physicalQty == null ? "Not counted yet" : qty(r.physicalQty, r.unit)}</td>
-        <td>${r.difference == null ? "—" : qty(r.difference, r.unit)}</td>
+        <td>${qtyExact(r.systemQty, r.unit)}</td>
+        <td>${r.physicalQty == null ? "Not counted yet" : qtyExact(r.physicalQty, r.unit)}</td>
+        <td>${r.difference == null ? "—" : qtyExact(r.difference, r.unit)}</td>
       </tr>`
     )
     .join("");

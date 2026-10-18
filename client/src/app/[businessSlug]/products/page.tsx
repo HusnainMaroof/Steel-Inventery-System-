@@ -1142,7 +1142,7 @@ function AddProductModal({
   };
 
   return (
-    <Modal open onClose={onClose} title="Create Product">
+    <Modal open onClose={onClose} title="Create Product" busy={isPending()}>
       {error && (
         <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
           {error}
@@ -1252,7 +1252,7 @@ function AddProductModal({
         )}
 
         <div className="flex justify-end gap-3">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={isPending()}>Cancel</button>
           <BusyButton type="submit" loading={isPending()}>{mode === "scratch" ? "Continue" : "Save Product"}</BusyButton>
         </div>
       </form>
@@ -1276,7 +1276,7 @@ function AddCategoryModal({
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <Modal open onClose={onClose} title={`Add Category — ${productName}`}>
+    <Modal open onClose={onClose} title={`Add Category — ${productName}`} busy={isPending()}>
       {error && (
         <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
           {error}
@@ -1303,7 +1303,7 @@ function AddCategoryModal({
           Active
         </label>
         <div className="flex justify-end gap-3">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={isPending()}>Cancel</button>
           <BusyButton type="submit" loading={isPending()}>Save</BusyButton>
         </div>
       </form>
@@ -1337,7 +1337,7 @@ function AddAttributeModal({
   };
 
   return (
-    <Modal open onClose={onClose} title={`Add Attribute — ${scopeName}`}>
+    <Modal open onClose={onClose} title={`Add Attribute — ${scopeName}`} busy={isPending()}>
       {error && (
         <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
           {error}
@@ -1400,7 +1400,7 @@ function AddAttributeModal({
           Required
         </label>
         <div className="flex justify-end gap-3">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={isPending()}>Cancel</button>
           <BusyButton type="submit" loading={isPending()}>Save Attribute</BusyButton>
         </div>
       </form>
@@ -1422,7 +1422,7 @@ function RenameModal({
   const { isPending } = useStore();
   const [name, setName] = useState(value);
   return (
-    <Modal open onClose={onClose} title={title}>
+    <Modal open onClose={onClose} title={title} busy={isPending()}>
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => {
@@ -1432,7 +1432,7 @@ function RenameModal({
       >
         <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         <div className="flex justify-end gap-3">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={isPending()}>Cancel</button>
           <BusyButton type="submit" loading={isPending()}>Save</BusyButton>
         </div>
       </form>

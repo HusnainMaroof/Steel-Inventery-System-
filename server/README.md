@@ -38,7 +38,7 @@ PostgreSQL (Neon) · REST `/api/v1`
 
 ## API
 
-Every route except `GET /health` is versioned under `/api/v1`. Except
+Every route except `GET /health` and `GET /health/live` is versioned under `/api/v1`. Except
 `POST /api/v1/auth/login`, `GET /api/v1/auth/status`, and
 `POST /api/v1/auth/register` (closed, 403), routes require
 `Authorization: Bearer <token>`.

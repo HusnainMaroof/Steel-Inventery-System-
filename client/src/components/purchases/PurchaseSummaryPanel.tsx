@@ -1,6 +1,6 @@
 "use client";
 
-import { fmtMoney, fmtQtyWithUnit } from "@/lib/format";
+import { fmtMoney, fmtQtyWithUnit, fmtUnitMoney } from "@/lib/format";
 import type { PurchaseDraftApi } from "./usePurchaseDraft";
 
 const numVal = (n: number) => (n === 0 ? "" : String(n));
@@ -82,7 +82,7 @@ export default function PurchaseSummaryPanel({
         {pick.qty > 0.001 ? (
           <div className="flex justify-between items-center text-sm">
             <span className="text-neutral-500">Landed cost{perLabel}</span>
-            <span className="tabular-nums font-medium">{fmtMoney(api.landedPerUnit)}</span>
+            <span className="tabular-nums font-medium">{fmtUnitMoney(api.landedPerUnit)}</span>
           </div>
         ) : null}
 
@@ -95,7 +95,14 @@ export default function PurchaseSummaryPanel({
             }`}
           >
             <span className="font-medium">Expected profit{perLabel}</span>
-            <span className="font-bold tabular-nums">{fmtMoney(api.marginPerUnit)}</span>
+            <span className="font-bold tabular-nums">{fmtUnitMoney(api.marginPerUnit)}</span>
+          </div>
+        ) : null}
+
+        {pick.sellRate > 0 && pick.qty > 0.001 ? (
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-neutral-500">Expected total profit</span>
+            <span className="tabular-nums font-medium">{fmtMoney(api.expectedTotalProfit)}</span>
           </div>
         ) : null}
 

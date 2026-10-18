@@ -98,6 +98,8 @@ model Business {
   subscriptionEndsAt   DateTime?
   assignedTemplateIds  String[]           @default([])
   templatesAppliedAt   DateTime?
+  /** Last issued invoice number (INV-NNNN). Never decremented, so numbers are not reused. */
+  invoiceSeq           Int                @default(0)
 
   users              User[]
   products           Product[]
@@ -115,6 +117,7 @@ model Business {
   expenses           Expense[]
   stockChecks        StockCheck[]
   inventoryTx        InventoryTransaction[]
+  stockLots          StockLot[]
   paymentAllocations PaymentAllocation[]
   locations          Location[]
 }
@@ -420,15 +423,19 @@ model Sale {
   @@index([businessId, customerId, date])
   @@index([businessId, createdAt])
   @@index([customerId])
+  // Tenant-safe target for SaleLine(saleId, businessId).
+  @@unique([id, businessId])
 }
 
 model SaleLine {
   id                String  @id @default(cuid())
+  businessId        String
   saleId            String
   productId         String
   variantId         String?
   categoryId        String?
-  purchaseId        String? // source lot the goods came from (traceability)
+  purchaseId        String? // source purchase the goods came from (traceability)
+  lotId             String? // exact StockLot consumed by this line, when known
   item              String
   attributeSnapshot Json?
   qualityName       String?
@@ -436,10 +443,13 @@ model SaleLine {
   unit              String
   rate              Decimal @db.Decimal(14, 2)
 
-  sale     Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  // Composite FK: a line can only belong to a sale of the same business.
+  sale     Sale      @relation(fields: [saleId, businessId], references: [id, businessId], onDelete: Cascade, onUpdate: Cascade)
   product  Product   @relation(fields: [productId], references: [id])
   variant  Variant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
   sourcePurchase Purchase? @relation("SourcePurchase", fields: [purchaseId], references: [id], onDelete: SetNull)
+  // Composite FK: a line can only consume a lot of the same business.
+  lot            StockLot? @relation(fields: [businessId, lotId], references: [businessId, id], onDelete: Restrict, onUpdate: Cascade)
   inventoryTx InventoryTransaction[]
 
   @@index([saleId])
@@ -447,6 +457,8 @@ model SaleLine {
   @@index([variantId])
   @@index([purchaseId])
   @@index([purchaseId, productId, variantId])
+  @@index([lotId])
+  @@index([businessId, lotId])
 }
 
 model Invoice {
@@ -551,6 +563,29 @@ model StockCheck {
   @@index([productId, date])
 }
 
+model StockLot {
+  id             String   @id @default(cuid())
+  businessId     String
+  purchaseId     String?
+  purchaseLineId String?
+  productId      String
+  variantId      String?
+  unit           String
+  receivedQty    Decimal  @db.Decimal(14, 3)
+  receivedAt     DateTime @db.Date
+  status         String   @default("ACTIVE") // ACTIVE | VOIDED
+  createdAt      DateTime @default(now())
+
+  business     Business               @relation(fields: [businessId], references: [id])
+  transactions InventoryTransaction[]
+  saleLines     SaleLine[]
+
+  // Tenant-safe target for InventoryTransaction(businessId, lotId).
+  @@unique([businessId, id])
+  @@index([businessId, purchaseId])
+  @@index([businessId, purchaseLineId])
+}
+
 model InventoryTransaction {
   id            String          @id @default(cuid())
   businessId    String
@@ -559,6 +594,7 @@ model InventoryTransaction {
   variantId     String?
   purchaseLineId String?
   saleLineId    String?
+  lotId         String?
   warehouseId   String?
   locationId    String?
   attributeSnapshot Json?
@@ -578,8 +614,11 @@ model InventoryTransaction {
   saleLine SaleLine? @relation(fields: [saleLineId], references: [id], onDelete: SetNull)
   warehouse Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  // Composite FK: a transaction can only point at a lot of the same business.
+  lot      StockLot? @relation(fields: [businessId, lotId], references: [businessId, id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([productId, date])
+  @@index([businessId, lotId])
   @@index([referenceType, referenceId])
   @@index([businessId, date])
   @@index([businessId, productId, date])

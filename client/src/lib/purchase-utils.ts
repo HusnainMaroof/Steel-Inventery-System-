@@ -1,5 +1,6 @@
+import Decimal from "decimal.js";
 import type { Payment, Purchase } from "./types";
-import { round2 } from "./money";
+import { round2, toDecimal } from "./decimal";
 
 /** Server purchase document id — shared by every line of a multi-line purchase. */
 export function purchaseParentId(p: Purchase): string {
@@ -8,7 +9,7 @@ export function purchaseParentId(p: Purchase): string {
 
 /** Mill payable for one line — goods value only (transport etc. are on us). */
 export function steelAmount(p: Purchase): number {
-  return p.qty * p.rate;
+  return toDecimal(p.qty).times(toDecimal(p.rate)).toNumber();
 }
 
 export function groupPurchasesByParent(purchases: Purchase[]): Map<string, Purchase[]> {
@@ -22,10 +23,21 @@ export function groupPurchasesByParent(purchases: Purchase[]): Map<string, Purch
   return map;
 }
 
+/** Exact goods total of a purchase document (sum of qty × rate, half-up to paisa). */
+export function purchaseGoodsSum(lines: Purchase[]): number {
+  return round2(
+    lines.reduce(
+      (sum, row) => sum.plus(toDecimal(row.qty).times(toDecimal(row.rate))),
+      new Decimal(0),
+    ),
+  );
+}
+
 export function purchaseDocumentTotals(lines: Purchase[]) {
-  const goods = round2(lines.reduce((sum, row) => sum + steelAmount(row), 0));
+  const goods = purchaseGoodsSum(lines);
   const paid = lines[0]?.paid ?? 0;
-  return { goods, paid, remaining: Math.max(0, round2(goods - paid)) };
+  const remaining = toDecimal(goods).minus(toDecimal(paid));
+  return { goods, paid, remaining: remaining.lt(0) ? 0 : round2(remaining) };
 }
 
 export function purchaseTotals(p: Purchase, allPurchases: Purchase[]) {
@@ -103,10 +115,10 @@ export function hydratePurchasePaymentHistories(
     meta.set(pid, {
       supplierId: lines[0]!.supplierId,
       date: lines[0]!.date,
-      goods: round2(lines.reduce((s, l) => s + steelAmount(l), 0)),
+      goods: purchaseGoodsSum(lines),
       paid: lines[0]?.paid ?? 0,
       allocated: round2(
-        (historyByPurchase.get(pid) ?? []).reduce((s, h) => s + h.amount, 0),
+        (historyByPurchase.get(pid) ?? []).reduce((s, h) => s.plus(toDecimal(h.amount)), new Decimal(0)).toNumber(),
       ),
     });
   }

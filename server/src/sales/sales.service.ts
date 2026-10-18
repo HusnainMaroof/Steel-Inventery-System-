@@ -11,17 +11,19 @@ import {
   stockLockKey,
 } from "../common/inventory/stock-locks";
 import {
-  incrementInvoicePaidOrThrow,
-} from "../common/payments/invoice-atomic";
-import { assertMoney, assertQty, LIMITS } from "../common/security/limits";
+  assertMaxDecimals,
+  assertMoney,
+  assertQty,
+  LIMITS,
+} from "../common/security/limits";
 import {
   sanitizeAttributeSnapshot,
   sanitizeOptionalText,
 } from "../common/security/sanitize-text";
-import { assertLineReferences } from "../common/catalog/line-reference-validation";
-import { consumedQtyByLot } from "../common/prisma/query-helpers";
+import { checkLineReferences } from "../common/catalog/line-reference-validation";
+import { newRecordId } from "../common/record-id";
 import { PrismaService } from "../prisma/prisma.service";
-import { saleGrandTotal } from "../domain/money";
+import { roundMoneyDecimal, saleGrandTotalDecimal } from "../domain/money";
 import { CreateSaleDto } from "./dto/create-sale.dto";
 
 const listInclude = {
@@ -30,10 +32,50 @@ const listInclude = {
   lines: true,
 } satisfies Prisma.SaleInclude;
 
+/** Percent values are stored as Decimal(5,2): 0 to 100, at most 2 decimals. */
+function assertPercent(value: number, label: string): void {
+  assertMaxDecimals(value, 2, `${label} percent`);
+  if (new Prisma.Decimal(value).lt(0) || new Prisma.Decimal(value).gt(100)) {
+    throw new BadRequestException(`${label} percent must be between 0 and 100`);
+  }
+}
+
 const listOrder: Prisma.SaleOrderByWithRelationInput[] = [
   { date: "desc" },
   { createdAt: "desc" },
 ];
+
+/** Exact decimal string for SQL binding. Avoids float64 conversion of money and quantities. */
+const exact = (value: Prisma.Decimal.Value) => new Prisma.Decimal(value).toFixed();
+
+type QtyRow = { productId: string; variantId: string | null; qty: string };
+type LotQtyRow = QtyRow & { purchaseId: string };
+
+/** Everything the sale checks need, read in one statement after the stock locks. */
+type SaleCheckRow = {
+  customerFound: boolean;
+  productCount: number;
+  /** Ledger sum per product/variant, for the requested products only. */
+  stock: QtyRow[];
+  categories: Array<{ id: string; productId: string }>;
+  variants: Array<{ id: string; productId: string; categoryId: string | null }>;
+  /** Requested purchase ids that exist for this business. */
+  purchaseIds: string[];
+  purchaseLines: LotQtyRow[];
+  /** Quantity already sold per purchase/product/variant. */
+  consumed: LotQtyRow[];
+  lots: Array<{ id: string; productId: string; variantId: string | null; purchaseId: string | null; status: string }>;
+  lotBalances: Array<{ lotId: string; qty: string }>;
+};
+
+type SaleWriteRow = {
+  saleCreatedAt: Date;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceCreatedAt: Date | null;
+  lineCount: number;
+  ledgerCount: number;
+};
 
 @Injectable()
 export class SalesService {
@@ -43,9 +85,14 @@ export class SalesService {
   ) {}
 
   /**
-   * §9/§12 — atomic sale creation. Availability is checked against the
+   * §9/§12: atomic sale creation. Availability is checked against the
    * inventory ledger inside the same transaction; an oversell throws and
    * every partial write rolls back.
+   *
+   * Latency: every statement inside the transaction is one database round
+   * trip, so the work is packed into five: BEGIN, all stock locks, one read
+   * for every check, one write for every row, COMMIT. The checks themselves
+   * are the same rules as before, applied in JavaScript to the read result.
    */
   async create(businessId: string, dto: CreateSaleDto) {
     if (dto.lines.length === 0) {
@@ -61,16 +108,31 @@ export class SalesService {
     assertMoney(dto.transportCharges ?? 0, "Transport charges");
     assertMoney(dto.labourCharges ?? 0, "Labour charges");
     assertMoney(dto.paidNow ?? 0, "Paid now");
+    assertPercent(dto.discountPct ?? 0, "Discount");
+    assertPercent(dto.taxPct ?? 0, "Tax");
     for (const line of dto.lines) {
       assertQty(line.qty);
+      assertMaxDecimals(line.qty, 3, "Quantity");
       assertMoney(line.rate, "Rate");
+      assertMaxDecimals(line.rate, 2, "Rate");
       line.item = line.item.trim().slice(0, 80);
       line.attributeSnapshot = sanitizeAttributeSnapshot(line.attributeSnapshot);
     }
 
+    const productIds = [...new Set(dto.lines.map((l) => l.productId))];
+    const categoryIds = [...new Set(dto.lines.map((l) => l.categoryId).filter(Boolean))] as string[];
+    const variantIds = [...new Set(dto.lines.map((l) => l.variantId).filter(Boolean))] as string[];
+    const purchaseIds = [...new Set(dto.lines.map((l) => l.purchaseId).filter(Boolean))] as string[];
+    const lotIds = [...new Set(dto.lines.map((l) => l.lotId).filter(Boolean))] as string[];
+
     return this.prisma.$transaction(async (tx) => {
+      // Round trip 1 (after BEGIN): every stock key, in sorted order.
       const lockKeys = dto.lines.flatMap((line) => {
-        const keys = [stockLockKey(businessId, line.productId, line.variantId)];
+        // Product-level key too: product-total sales and variant sales must serialize.
+        const keys = [
+          stockLockKey(businessId, line.productId, line.variantId),
+          stockLockKey(businessId, line.productId, null),
+        ];
         if (line.purchaseId) {
           keys.push(lotLockKey(businessId, line.purchaseId, line.productId, line.variantId));
         }
@@ -78,42 +140,125 @@ export class SalesService {
       });
       await lockInventoryKeys(tx, lockKeys);
 
-      const customer = await tx.customer.findFirst({
-        where: { id: dto.customerId, businessId },
-        select: { id: true },
-      });
-      if (!customer) throw new BadRequestException("Customer not found");
+      // Round trip 2: all check data. It runs after the locks, so the stock it
+      // reads cannot change before this transaction commits.
+      const [checks] = await tx.$queryRaw<SaleCheckRow[]>`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM "Customer" WHERE "id" = ${dto.customerId} AND "businessId" = ${businessId}
+          ) AS "customerFound",
+          (
+            SELECT COUNT(*)::int FROM "Product"
+            WHERE "businessId" = ${businessId} AND "id" = ANY(${productIds}::text[])
+          ) AS "productCount",
+          COALESCE((
+            SELECT json_agg(json_build_object('productId', g."productId", 'variantId', g."variantId", 'qty', g.qty::text))
+            FROM (
+              SELECT "productId", "variantId", SUM("qty") AS qty
+              FROM "InventoryTransaction"
+              WHERE "businessId" = ${businessId} AND "productId" = ANY(${productIds}::text[])
+              GROUP BY "productId", "variantId"
+            ) g
+          ), '[]'::json) AS "stock",
+          COALESCE((
+            SELECT json_agg(json_build_object('id', c."id", 'productId', c."productId"))
+            FROM "ProductCategory" c
+            WHERE c."businessId" = ${businessId} AND c."id" = ANY(${categoryIds}::text[])
+          ), '[]'::json) AS "categories",
+          COALESCE((
+            SELECT json_agg(json_build_object('id', v."id", 'productId', v."productId", 'categoryId', v."categoryId"))
+            FROM "Variant" v
+            WHERE v."businessId" = ${businessId} AND v."id" = ANY(${variantIds}::text[])
+          ), '[]'::json) AS "variants",
+          COALESCE((
+            SELECT json_agg(p."id")
+            FROM "Purchase" p
+            WHERE p."businessId" = ${businessId} AND p."id" = ANY(${purchaseIds}::text[])
+          ), '[]'::json) AS "purchaseIds",
+          COALESCE((
+            SELECT json_agg(json_build_object('purchaseId', pl."purchaseId", 'productId', pl."productId", 'variantId', pl."variantId", 'qty', pl."qty"::text))
+            FROM "PurchaseLine" pl
+            INNER JOIN "Purchase" p ON p."id" = pl."purchaseId"
+            WHERE p."businessId" = ${businessId} AND p."id" = ANY(${purchaseIds}::text[])
+          ), '[]'::json) AS "purchaseLines",
+          COALESCE((
+            SELECT json_agg(json_build_object('purchaseId', c."purchaseId", 'productId', c."productId", 'variantId', c."variantId", 'qty', c.qty::text))
+            FROM (
+              SELECT sl."purchaseId", sl."productId", sl."variantId", SUM(sl."qty") AS qty
+              FROM "SaleLine" sl
+              INNER JOIN "Sale" s ON s."id" = sl."saleId"
+              WHERE s."businessId" = ${businessId} AND sl."purchaseId" = ANY(${purchaseIds}::text[])
+              GROUP BY sl."purchaseId", sl."productId", sl."variantId"
+            ) c
+          ), '[]'::json) AS "consumed",
+          COALESCE((
+            SELECT json_agg(json_build_object('id', l."id", 'productId', l."productId", 'variantId', l."variantId", 'purchaseId', l."purchaseId", 'status', l."status"))
+            FROM "StockLot" l
+            WHERE l."businessId" = ${businessId} AND l."id" = ANY(${lotIds}::text[])
+          ), '[]'::json) AS "lots",
+          COALESCE((
+            SELECT json_agg(json_build_object('lotId', b."lotId", 'qty', b.qty::text))
+            FROM (
+              SELECT "lotId", SUM("qty") AS qty
+              FROM "InventoryTransaction"
+              WHERE "businessId" = ${businessId} AND "lotId" = ANY(${lotIds}::text[])
+              GROUP BY "lotId"
+            ) b
+          ), '[]'::json) AS "lotBalances"
+      `;
 
-      const productIds = [...new Set(dto.lines.map((l) => l.productId))];
-      const products = await tx.product.findMany({
-        where: { businessId, id: { in: productIds } },
-        select: { id: true },
-      });
-      if (products.length !== productIds.length) {
+      if (!checks?.customerFound) throw new BadRequestException("Customer not found");
+      if (checks.productCount !== productIds.length) {
         throw new BadRequestException("One or more products were not found");
       }
-      await assertLineReferences(tx, businessId, dto.lines);
+      checkLineReferences(dto.lines, {
+        categories: checks.categories,
+        variants: checks.variants,
+        warehouses: [],
+        locations: [],
+      });
 
-      const purchaseIds = [
-        ...new Set(dto.lines.map((l) => l.purchaseId).filter(Boolean)),
-      ] as string[];
-      const [purchasesWithLines, consumedByLot] = await Promise.all([
-        purchaseIds.length
-          ? tx.purchase.findMany({
-              where: { id: { in: purchaseIds }, businessId },
-              include: { lines: true },
-            })
-          : Promise.resolve([]),
-        consumedQtyByLot(tx, businessId, purchaseIds),
-      ]);
-      const purchaseById = new Map(purchasesWithLines.map((p) => [p.id, p]));
+      // Exact StockLot: a lot balance is the sum of its ledger rows (purchase, edit, reversal, sale).
+      const lotById = new Map(checks.lots.map((lot) => [lot.id, lot]));
+      const balanceByLot = new Map(
+        checks.lotBalances.map((row) => [row.lotId, new Prisma.Decimal(row.qty)]),
+      );
+      for (const line of dto.lines) {
+        if (!line.lotId) continue;
+        const lot = lotById.get(line.lotId);
+        if (!lot) throw new BadRequestException("Source lot not found");
+        if (lot.status !== "ACTIVE") throw new BadRequestException("Source lot is voided");
+        if (lot.productId !== line.productId || (lot.variantId ?? null) !== (line.variantId ?? null)) {
+          throw new BadRequestException("Source lot does not match the sale line product");
+        }
+        if (line.purchaseId && lot.purchaseId && line.purchaseId !== lot.purchaseId) {
+          throw new BadRequestException("Source lot does not belong to the given purchase");
+        }
+        const requestedFromLot = dto.lines
+          .filter((candidate) => candidate.lotId === line.lotId)
+          .reduce((sum, candidate) => sum.plus(candidate.qty), new Prisma.Decimal(0));
+        const available = balanceByLot.get(line.lotId) ?? new Prisma.Decimal(0);
+        if (requestedFromLot.gt(available)) {
+          throw new BadRequestException("Insufficient inventory in source lot");
+        }
+      }
 
+      // Purchase lot (traceability): bought on that purchase minus already sold from it.
+      const purchaseFound = new Set(checks.purchaseIds);
+      const consumedByLot = new Map(
+        checks.consumed.map((row) => [
+          `${row.purchaseId}:${row.productId}:${row.variantId ?? ""}`,
+          new Prisma.Decimal(row.qty),
+        ]),
+      );
       for (const line of dto.lines) {
         if (!line.purchaseId) continue;
-        const purchase = purchaseById.get(line.purchaseId);
-        if (!purchase) throw new BadRequestException("Source purchase lot not found");
-        const matchingLines = purchase.lines.filter(
+        if (!purchaseFound.has(line.purchaseId)) {
+          throw new BadRequestException("Source purchase lot not found");
+        }
+        const matchingLines = checks.purchaseLines.filter(
           (purchaseLine) =>
+            purchaseLine.purchaseId === line.purchaseId &&
             purchaseLine.productId === line.productId &&
             (!line.variantId || purchaseLine.variantId === line.variantId),
         );
@@ -121,11 +266,11 @@ export class SalesService {
           throw new BadRequestException("Source purchase lot not found");
         }
         const bought = matchingLines.reduce(
-          (sum, purchaseLine) => sum + Number(purchaseLine.qty),
-          0,
+          (sum, purchaseLine) => sum.plus(purchaseLine.qty),
+          new Prisma.Decimal(0),
         );
         const lotKey = `${line.purchaseId}:${line.productId}:${line.variantId ?? ""}`;
-        const alreadySold = consumedByLot.get(lotKey) ?? 0;
+        const alreadySold = consumedByLot.get(lotKey) ?? new Prisma.Decimal(0);
         const requestedFromLot = dto.lines
           .filter(
             (candidate) =>
@@ -133,53 +278,68 @@ export class SalesService {
               candidate.productId === line.productId &&
               candidate.variantId === line.variantId,
           )
-          .reduce((sum, candidate) => sum + candidate.qty, 0);
-        if (requestedFromLot > bought - alreadySold + 0.0005) {
+          .reduce((sum, candidate) => sum.plus(candidate.qty), new Prisma.Decimal(0));
+        // Quantities are stored at 3 decimals, so this comparison is exact.
+        if (requestedFromLot.gt(bought.minus(alreadySold))) {
           throw new BadRequestException("Insufficient inventory in source purchase lot");
         }
       }
 
-      // §22 edge case — sell more than available ⇒ reject, nothing written.
-      const ledger = await tx.inventoryTransaction.groupBy({
-        by: ["productId", "variantId"],
-        where: { businessId },
-        _sum: { qty: true },
-      });
-      const productLevels = new Map<string, number>();
-      const variantLevels = new Map<string, number>();
-      for (const row of ledger) {
-        const qty = Number(row._sum.qty ?? 0);
-        productLevels.set(row.productId, (productLevels.get(row.productId) ?? 0) + qty);
+      // §22 edge case: sell more than available ⇒ reject, nothing written.
+      const productLevels = new Map<string, Prisma.Decimal>();
+      const variantLevels = new Map<string, Prisma.Decimal>();
+      for (const row of checks.stock) {
+        const qty = new Prisma.Decimal(row.qty);
+        productLevels.set(
+          row.productId,
+          (productLevels.get(row.productId) ?? new Prisma.Decimal(0)).plus(qty),
+        );
         if (row.variantId) variantLevels.set(`${row.productId}:${row.variantId}`, qty);
       }
-      const requested = new Map<string, { productId: string; variantId?: string; qty: number }>();
+      const availableFor = (line: { productId: string; variantId?: string | null }) =>
+        line.variantId
+          ? variantLevels.get(`${line.productId}:${line.variantId}`) ?? new Prisma.Decimal(0)
+          : productLevels.get(line.productId) ?? new Prisma.Decimal(0);
+      const requested = new Map<
+        string,
+        { productId: string; variantId?: string; qty: Prisma.Decimal }
+      >();
       for (const line of dto.lines) {
         const key = line.variantId ? `${line.productId}:${line.variantId}` : line.productId;
         const current = requested.get(key);
         requested.set(key, {
           productId: line.productId,
           variantId: line.variantId,
-          qty: (current?.qty ?? 0) + line.qty,
+          qty: (current?.qty ?? new Prisma.Decimal(0)).plus(line.qty),
         });
       }
-      const shortages = [...requested.values()].filter((line) => {
-        const available = line.variantId
-          ? variantLevels.get(`${line.productId}:${line.variantId}`) ?? 0
-          : productLevels.get(line.productId) ?? 0;
-        return line.qty > available + 0.0005;
-      });
+      const variantShortages = [...requested.values()].filter((line) =>
+        line.qty.gt(availableFor(line)),
+      );
+      // Variant lines and product-level lines draw from the same product total,
+      // but variant ledger rows never include product-level sales. So the product
+      // total must also cover every line for that product.
+      const productRequested = new Map<string, Prisma.Decimal>();
+      for (const line of dto.lines) {
+        productRequested.set(
+          line.productId,
+          (productRequested.get(line.productId) ?? new Prisma.Decimal(0)).plus(line.qty),
+        );
+      }
+      const productShortages = [...productRequested]
+        .filter(([productId, qty]) => qty.gt(productLevels.get(productId) ?? new Prisma.Decimal(0)))
+        .map(([productId, qty]) => ({ productId, qty }));
+      const shortages = [...variantShortages, ...productShortages];
       if (shortages.length > 0) {
         const first = shortages[0];
-        const available = first.variantId
-          ? variantLevels.get(`${first.productId}:${first.variantId}`) ?? 0
-          : productLevels.get(first.productId) ?? 0;
         throw new BadRequestException(
           `Insufficient inventory for ${shortages.length} product(s) — ` +
-            `first shortage: requested ${first.qty}, available ${available}`,
+            `first shortage: requested ${first.qty.toString()}, ` +
+            `available ${availableFor(first).toString()}`,
         );
       }
 
-      const totals = saleGrandTotal(
+      const totals = saleGrandTotalDecimal(
         dto.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
         {
           discountPct: dto.discountPct ?? 0,
@@ -189,121 +349,171 @@ export class SalesService {
           labour: dto.labourCharges ?? 0,
         },
       );
+      const paidNow = dto.paidNow && dto.paidNow > 0 ? roundMoneyDecimal(dto.paidNow) : new Prisma.Decimal(0);
+      if (paidNow.gt(totals.grandTotal)) {
+        throw new BadRequestException(
+          `Paid-now amount (${paidNow.toFixed(2)}) exceeds the invoice total ` +
+            `(${totals.grandTotal.toFixed(2)})`,
+        );
+      }
+      const hasPayment = paidNow.gt(0);
 
-      const sale = await tx.sale.create({
-        data: {
-          businessId,
-          date: new Date(dto.date),
-          customerId: dto.customerId,
-          notes: dto.notes,
-          discountPct: dto.discountPct ?? 0,
-          taxPct: dto.taxPct ?? 0,
-          loadingCharges: dto.loadingCharges ?? 0,
-          transportCharges: dto.transportCharges ?? 0,
-          labourCharges: dto.labourCharges ?? 0,
-          lines: {
-            create: dto.lines.map((line) => ({
-              productId: line.productId,
-              variantId: line.variantId,
-              categoryId: line.categoryId,
-              purchaseId: line.purchaseId, // source lot traceability
-              item: line.item,
-              attributeSnapshot: line.attributeSnapshot ?? undefined,
-              qualityName: line.qualityName,
-              qty: line.qty,
-              unit: line.unit,
-              rate: line.rate,
-            })),
-          },
-        },
-        include: { lines: true },
-      });
-
-      // §7 — every stock decrease is a traceable ledger row (signed −qty).
-      await tx.inventoryTransaction.createMany({
-        data: sale.lines.map((line) => ({
-          businessId,
+      // Same calendar day Prisma stores for a DateTime @db.Date (UTC day of the instant).
+      const saleDate = new Date(dto.date).toISOString().slice(0, 10);
+      const saleId = newRecordId();
+      const invoiceId = newRecordId();
+      const lines = dto.lines.map((line) => {
+        const lot = line.lotId ? lotById.get(line.lotId) : undefined;
+        return {
+          id: newRecordId(),
+          txId: newRecordId(),
           productId: line.productId,
-          categoryId: line.categoryId,
-          variantId: line.variantId,
-          saleLineId: line.id,
-          attributeSnapshot: line.attributeSnapshot ?? undefined,
+          variantId: line.variantId ?? null,
+          categoryId: line.categoryId ?? null,
+          // Traceability: a line that names an exact lot records that lot's purchase.
+          purchaseId: lot?.purchaseId ?? line.purchaseId ?? null,
+          lotId: line.lotId ?? null,
+          item: line.item,
+          attributeSnapshot: line.attributeSnapshot ?? null,
+          qualityName: line.qualityName ?? null,
+          qty: exact(line.qty),
           unit: line.unit,
-          type: "SALE" as const,
-          qty: -line.qty,
-          referenceType: "SALE",
-          referenceId: sale.id,
-          date: new Date(dto.date),
-        })),
+          rate: exact(line.rate),
+        };
       });
+      const discountPct = exact(dto.discountPct ?? 0);
+      const taxPct = exact(dto.taxPct ?? 0);
+      const loadingCharges = exact(dto.loadingCharges ?? 0);
+      const transportCharges = exact(dto.transportCharges ?? 0);
+      const labourCharges = exact(dto.labourCharges ?? 0);
+      const total = totals.grandTotal.toFixed(2);
+      const paid = paidNow.toFixed(2);
+      const auditMeta = JSON.stringify({ customerId: dto.customerId, lineCount: lines.length });
 
-      const invoice = await this.createInvoice(tx, businessId, sale.id, totals.grandTotal);
-
-      if (dto.paidNow && dto.paidNow > 0) {
-        if (dto.paidNow > totals.grandTotal + 0.005) {
-          throw new BadRequestException(
-            `Paid-now amount (${dto.paidNow}) exceeds the invoice total (${totals.grandTotal})`,
-          );
-        }
-        const payment = await tx.payment.create({
-          data: {
-            businessId,
-            date: new Date(dto.date),
-            type: "CUSTOMER",
-            customerId: dto.customerId,
-            amount: dto.paidNow,
-            method: "CASH",
-            saleId: sale.id,
-          },
-        });
-        await tx.paymentAllocation.create({
-          data: {
-            businessId,
-            paymentId: payment.id,
-            saleId: sale.id,
-            amount: dto.paidNow,
-          },
-        });
-        await incrementInvoicePaidOrThrow(tx, businessId, invoice.id, dto.paidNow);
+      // Round trip 3: sale, lines, §7 stock-out ledger rows (signed −qty), invoice with the
+      // next INV-NNNN number, the paid-now receipt and its allocation, and the audit row.
+      // Foreign keys between these rows are checked at the end of the statement.
+      // The Business UPDATE locks the business row until commit, so two sales can never
+      // get the same number; the counter never goes down, so deleted numbers are not reused.
+      const [written] = await tx.$queryRaw<SaleWriteRow[]>`
+        WITH new_sale AS (
+          INSERT INTO "Sale" ("id", "businessId", "date", "customerId", "notes", "discountPct", "taxPct",
+                              "loadingCharges", "transportCharges", "labourCharges")
+          VALUES (${saleId}, ${businessId}, ${saleDate}::date, ${dto.customerId}, ${dto.notes ?? null},
+                  ${discountPct}::numeric, ${taxPct}::numeric, ${loadingCharges}::numeric,
+                  ${transportCharges}::numeric, ${labourCharges}::numeric)
+          RETURNING "id", "createdAt"
+        ),
+        line_input AS (
+          SELECT * FROM jsonb_to_recordset(${JSON.stringify(lines)}::jsonb) AS l(
+            "id" text, "txId" text, "productId" text, "variantId" text, "categoryId" text,
+            "purchaseId" text, "lotId" text, "item" text, "attributeSnapshot" jsonb,
+            "qualityName" text, "qty" numeric, "unit" text, "rate" numeric
+          )
+        ),
+        new_lines AS (
+          INSERT INTO "SaleLine" ("id", "businessId", "saleId", "productId", "variantId", "categoryId",
+                                  "purchaseId", "lotId", "item", "attributeSnapshot", "qualityName",
+                                  "qty", "unit", "rate")
+          SELECT l."id", ${businessId}, s."id", l."productId", l."variantId", l."categoryId",
+                 l."purchaseId", l."lotId", l."item", l."attributeSnapshot", l."qualityName",
+                 l."qty", l."unit", l."rate"
+          FROM line_input l CROSS JOIN new_sale s
+          RETURNING "id"
+        ),
+        new_ledger AS (
+          INSERT INTO "InventoryTransaction" ("id", "businessId", "productId", "categoryId", "variantId",
+                                              "saleLineId", "lotId", "attributeSnapshot", "unit", "type",
+                                              "qty", "referenceType", "referenceId", "date")
+          SELECT l."txId", ${businessId}, l."productId", l."categoryId", l."variantId",
+                 l."id", l."lotId", l."attributeSnapshot", l."unit", 'SALE'::"InventoryTxType",
+                 -l."qty", 'SALE', s."id", ${saleDate}::date
+          FROM line_input l CROSS JOIN new_sale s
+          RETURNING "id"
+        ),
+        seq AS (
+          UPDATE "Business" SET "invoiceSeq" = "invoiceSeq" + 1
+          WHERE "id" = ${businessId}
+          RETURNING "invoiceSeq"
+        ),
+        new_invoice AS (
+          INSERT INTO "Invoice" ("id", "businessId", "saleId", "number", "total", "paid")
+          SELECT ${invoiceId}, ${businessId}, s."id",
+                 'INV-' || CASE WHEN length(q."invoiceSeq"::text) >= 4
+                                THEN q."invoiceSeq"::text
+                                ELSE lpad(q."invoiceSeq"::text, 4, '0') END,
+                 ${total}::numeric, ${paid}::numeric
+          FROM seq q CROSS JOIN new_sale s
+          RETURNING "id", "number", "createdAt"
+        ),
+        new_payment AS (
+          INSERT INTO "Payment" ("id", "businessId", "date", "type", "customerId", "amount", "method", "saleId")
+          SELECT ${newRecordId()}, ${businessId}, ${saleDate}::date, 'CUSTOMER'::"PaymentType",
+                 ${dto.customerId}, ${paid}::numeric, 'CASH'::"PaymentMethod", s."id"
+          FROM new_sale s
+          WHERE ${hasPayment}::boolean
+          RETURNING "id"
+        ),
+        new_allocation AS (
+          INSERT INTO "PaymentAllocation" ("id", "businessId", "paymentId", "saleId", "amount")
+          SELECT ${newRecordId()}, ${businessId}, p."id", s."id", ${paid}::numeric
+          FROM new_payment p CROSS JOIN new_sale s
+          RETURNING "id"
+        ),
+        new_audit AS (
+          INSERT INTO "AuditLog" ("id", "businessId", "actorId", "action", "entityType", "entityId", "metadata")
+          VALUES (${newRecordId()}, ${businessId}, NULL, 'sale.created', 'sale', ${saleId}, ${auditMeta}::jsonb)
+          RETURNING "id"
+        )
+        SELECT s."createdAt" AS "saleCreatedAt",
+               i."id" AS "invoiceId",
+               i."number" AS "invoiceNumber",
+               i."createdAt" AS "invoiceCreatedAt",
+               (SELECT COUNT(*)::int FROM new_lines) AS "lineCount",
+               (SELECT COUNT(*)::int FROM new_ledger) AS "ledgerCount"
+        FROM new_sale s
+        LEFT JOIN new_invoice i ON TRUE
+      `;
+      if (!written?.invoiceId || !written.invoiceNumber) {
+        throw new NotFoundException("Business not found");
+      }
+      if (written.lineCount !== lines.length || written.ledgerCount !== lines.length) {
+        throw new Error("Sale write did not insert every line");
       }
 
-      await this.audit.logTx(tx, {
+      const invoice = {
+        id: written.invoiceId,
         businessId,
-        action: "sale.created",
-        entityType: "sale",
-        entityId: sale.id,
-        metadata: { customerId: dto.customerId, lineCount: sale.lines.length },
-      });
-
-      return { sale, invoice: { ...invoice, total: totals.grandTotal } };
+        saleId,
+        number: written.invoiceNumber,
+        total: totals.grandTotal,
+        paid: paidNow,
+        createdAt: written.invoiceCreatedAt,
+      };
+      // Same shape as the stored rows, so the client can merge it without a reload.
+      const sale = {
+        id: saleId,
+        businessId,
+        date: new Date(saleDate),
+        customerId: dto.customerId,
+        notes: dto.notes ?? null,
+        discountPct: new Prisma.Decimal(discountPct),
+        taxPct: new Prisma.Decimal(taxPct),
+        loadingCharges: new Prisma.Decimal(loadingCharges),
+        transportCharges: new Prisma.Decimal(transportCharges),
+        labourCharges: new Prisma.Decimal(labourCharges),
+        createdAt: written.saleCreatedAt,
+        lines: lines.map(({ txId: _txId, ...line }) => ({
+          ...line,
+          businessId,
+          saleId,
+          qty: new Prisma.Decimal(line.qty),
+          rate: new Prisma.Decimal(line.rate),
+        })),
+        invoice,
+      };
+      return { sale, invoice: { ...invoice, total: totals.grandTotal.toNumber() } };
     });
-  }
-
-  private async createInvoice(
-    tx: Prisma.TransactionClient,
-    businessId: string,
-    saleId: string,
-    total: number,
-  ) {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const count = await tx.invoice.count({ where: { businessId } });
-      const number = `INV-${String(count + 1).padStart(4, "0")}`;
-      try {
-        return await tx.invoice.create({
-          data: { businessId, saleId, number, total },
-        });
-      } catch (err) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === "P2002" &&
-          attempt < 3
-        ) {
-          continue;
-        }
-        throw err;
-      }
-    }
-    throw new BadRequestException("Could not allocate an invoice number");
   }
 
   async list(businessId: string, skip: number, take: number, customerId?: string) {
@@ -353,10 +563,19 @@ export class SalesService {
     return sale;
   }
 
-  /** Delete = reversal ledger rows + payment cleanup + invoice gone, atomically. */
+  /**
+   * Delete = reversal ledger rows + payment cleanup + invoice gone, atomically.
+   *
+   * Latency: six round trips (BEGIN, read the sale with its lines and invoice in one
+   * join query, all stock locks, one cleanup statement, the sale delete, COMMIT).
+   * The sale delete is its own statement: it cascades to the lines and sets
+   * `saleLineId` to NULL on their ledger rows, including the reversal rows just written,
+   * the same end state as before.
+   */
   async remove(businessId: string, id: string, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.findFirst({
+        relationLoadStrategy: "join",
         where: { id, businessId },
         include: { invoice: true, lines: true },
       });
@@ -364,64 +583,90 @@ export class SalesService {
 
       const lockKeys = sale.lines.flatMap((line) => [
         stockLockKey(businessId, line.productId, line.variantId),
+        stockLockKey(businessId, line.productId, null),
         ...(line.purchaseId
           ? [lotLockKey(businessId, line.purchaseId, line.productId, line.variantId)]
           : []),
       ]);
       await lockInventoryKeys(tx, lockKeys);
 
-      await tx.inventoryTransaction.createMany({
-        data: sale.lines.map((line) => ({
-          businessId,
-          productId: line.productId,
-          categoryId: line.categoryId,
-          variantId: line.variantId,
-          saleLineId: line.id,
-          attributeSnapshot: line.attributeSnapshot ?? undefined,
-          unit: line.unit,
-          type: "RETURN" as const,
-          qty: line.qty,
-          referenceType: "SALE_DELETE",
-          referenceId: sale.id,
-          date: sale.date,
-        })),
-      });
+      // §7: one opposite-sign RETURN row per line, so the stock comes back.
+      const reversals = sale.lines.map((line) => ({
+        id: newRecordId(),
+        productId: line.productId,
+        categoryId: line.categoryId,
+        variantId: line.variantId,
+        saleLineId: line.id,
+        lotId: line.lotId,
+        attributeSnapshot: line.attributeSnapshot ?? null,
+        unit: line.unit,
+        qty: exact(line.qty),
+      }));
+      const saleDate = sale.date.toISOString().slice(0, 10);
 
-      const allocations = await tx.paymentAllocation.findMany({
-        where: { businessId, saleId: sale.id },
-        select: { paymentId: true },
-      });
-      const paymentIds = [...new Set(allocations.map((a) => a.paymentId))];
-
-      await tx.paymentAllocation.deleteMany({ where: { businessId, saleId: sale.id } });
-      await tx.payment.deleteMany({ where: { businessId, saleId: sale.id } });
-
-      if (paymentIds.length > 0) {
-        const withRemaining = await tx.paymentAllocation.groupBy({
-          by: ["paymentId"],
-          where: { paymentId: { in: paymentIds } },
-        });
-        const stillUsed = new Set(withRemaining.map((row) => row.paymentId));
-        const orphanIds = paymentIds.filter((id) => !stillUsed.has(id));
-        if (orphanIds.length > 0) {
-          await tx.payment.deleteMany({
-            where: { id: { in: orphanIds }, businessId, saleId: null },
-          });
-        }
-      }
-
-      if (sale.invoice) {
-        await tx.invoice.delete({ where: { id: sale.invoice.id, businessId } });
-      }
+      // One statement for everything that hangs off the sale:
+      // - the reversal ledger rows,
+      // - this sale's allocations,
+      // - payments recorded against this sale (paid-now and targeted receipts),
+      // - untargeted (FIFO) payments whose only allocations were to this sale,
+      //   so no money record is left that settles nothing,
+      // - the invoice, and the audit row.
+      // Every sub-statement sees the rows as they were before the statement, so the
+      // FIFO check reads the allocations before they are deleted.
+      await tx.$executeRaw`
+        WITH reversal_input AS (
+          SELECT * FROM jsonb_to_recordset(${JSON.stringify(reversals)}::jsonb) AS r(
+            "id" text, "productId" text, "categoryId" text, "variantId" text, "saleLineId" text,
+            "lotId" text, "attributeSnapshot" jsonb, "unit" text, "qty" numeric
+          )
+        ),
+        new_reversals AS (
+          INSERT INTO "InventoryTransaction" ("id", "businessId", "productId", "categoryId", "variantId",
+                                              "saleLineId", "lotId", "attributeSnapshot", "unit", "type",
+                                              "qty", "referenceType", "referenceId", "date")
+          SELECT r."id", ${businessId}, r."productId", r."categoryId", r."variantId",
+                 r."saleLineId", r."lotId", r."attributeSnapshot", r."unit", 'RETURN'::"InventoryTxType",
+                 r."qty", 'SALE_DELETE', ${sale.id}, ${saleDate}::date
+          FROM reversal_input r
+          RETURNING "id"
+        ),
+        orphan_payments AS (
+          DELETE FROM "Payment" p
+          WHERE p."businessId" = ${businessId}
+            AND p."saleId" IS NULL
+            AND p."id" IN (
+              SELECT a."paymentId" FROM "PaymentAllocation" a
+              WHERE a."businessId" = ${businessId} AND a."saleId" = ${sale.id}
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM "PaymentAllocation" other
+              WHERE other."paymentId" = p."id" AND other."saleId" IS DISTINCT FROM ${sale.id}
+            )
+          RETURNING p."id"
+        ),
+        sale_payments AS (
+          DELETE FROM "Payment"
+          WHERE "businessId" = ${businessId} AND "saleId" = ${sale.id}
+          RETURNING "id"
+        ),
+        sale_allocations AS (
+          DELETE FROM "PaymentAllocation"
+          WHERE "businessId" = ${businessId} AND "saleId" = ${sale.id}
+          RETURNING "id"
+        ),
+        sale_invoice AS (
+          DELETE FROM "Invoice"
+          WHERE "businessId" = ${businessId} AND "saleId" = ${sale.id}
+          RETURNING "id"
+        ),
+        new_audit AS (
+          INSERT INTO "AuditLog" ("id", "businessId", "actorId", "action", "entityType", "entityId")
+          VALUES (${newRecordId()}, ${businessId}, ${actorId ?? null}, 'sale.deleted', 'sale', ${sale.id})
+          RETURNING "id"
+        )
+        SELECT 1
+      `;
       await tx.sale.delete({ where: { id: sale.id, businessId } });
-
-      await this.audit.logTx(tx, {
-        businessId,
-        actorId: actorId ?? null,
-        action: "sale.deleted",
-        entityType: "sale",
-        entityId: sale.id,
-      });
 
       return { deleted: true, saleId: sale.id };
     });

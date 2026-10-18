@@ -8,6 +8,8 @@ import { dateInIsoRange } from "@/lib/date-range-filter";
 import { DatePicker } from "@/components/ui/date-picker";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import type { Expense } from "@/lib/types";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../../lib/decimal";
 
 type DraftLine = { name: string; amount: string };
 
@@ -53,7 +55,7 @@ export default function ExpensesPage() {
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [filtered]);
 
-  const total = filtered.reduce((sum, e) => sum + e.amount, 0);
+  const total = filtered.reduce((sum, e) => sum.plus(toDecimal(e.amount)), new Decimal(0)).toNumber();
   const hasFilters = query.trim() !== "" || !!(dateRange.from || dateRange.to);
 
   const openAdd = () => {
@@ -264,7 +266,13 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add expense" size="lg">
+      <Modal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        busy={savingExpense || isPending("expense:create")}
+        title="Add expense"
+        size="lg"
+      >
         <form onSubmit={save} className="flex flex-col gap-4">
           {error ? (
             <div
@@ -347,7 +355,12 @@ export default function ExpensesPage() {
             </button>
           </div>
           <div className="flex justify-end gap-3 mt-2">
-            <button type="button" className="btn-ghost" onClick={() => setAddOpen(false)}>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setAddOpen(false)}
+              disabled={savingExpense || isPending("expense:create")}
+            >
               Cancel
             </button>
             <BusyButton type="submit" loading={savingExpense || isPending("expense:create")}>

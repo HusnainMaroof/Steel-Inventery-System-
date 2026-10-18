@@ -1,3 +1,11 @@
+import { Prisma } from "@prisma/client";
+import { roundMoneyDecimal } from "./money";
+
+/** Money tolerance: amounts within half a paisa are treated as zero. */
+const TOLERANCE = new Prisma.Decimal("0.005");
+const Decimal = Prisma.Decimal;
+const dec = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
+
 /**
  * Payment settlement (§10, §27): payments never overwrite balances — every
  * payment is a record, and customer payments without a target invoice settle
@@ -5,8 +13,8 @@
  */
 export interface OpenInvoice {
   saleId: string;
-  total: number;
-  paidSoFar: number;
+  total: Prisma.Decimal.Value;
+  paidSoFar: Prisma.Decimal.Value;
   /** ISO date of the sale — smaller settles first. */
   date: string;
 }
@@ -28,32 +36,38 @@ export interface SettlementResult {
  */
 export function settleFifo(
   openInvoices: OpenInvoice[],
-  amount: number,
+  amount: Prisma.Decimal.Value,
 ): SettlementResult {
   const ordered = [...openInvoices]
-    .filter((i) => i.total - i.paidSoFar > 0.005)
+    .filter((i) => dec(i.total).minus(dec(i.paidSoFar)).gt(TOLERANCE))
     .sort((a, b) => a.date.localeCompare(b.date) || a.saleId.localeCompare(b.saleId));
 
-  let left = amount;
+  let left = dec(amount);
   const allocations: Allocation[] = [];
 
   for (const invoice of ordered) {
-    if (left <= 0.005) break;
-    const due = round2(invoice.total - invoice.paidSoFar);
-    const take = Math.min(due, left);
-    if (take > 0.005) {
-      allocations.push({ saleId: invoice.saleId, amount: round2(take) });
-      left = round2(left - take);
+    if (left.lte(TOLERANCE)) break;
+    const due = roundMoneyDecimal(dec(invoice.total).minus(dec(invoice.paidSoFar)));
+    const take = Decimal.min(due, left);
+    if (take.gt(TOLERANCE)) {
+      allocations.push({
+        saleId: invoice.saleId,
+        amount: roundMoneyDecimal(take).toNumber(),
+      });
+      left = left.minus(take);
     }
   }
 
-  return { allocations, unallocated: round2(Math.max(0, left)) };
+  return {
+    allocations,
+    unallocated: roundMoneyDecimal(Decimal.max(left, 0)).toNumber(),
+  };
 }
 
 export interface OpenPurchase {
   purchaseId: string;
-  goodsTotal: number;
-  paid: number;
+  goodsTotal: Prisma.Decimal.Value;
+  paid: Prisma.Decimal.Value;
 }
 
 export interface PurchaseAllocation {
@@ -69,33 +83,39 @@ export interface SupplierSettlementResult {
 /** Settle a supplier payment against open purchase dues in the given FIFO order. */
 export function settleSupplierFifo(
   openPurchases: OpenPurchase[],
-  amount: number,
+  amount: Prisma.Decimal.Value,
 ): SupplierSettlementResult {
-  let left = amount;
+  let left = dec(amount);
   const allocations: PurchaseAllocation[] = [];
 
   for (const purchase of openPurchases) {
-    if (left <= 0.005) break;
-    const due = round2(Math.max(0, purchase.goodsTotal - purchase.paid));
-    const take = Math.min(due, left);
-    if (take > 0.005) {
-      allocations.push({ purchaseId: purchase.purchaseId, amount: round2(take) });
-      left = round2(left - take);
+    if (left.lte(TOLERANCE)) break;
+    const due = roundMoneyDecimal(
+      Decimal.max(dec(purchase.goodsTotal).minus(dec(purchase.paid)), 0),
+    );
+    const take = Decimal.min(due, left);
+    if (take.gt(TOLERANCE)) {
+      allocations.push({
+        purchaseId: purchase.purchaseId,
+        amount: roundMoneyDecimal(take).toNumber(),
+      });
+      left = left.minus(take);
     }
   }
 
-  return { allocations, unallocated: round2(Math.max(0, left)) };
+  return {
+    allocations,
+    unallocated: roundMoneyDecimal(Decimal.max(left, 0)).toNumber(),
+  };
 }
 
 /** Supplier payable = per purchase (goods total − paid). Charges are on us. */
 export function supplierPayable(
-  purchases: { goodsTotal: number; paid: number }[],
+  purchases: { goodsTotal: Prisma.Decimal.Value; paid: Prisma.Decimal.Value }[],
 ): number {
-  return round2(
-    purchases.reduce((sum, p) => sum + Math.max(0, p.goodsTotal - p.paid), 0),
-  );
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  const total = purchases.reduce((sum, p) => {
+    const due = dec(p.goodsTotal).minus(dec(p.paid));
+    return sum.plus(Prisma.Decimal.max(due, 0));
+  }, new Prisma.Decimal(0));
+  return roundMoneyDecimal(total).toNumber();
 }

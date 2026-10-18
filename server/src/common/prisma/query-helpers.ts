@@ -5,7 +5,7 @@ export async function consumedQtyByLot(
   tx: Prisma.TransactionClient,
   businessId: string,
   purchaseIds: string[],
-): Promise<Map<string, number>> {
+): Promise<Map<string, Prisma.Decimal>> {
   if (purchaseIds.length === 0) return new Map();
   const rows = await tx.$queryRaw<
     { purchaseId: string; productId: string; variantId: string | null; qty: string }[]
@@ -21,7 +21,7 @@ export async function consumedQtyByLot(
   return new Map(
     rows.map((row) => [
       `${row.purchaseId}:${row.productId}:${row.variantId ?? ""}`,
-      Number(row.qty),
+      new Prisma.Decimal(row.qty),
     ]),
   );
 }
@@ -42,7 +42,7 @@ export async function openPurchasesForSupplier(
     SELECT p.id,
            p.paid,
            COALESCE((
-             SELECT SUM(pl.qty * pl.rate)
+             SELECT ROUND(SUM(pl.qty * pl.rate), 2)
              FROM "PurchaseLine" pl
              WHERE pl."purchaseId" = p.id
            ), 0)::text AS goods

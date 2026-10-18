@@ -309,7 +309,7 @@ export default function ReportsPage() {
           }
         />
       ) : hasAny ? (
-        <div className={reportLoading ? "opacity-60" : ""}>
+        <div>
           <div
             role="tablist"
             aria-label="Report sections"
@@ -360,11 +360,12 @@ export default function ReportsPage() {
       <Modal
         open={checkOpen}
         onClose={() => setCheckOpen(false)}
+        busy={isPending("stock-check:create")}
         title="Record Stock Count"
         subtitle="Count what is actually in the yard. Do not copy the system figure."
         footer={
           <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" className="btn-ghost min-h-[44px]" onClick={() => setCheckOpen(false)}>
+            <button type="button" className="btn-ghost min-h-[44px]" onClick={() => setCheckOpen(false)} disabled={isPending("stock-check:create")}>
               Cancel
             </button>
             <BusyButton type="button" className="min-h-[44px]" onClick={saveCheck} loading={isPending("stock-check:create")}>

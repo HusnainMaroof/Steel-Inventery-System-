@@ -8,6 +8,8 @@ import { ConfirmModal, EmptyState, ErrorState, PaginationBar, RowActionsMenu } f
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { dateInIsoRange } from "@/lib/date-range-filter";
 import { fmtMoney, fmtDate, fmtTime, fmtQtyWithUnit } from "@/lib/format";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../lib/decimal";
 
 type AttrRow = { label: string; value: string };
 
@@ -183,11 +185,11 @@ export default function SalesTable({
       .map(([date, list]) => ({
         date,
         sales: list,
-        dayTotal: list.reduce((a, r) => a + r.total, 0),
+        dayTotal: list.reduce((a, r) => a.plus(toDecimal(r.total)), new Decimal(0)).toNumber(),
       }));
   }, [rows, sales, search, statusFilter, dateRange]);
 
-  const totalDue = groups.reduce((a, g) => a + g.sales.reduce((b, r) => b + r.due, 0), 0);
+  const totalDue = groups.reduce((a, g) => a.plus(toDecimal(g.sales.reduce((b, r) => b.plus(toDecimal(r.due)), new Decimal(0)).toNumber())), new Decimal(0)).toNumber();
   const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
 
   const menuItems = (s: SaleRow) => [

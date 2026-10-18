@@ -15,6 +15,8 @@ import PrintPack from "@/components/sales/PrintPack";
 import { useSaleDraft } from "@/components/sales/useSaleDraft";
 import { productUsesCategories, resolveDefs } from "@/lib/catalogue";
 import { useUiPreferences } from "@/lib/preferences";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../../lib/decimal";
 
 export default function SalesPage() {
   const { sales, customers, inventory, products, categories, attributeDefs, addSale, addCustomer, deleteSale, salePaid, isPending } = useStore();
@@ -53,7 +55,7 @@ export default function SalesPage() {
   const savingSaleRef = useRef(false);
 
   /* ---- money on the current draft ---- */
-  const subtotal = api.lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
+  const subtotal = api.lines.reduce((a, l) => a.plus(toDecimal((Number(l.qty) || 0) * (Number(l.rate) || 0))), new Decimal(0)).toNumber();
   const discAmt = subtotal * (discountPct / 100);
   const taxable = subtotal - discAmt;
   const taxAmt = taxable * (taxPct / 100);
@@ -102,13 +104,13 @@ export default function SalesPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingSaleRef.current || !canSave || isPending("sale:create")) return;
-    savingSaleRef.current = true;
-    setSavingSale(true);
     const paying = Number(paidNow) || 0;
     if (paying > grandTotal + 0.001) {
       setPayError(`Amount paid (${fmtMoney(paying)}) can't be more than this sale's total of ${fmtMoney(grandTotal)}.`);
       return;
     }
+    savingSaleRef.current = true;
+    setSavingSale(true);
     setPayError("");
     setSubmitError("");
     try {
@@ -304,7 +306,7 @@ export default function SalesPage() {
       />
 
       {/* add customer popup — the only popup left */}
-      <Modal open={newCustOpen} onClose={onNewCustClose} title="New Customer">
+      <Modal open={newCustOpen} onClose={onNewCustClose} busy={isPending("customer:create")} title="New Customer">
         <form onSubmit={saveNewCustomer} className="grid gap-4">
           {newCustError ? <InlineFormError message={newCustError} /> : null}
           <div>
@@ -320,7 +322,7 @@ export default function SalesPage() {
             <input value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} />
           </div>
           <div className="flex justify-end gap-3">
-            <button type="button" className="btn-ghost" onClick={onNewCustClose}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={onNewCustClose} disabled={isPending("customer:create")}>Cancel</button>
             <BusyButton type="submit" loading={isPending("customer:create")} disabled={!newCust.name.trim()}>
               Add Customer
             </BusyButton>

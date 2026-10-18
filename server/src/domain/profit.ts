@@ -1,4 +1,5 @@
-import { saleGrandTotal } from "./money";
+import { Prisma } from "@prisma/client";
+import { roundMoneyDecimal, saleGrandTotal } from "./money";
 
 /**
  * Profit engine (§27): the report is computed from transaction records, so
@@ -7,28 +8,35 @@ import { saleGrandTotal } from "./money";
  * Revenue attribution: an invoice's flat charges and discount/tax are spread
  * across its lines in proportion to each line's share of the subtotal — the
  * same rule as `saleGrandTotal`, so figures reconcile with invoices.
+ *
+ * Precision: unit cost stays an exact Decimal (never rounded to paisa before
+ * multiplying by quantity). Only the returned money totals are rounded to 2
+ * decimals, half-up.
  */
+type D = Prisma.Decimal.Value;
+const Dec = (v: D) => new Prisma.Decimal(v);
+
 export interface SaleLineForProfit {
   productId: string;
-  qty: number;
-  rate: number;
-  /** Landed cost per unit of this line (from its source purchase). */
-  unitCost: number;
+  qty: D;
+  rate: D;
+  /** Landed cost per unit of this line (from its source purchase), exact. */
+  unitCost: D;
 }
 
 export interface SaleForProfit {
   saleId: string;
   lines: SaleLineForProfit[];
-  discountPct: number;
-  taxPct: number;
-  loading: number;
-  transport: number;
-  labour: number;
+  discountPct: D;
+  taxPct: D;
+  loading: D;
+  transport: D;
+  labour: D;
 }
 
 export interface ExpenseForProfit {
   productId?: string; // absent = whole shop
-  amount: number;
+  amount: D;
 }
 
 export interface ProfitResult {
@@ -45,8 +53,8 @@ export function attributedLineRevenue(
   sale: SaleForProfit,
   line: SaleLineForProfit,
 ): number {
-  const subtotal = sale.lines.reduce((sum, l) => sum + l.qty * l.rate, 0);
-  if (subtotal <= 0) return 0;
+  const subtotal = sale.lines.reduce((sum, l) => sum.plus(Dec(l.qty).times(Dec(l.rate))), Dec(0));
+  if (subtotal.lte(0)) return 0;
   const totals = saleGrandTotal(
     sale.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
     {
@@ -57,8 +65,8 @@ export function attributedLineRevenue(
       labour: sale.labour,
     },
   );
-  const share = (line.qty * line.rate) / subtotal;
-  return round2(totals.grandTotal * share);
+  const share = Dec(line.qty).times(Dec(line.rate)).div(subtotal);
+  return roundMoneyDecimal(Dec(totals.grandTotal).times(share)).toNumber();
 }
 
 export function computeProfit(
@@ -66,12 +74,12 @@ export function computeProfit(
   expenses: ExpenseForProfit[],
   options: { productId?: string } = {},
 ): ProfitResult {
-  let salesRevenue = 0;
-  let stockCost = 0;
+  let salesRevenue = Dec(0);
+  let stockCost = Dec(0);
 
   for (const sale of sales) {
-    const subtotal = sale.lines.reduce((sum, l) => sum + l.qty * l.rate, 0);
-    if (subtotal <= 0) continue;
+    const subtotal = sale.lines.reduce((sum, l) => sum.plus(Dec(l.qty).times(Dec(l.rate))), Dec(0));
+    if (subtotal.lte(0)) continue;
     const totals = saleGrandTotal(
       sale.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
       {
@@ -84,28 +92,32 @@ export function computeProfit(
     );
 
     for (const line of sale.lines) {
-      const share = (line.qty * line.rate) / subtotal;
-      salesRevenue += totals.grandTotal * share;
-      stockCost += line.qty * line.unitCost;
+      const share = Dec(line.qty).times(Dec(line.rate)).div(subtotal);
+      salesRevenue = salesRevenue.plus(Dec(totals.grandTotal).times(share));
+      stockCost = stockCost.plus(Dec(line.qty).times(Dec(line.unitCost)));
     }
   }
 
-  salesRevenue = round2(salesRevenue);
-  stockCost = round2(stockCost);
-  const profitOnSales = round2(salesRevenue - stockCost);
+  const revenueRounded = roundMoneyDecimal(salesRevenue);
+  const costRounded = roundMoneyDecimal(stockCost);
+  const profitRounded = roundMoneyDecimal(revenueRounded.minus(costRounded));
 
-  const totalExpenses = round2(
-    expenses
-      .filter((e) => !options.productId || e.productId === options.productId)
-      .reduce((sum, e) => sum + e.amount, 0),
-  );
+  const totalExpensesDec = expenses
+    .filter((e) => !options.productId || e.productId === options.productId)
+    .reduce((sum, e) => sum.plus(Dec(e.amount)), Dec(0));
+  const totalExpenses = roundMoneyDecimal(totalExpensesDec);
 
-  const netProfit = round2(profitOnSales - totalExpenses);
-  const profitPct = salesRevenue > 0 ? round2((netProfit / salesRevenue) * 100) : 0;
+  const netProfit = roundMoneyDecimal(profitRounded.minus(totalExpenses));
+  const profitPct = revenueRounded.gt(0)
+    ? roundMoneyDecimal(netProfit.div(revenueRounded).times(100))
+    : Dec(0);
 
-  return { salesRevenue, stockCost, profitOnSales, totalExpenses, netProfit, profitPct };
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  return {
+    salesRevenue: revenueRounded.toNumber(),
+    stockCost: costRounded.toNumber(),
+    profitOnSales: profitRounded.toNumber(),
+    totalExpenses: totalExpenses.toNumber(),
+    netProfit: netProfit.toNumber(),
+    profitPct: profitPct.toNumber(),
+  };
 }

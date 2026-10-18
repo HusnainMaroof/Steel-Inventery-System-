@@ -2,6 +2,8 @@
 
 import { useStore } from "@/lib/store";
 import { fmtMoney } from "@/lib/format";
+import Decimal from "decimal.js";
+import { toDecimal } from "../lib/decimal";
 
 /** "Who owes who" panel — customers owing you vs. what you owe suppliers.
  *  Pass showWho={false} to show only the total due numbers, no party lists.
@@ -21,13 +23,13 @@ export default function CreditDebit({
     .map((c) => ({ c, bal: customerBalance(c.id) }))
     .filter((x) => x.bal > 0)
     .sort((a, b) => b.bal - a.bal);
-  const totalReceivable = receivableProp ?? owingCustomers.reduce((a, x) => a + x.bal, 0);
+  const totalReceivable = receivableProp ?? owingCustomers.reduce((a, x) => a.plus(toDecimal(x.bal)), new Decimal(0)).toNumber();
 
   const owingSuppliers = suppliers
     .map((s) => ({ s, bal: supplierBalance(s.id) }))
     .filter((x) => x.bal > 0)
     .sort((a, b) => b.bal - a.bal);
-  const totalPayable = payableProp ?? owingSuppliers.reduce((a, x) => a + x.bal, 0);
+  const totalPayable = payableProp ?? owingSuppliers.reduce((a, x) => a.plus(toDecimal(x.bal)), new Decimal(0)).toNumber();
 
   return (
     <div className="grid grid-cols-2 gap-4 mb-6">

@@ -2,17 +2,15 @@ import { BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PaymentsService } from "./payments.service";
 
+/**
+ * The service reads the daily total, the party and its open documents in one
+ * $queryRaw, then writes everything in a second one. These tests stop at the
+ * read: the rules must reject before any write runs.
+ */
 describe("PaymentsService payment integrity", () => {
   const tx = {
     $executeRaw: jest.fn().mockResolvedValue(1),
-    $queryRaw: jest.fn().mockResolvedValue([]),
-    customer: { findFirst: jest.fn() },
-    supplier: { findFirst: jest.fn() },
-    sale: { findFirst: jest.fn() },
-    payment: {
-      aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 0 } }),
-      create: jest.fn().mockResolvedValue({ id: "payment-1" }),
-    },
+    $queryRaw: jest.fn(),
   };
   const prisma = {
     $transaction: jest.fn((operation: (transaction: typeof tx) => unknown) =>
@@ -27,14 +25,11 @@ describe("PaymentsService payment integrity", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    tx.payment.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
-    tx.payment.create.mockResolvedValue({ id: "payment-1" });
-    tx.$queryRaw.mockResolvedValue([]);
   });
 
   it("rejects applying one customer's payment to another customer's invoice", async () => {
-    tx.customer.findFirst.mockResolvedValue({ id: "customer-a" });
-    tx.sale.findFirst.mockResolvedValue(null);
+    // The open-invoice read is scoped to customer A, so customer B's sale is not returned.
+    tx.$queryRaw.mockResolvedValueOnce([{ dayTotal: "0", partyFound: true, open: [] }]);
 
     await expect(
       service.create("business-1", {
@@ -44,21 +39,15 @@ describe("PaymentsService payment integrity", () => {
         amount: 10,
         date: "2026-09-25",
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toThrow(new BadRequestException("Invoice not found for this customer"));
 
-    expect(tx.sale.findFirst).toHaveBeenCalledWith({
-      where: {
-        id: "sale-owned-by-customer-b",
-        businessId: "business-1",
-        customerId: "customer-a",
-      },
-      select: { invoice: true },
-    });
+    // Only the read ran: no payment, allocation or audit write.
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(audit.logTx).not.toHaveBeenCalled();
   });
 
   it("rejects supplier payments that exceed all outstanding purchase dues", async () => {
-    tx.supplier.findFirst.mockResolvedValue({ id: "supplier-1" });
+    tx.$queryRaw.mockResolvedValueOnce([{ dayTotal: "0", partyFound: true, open: [] }]);
 
     await expect(
       service.create("business-1", {
@@ -69,6 +58,65 @@ describe("PaymentsService payment integrity", () => {
       }),
     ).rejects.toThrow("Supplier payment exceeds the remaining payable by 10.00");
 
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(audit.logTx).not.toHaveBeenCalled();
+  });
+
+  it("rejects a payment above the targeted invoice's remaining due before writing", async () => {
+    tx.$queryRaw.mockResolvedValueOnce([
+      {
+        dayTotal: "0",
+        partyFound: true,
+        open: [{ saleId: "sale-1", date: "2026-09-25", invoiceId: "inv-1", total: "100.00", paid: "95.00" }],
+      },
+    ]);
+
+    await expect(
+      service.create("business-1", {
+        type: "CUSTOMER",
+        customerId: "customer-a",
+        saleId: "sale-1",
+        amount: 10,
+        date: "2026-09-25",
+      }),
+    ).rejects.toThrow("Payment (10.00) exceeds the remaining due (5.00)");
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("rolls back when a guarded invoice update matched no row", async () => {
+    tx.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          dayTotal: "0",
+          partyFound: true,
+          open: [{ saleId: "sale-1", date: "2026-09-25", invoiceId: "inv-1", total: "100.00", paid: "0.00" }],
+        },
+      ])
+      .mockResolvedValueOnce([
+        { createdAt: new Date(), invoicesUpdated: 0, purchasesUpdated: 0, allocations: 1 },
+      ]);
+
+    await expect(
+      service.create("business-1", {
+        type: "CUSTOMER",
+        customerId: "customer-a",
+        saleId: "sale-1",
+        amount: 10,
+        date: "2026-09-25",
+      }),
+    ).rejects.toThrow("Payment exceeds the remaining due on this invoice or the invoice was not found");
+  });
+
+  it("enforces the daily payment cap from the read", async () => {
+    tx.$queryRaw.mockResolvedValueOnce([{ dayTotal: "499999999.00", partyFound: true, open: [] }]);
+
+    await expect(
+      service.create("business-1", {
+        type: "SUPPLIER",
+        supplierId: "supplier-1",
+        amount: 10,
+        date: "2026-09-25",
+      }),
+    ).rejects.toThrow("Daily payment limit");
   });
 });

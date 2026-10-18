@@ -17,6 +17,8 @@ import {
   purchaseTotals,
 } from "@/lib/purchase-utils";
 import type { AttributeDef, Purchase } from "@/lib/types";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../../lib/decimal";
 
 /* structured identity of a purchase line — rendered from the stored
    hierarchy, never the concatenated shortName:
@@ -274,7 +276,7 @@ export default function PurchasesPage() {
       .map(([date, items]) => ({
         date,
         rows: items,
-        dayTotal: items.reduce((a, p) => a + steelAmount(p), 0),
+        dayTotal: items.reduce((a, p) => a.plus(toDecimal(steelAmount(p))), new Decimal(0)).toNumber(),
       }));
   }, [filteredPurchases]);
 
@@ -879,6 +881,7 @@ export default function PurchasesPage() {
       <Modal
         open={!!payId}
         onClose={closePay}
+        busy={savingPay || isPending("payment:create")}
         title="Pay supplier"
         subtitle={
           payId
@@ -892,7 +895,7 @@ export default function PurchasesPage() {
         footer={
           payId ? (
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 w-full">
-              <button type="button" className="btn-ghost w-full sm:w-auto !py-2.5" onClick={closePay}>
+              <button type="button" className="btn-ghost w-full sm:w-auto !py-2.5" onClick={closePay} disabled={savingPay || isPending("payment:create")}>
                 Cancel
               </button>
               <BusyButton

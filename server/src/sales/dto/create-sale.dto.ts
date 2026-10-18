@@ -28,6 +28,11 @@ export class CreateSaleLineDto {
   @IsString()
   categoryId?: string;
 
+  /** Optional exact stock lot (StockLot id) the goods come from. */
+  @IsOptional()
+  @IsCuid()
+  lotId?: string;
+
   /** Source lot — traceability: which purchase the goods came from. */
   @IsOptional()
   @IsCuid()

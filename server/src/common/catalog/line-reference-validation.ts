@@ -50,6 +50,25 @@ export async function assertLineReferences(
       : Promise.resolve([]),
   ]);
 
+  checkLineReferences(lines, { categories, variants, warehouses, locations });
+}
+
+/** Tenant-scoped rows the references point at. Missing rows mean "not found". */
+export type LineReferenceRows = {
+  categories: Array<{ id: string; productId: string }>;
+  variants: Array<{ id: string; productId: string; categoryId: string | null }>;
+  warehouses: Array<{ id: string }>;
+  locations: Array<{ id: string; warehouseId: string }>;
+};
+
+/**
+ * Pure check of line references against rows already loaded for the tenant.
+ * Lets a caller load the rows inside a larger query and still apply the same rules.
+ */
+export function checkLineReferences(
+  lines: LineRef[],
+  { categories, variants, warehouses, locations }: LineReferenceRows,
+): void {
   const categoryById = new Map(categories.map((row) => [row.id, row]));
   const variantById = new Map(variants.map((row) => [row.id, row]));
   const warehouseById = new Map(warehouses.map((row) => [row.id, row]));

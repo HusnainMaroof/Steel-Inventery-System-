@@ -103,7 +103,7 @@ redirects in Next config; tenant redirects live in page files and `Shell`.
 ```text
 AuthProvider
   StoreProvider
-    ServerStatusMonitor     # probes GET /api/health every 45s
+    ServerStatusMonitor     # probes GET /api/health on load, focus, and tab visible (no timer)
     Shell                   # sidebar / role redirects / print chrome skip
       {children}
 ```
@@ -296,7 +296,7 @@ shared store is required only if you run multiple API instances.
 | Stock checks | `stock-checks` | staff page `inventory` |
 | Reports | `reports` | staff page `reports` |
 | Media | `media` | `SUPERADMIN` or `ADMIN` |
-| Health | `health` | Public, unversioned |
+| Health | `health` | Public, unversioned. `GET /health` checks the DB (readiness). `GET /health/live` checks the process only, with no DB call (liveness, used by Docker). |
 
 `StaffAccessGuard` (used with `@RequireStaffPage`): plan `allowedPages`
 first, then staff `access[]`. Super Admin bypasses staff-page checks.
@@ -429,7 +429,7 @@ path that changes subscription or plan state invalidates eagerly:
 `PATCH /owners/:id/subscription` and `DELETE /owners/:id` per business,
 `PATCH /platform/subscription-plans/:id` for every business on that
 plan (plan edits change `billingCycle`/`allowedPages` on all of them).
-Measured impact (SCALE≈200, dev machine → Neon ap-southeast-1): every
+Historical measurement (SCALE≈200, dev machine → Neon ap-southeast-1, the region at the time): every
 authenticated endpoint lost ~215ms (one RTT); bootstrap p50 1342→108ms;
 `/ledger/transactions` 2027→864ms.
 

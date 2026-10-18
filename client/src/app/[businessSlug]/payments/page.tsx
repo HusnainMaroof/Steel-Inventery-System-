@@ -10,6 +10,8 @@ import { useBusinessHref } from "@/components/BusinessLink";
 import { purchaseParentId } from "@/lib/purchase-utils";
 import { fmtMoney, fmtDate, fmtDateTime } from "@/lib/format";
 import type { Payment, Purchase } from "@/lib/types";
+import Decimal from "decimal.js";
+import { toDecimal } from "../../../lib/decimal";
 
 type PaymentRow = {
   id: string;
@@ -192,8 +194,8 @@ export default function PaymentsPage() {
     [filtered, customers, suppliers, sales, purchases],
   );
 
-  const totalReceived = filtered.filter((p) => p.type === "customer").reduce((a, p) => a + p.amount, 0);
-  const totalPaid = filtered.filter((p) => p.type === "supplier").reduce((a, p) => a + p.amount, 0);
+  const totalReceived = filtered.filter((p) => p.type === "customer").reduce((a, p) => a.plus(toDecimal(p.amount)), new Decimal(0)).toNumber();
+  const totalPaid = filtered.filter((p) => p.type === "supplier").reduce((a, p) => a.plus(toDecimal(p.amount)), new Decimal(0)).toNumber();
 
   const sortedRows = useMemo(
     () =>
@@ -217,8 +219,8 @@ export default function PaymentsPage() {
     return [...map.entries()]
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([date, items]) => {
-        const dayIn = items.filter((i) => i.type === "customer").reduce((a, i) => a + i.amount, 0);
-        const dayOut = items.filter((i) => i.type === "supplier").reduce((a, i) => a + i.amount, 0);
+        const dayIn = items.filter((i) => i.type === "customer").reduce((a, i) => a.plus(toDecimal(i.amount)), new Decimal(0)).toNumber();
+        const dayOut = items.filter((i) => i.type === "supplier").reduce((a, i) => a.plus(toDecimal(i.amount)), new Decimal(0)).toNumber();
         return { date, items, dayIn, dayOut };
       });
   }, [sortedRows]);
