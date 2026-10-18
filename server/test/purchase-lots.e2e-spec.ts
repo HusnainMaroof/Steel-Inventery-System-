@@ -102,7 +102,7 @@ describeIfSafe("purchase lots (e2e, disposable local DB)", () => {
     await prisma.$connect();
 
     const [{ name }] = await prisma.$queryRaw<{ name: string }[]>`
-      SELECT current_database() AS name`;
+      SELECT current_database()::text AS name`;
     if (name !== SAFE_DB_NAME) {
       throw new Error(`Refusing to run: connected to database "${name}"`);
     }

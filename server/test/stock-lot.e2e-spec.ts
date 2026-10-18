@@ -147,7 +147,7 @@ describeIfSafe("StockLot schema and purchase reversals (e2e, disposable local DB
 
     // Second check on the live connection: refuse to run against any other DB.
     const [{ name }] = await prisma.$queryRaw<{ name: string }[]>`
-      SELECT current_database() AS name`;
+      SELECT current_database()::text AS name`;
     if (name !== SAFE_DB_NAME) {
       throw new Error(`Refusing to run: connected to database "${name}"`);
     }
