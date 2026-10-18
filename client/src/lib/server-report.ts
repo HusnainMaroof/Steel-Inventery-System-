@@ -72,14 +72,8 @@ function serverModeOf(mode: ReportMode, from?: string, to?: string): {
   return { mode: "month", month: new Date().getMonth() + 1 };
 }
 
-/** In-flight dedupe: identical concurrent report requests share one promise
- * (React Strict Mode remounts + the store's two dataVersion bumps used to
- * fire the same heavy report query up to four times at once). */
-const inFlightReports = new Map<string, Promise<ApiProfitReport>>();
-
-export function fetchServerProfitReport(
-  params: ReportFetchParams,
-): Promise<ApiProfitReport> {
+/** Build the canonical query string + API URL for a report request. */
+function buildReportQuery(params: ReportFetchParams): { key: string; url: string } {
   const mapped = serverModeOf(params.mode, params.from, params.to);
   const query = new URLSearchParams();
   query.set("mode", mapped.mode);
@@ -89,13 +83,69 @@ export function fetchServerProfitReport(
   if (mapped.to) query.set("to", mapped.to);
   if (params.productId) query.set("productId", params.productId);
   const key = query.toString();
+  return { key, url: `/reports/profit?${key}` };
+}
+
+/** In-flight dedupe: identical concurrent report requests share one promise
+ * (React Strict Mode remounts + the store's two dataVersion bumps used to
+ * fire the same heavy report query up to four times at once). */
+const inFlightReports = new Map<string, Promise<ApiProfitReport>>();
+
+/** An early report older than this is not trusted for the first load. */
+const EARLY_REPORT_MAX_AGE_MS = 15_000;
+
+type EarlyReportSlot = {
+  key: string;
+  startedAt: number;
+  request: Promise<ApiProfitReport | null>;
+};
+let earlyReport: EarlyReportSlot | null = null;
+
+/**
+ * On a full page load of a tenant dashboard, the default profit report
+ * starts right away, in parallel with /api/auth/me and the bootstrap,
+ * instead of after the store becomes ready. Both requests carry the same
+ * session cookie. The dashboard adopts the response once; any failure or
+ * key mismatch falls back to a normal fetch.
+ */
+export function startEarlyProfitReport(params: ReportFetchParams): void {
+  if (typeof window === "undefined" || earlyReport) return;
+  const { key, url } = buildReportQuery(params);
+  earlyReport = {
+    key,
+    startedAt: Date.now(),
+    request: apiFetch<ApiProfitReport>(url).catch(() => null),
+  };
+}
+
+export function fetchServerProfitReport(
+  params: ReportFetchParams,
+): Promise<ApiProfitReport> {
+  const { key, url } = buildReportQuery(params);
   const existing = inFlightReports.get(key);
   if (existing) return existing;
-  const request = apiFetch<ApiProfitReport>(`/reports/profit?${key}`).finally(() => {
+  // The adopted early request is registered as in flight too, so a Strict Mode
+  // remount shares it instead of firing a second report.
+  const early = takeEarlyProfitReport(key);
+  const request = (
+    early
+      ? early.then((result) => result ?? apiFetch<ApiProfitReport>(url))
+      : apiFetch<ApiProfitReport>(url)
+  ).finally(() => {
     inFlightReports.delete(key);
   });
   inFlightReports.set(key, request);
   return request;
+}
+
+/** Hands out the early report at most once, and only for the same query. */
+function takeEarlyProfitReport(key: string): Promise<ApiProfitReport | null> | null {
+  const early = earlyReport;
+  earlyReport = null;
+  if (!early || early.key !== key || Date.now() - early.startedAt > EARLY_REPORT_MAX_AGE_MS) {
+    return null;
+  }
+  return early.request;
 }
 
 /**

@@ -1,5 +1,15 @@
-import type { ReportFetchParams } from "./server-report";
+import { startEarlyProfitReport, type ReportFetchParams } from "./server-report";
 import { normalizeIsoRange, todayIsoDay, type IsoRange } from "./date-range-filter";
+import { businessSlugFromPath, pagePathFromBusinessRoute } from "./business-path";
+
+// Kickstart the default dashboard report at module load so it races the bootstrap.
+if (
+  typeof window !== "undefined" &&
+  businessSlugFromPath(window.location.pathname) &&
+  pagePathFromBusinessRoute(window.location.pathname) === "/dashboard"
+) {
+  startEarlyProfitReport(dashboardReportParams("monthly", false, { from: null, to: null }, "all"));
+}
 
 export type DashboardPeriod = "today" | "monthly" | "yearly";
 
