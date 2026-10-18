@@ -161,6 +161,7 @@ export default function SuppliersPage() {
             <select
               value={searchMode}
               onChange={(e) => setSearchMode(e.target.value as "name" | "phone")}
+              aria-label="Search by"
               className="!w-auto !rounded-r-none !border-r-0"
             >
               <option value="name">Name</option>
@@ -173,6 +174,7 @@ export default function SuppliersPage() {
               <input
                 type="text"
                 placeholder={searchMode === "name" ? "Search by name..." : "Search by phone..."}
+                aria-label={searchMode === "name" ? "Search by name" : "Search by phone"}
                 value={searchInput}
                 onChange={(e) => onSearchChange(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { setAppliedSearch(searchInput); setAppliedMode(searchMode); } }}

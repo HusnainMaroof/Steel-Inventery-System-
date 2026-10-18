@@ -173,7 +173,7 @@ function DueCard({
   const accent = tone === "in" ? "text-[#2e6b2e]" : "text-[#a12b1f]";
 
   return (
-    <Card className="@container p-5 h-full flex flex-col justify-between gap-4 min-h-[140px]">
+    <Card className="@container p-5 h-full flex flex-col justify-between max-sm:justify-start gap-4 min-h-[140px] max-sm:min-h-0">
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#171717]">{label}</p>
       <div>
         {loading ? (
@@ -309,7 +309,7 @@ export default function DashboardPage() {
                   setPeriod(p.key);
                   setDateRange({ from: null, to: null });
                 }}
-                className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                className={`flex-1 sm:flex-none min-h-[36px] px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
                   !rangeActive && period === p.key
                     ? "bg-[#171717] text-white"
                     : "text-[#171717] hover:text-black"

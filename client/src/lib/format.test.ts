@@ -71,6 +71,12 @@ describe("fmtMoney for report party dues (full values, no compact notation)", ()
   it("keeps a negative-free zero due readable", () => {
     assert.equal(fmtMoney(0), "₨ 0");
   });
+
+  it("shows fractional amounts with exactly two decimal places", () => {
+    assert.equal(fmtMoney(175948.7), "₨ 175,948.70");
+    assert.equal(fmtMoney(17903.77), "₨ 17,903.77");
+    assert.equal(fmtMoney(0.004), "₨ 0");
+  });
 });
 
 describe("fmtMoney for dashboard KPIs (full values, no compact notation)", () => {

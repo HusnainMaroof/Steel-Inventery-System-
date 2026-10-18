@@ -114,7 +114,7 @@ export default function SettingsPage() {
                 ref={fileRef}
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                className="sr-only"
+                className="hidden"
                 onChange={(e) => void onPickLogo(e.target.files?.[0])}
               />
               <BusyButton
@@ -253,6 +253,7 @@ export default function SettingsPage() {
             type="button"
             role="switch"
             aria-checked={prefs.showOptionalDetails}
+            aria-label="Show extra fields"
             onClick={() => setPref("showOptionalDetails", !prefs.showOptionalDetails)}
             className={`relative w-11 h-6 rounded-full transition-colors ${
               prefs.showOptionalDetails ? "bg-[#171717]" : "bg-[#e5e5e5]"

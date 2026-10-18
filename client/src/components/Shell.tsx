@@ -100,7 +100,7 @@ function UserBlock({
         onClick={onSignOut}
         title="Sign out"
         aria-label="Sign out"
-        className="shrink-0 text-[10px] uppercase tracking-[0.12em] font-medium text-neutral-400 hover:text-black transition-colors px-2 py-1.5 rounded-sm hover:bg-neutral-100"
+        className="shrink-0 text-[10px] uppercase tracking-[0.12em] font-medium text-neutral-600 hover:text-black transition-colors px-2 py-1.5 rounded-sm hover:bg-neutral-100"
       >
         Sign out
       </button>
@@ -144,9 +144,9 @@ function BrandMark({
     if (logoPlaceholder) {
       return (
         <span
-          className={`font-medium text-neutral-500 ${
+          className={`font-medium text-neutral-500 whitespace-nowrap ${
             collapsed ? "text-[10px] uppercase tracking-wide text-center leading-tight" : "text-[13px]"
-          } ${className}`}
+          }`}
         >
           {collapsed ? "Logo" : "Your logo"}
         </span>
@@ -156,7 +156,7 @@ function BrandMark({
       <span
         className={`font-semibold tracking-tight text-[#171717] ${
           collapsed ? "text-sm" : "text-xl"
-        } ${className}`}
+        }`}
       >
         {collapsed ? brand.slice(0, 1) : brand}
       </span>
@@ -250,7 +250,7 @@ function MobileNav({
         <button
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
-          className="-ml-1 w-9 h-9 flex items-center justify-center rounded-sm text-neutral-700 hover:bg-neutral-100 active:scale-90 transition"
+          className="-ml-1 w-[44px] h-[44px] flex items-center justify-center rounded-sm text-neutral-700 hover:bg-neutral-100 active:scale-90 transition"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
             <path d="M2.5 5h15M2.5 10h15M2.5 15h15" />
@@ -259,7 +259,7 @@ function MobileNav({
         <Link href={brandHref} title={brand} className="flex-1 min-w-0 flex justify-center px-2">
           <BrandMark brand={brand} logoSrc={logoSrc} className="h-14 w-14 object-contain object-center" logoPlaceholder={logoPlaceholder} />
         </Link>
-        <span className="w-9" aria-hidden />
+        <span className="w-[44px]" aria-hidden />
       </header>
       {user.role === "SUPERADMIN" ? <AdminMobileTabBar pathname={pathname} /> : null}
       <main className="p-4 min-w-0 overflow-x-auto">{children}</main>

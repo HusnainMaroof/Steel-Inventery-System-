@@ -19,11 +19,13 @@ export const fmtNum = (n: number, decimals = 0) => {
  */
 export const fmtMoney = (n: number) => {
   if (!Number.isFinite(n)) return "₨ 0";
+  const rounded = Math.round(n * 100) / 100;
+  const fractionDigits = Number.isInteger(rounded) ? 0 : 2;
   return (
     "₨ " +
-    n.toLocaleString("en-US", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
+    rounded.toLocaleString("en-US", {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
     })
   );
 };

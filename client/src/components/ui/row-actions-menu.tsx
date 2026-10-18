@@ -74,7 +74,7 @@ export function RowActionsMenu({
   if (enabled.length === 0) return null;
 
   const defaultBtnClass =
-    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-black transition-colors hover:border-neutral-300 hover:bg-neutral-100";
+    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-black transition-colors hover:border-neutral-300 hover:bg-neutral-100 max-sm:h-[40px] max-sm:w-[40px]";
 
   return (
     <span

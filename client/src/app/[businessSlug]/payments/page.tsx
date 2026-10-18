@@ -324,6 +324,7 @@ export default function PaymentsPage() {
               <input
                 type="text"
                 placeholder="Search by name"
+                aria-label="Search by name"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") setAppliedSearch(searchInput); }}

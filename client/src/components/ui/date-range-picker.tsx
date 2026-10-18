@@ -339,7 +339,7 @@ export function DateRangePicker({
             role="button"
             tabIndex={0}
             aria-label={`Clear date range — ${appliedRange ?? ""}`}
-            className="ml-0.5 inline-flex size-4 items-center justify-center rounded-full text-white/60 hover:bg-white/15 hover:text-white"
+            className="-my-1 ml-0.5 inline-flex size-7 items-center justify-center rounded-full text-white/60 hover:bg-white/15 hover:text-white"
             onClick={(e) => {
               e.stopPropagation();
               clearAll();

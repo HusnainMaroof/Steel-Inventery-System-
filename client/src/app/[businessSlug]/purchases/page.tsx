@@ -341,7 +341,7 @@ export default function PurchasesPage() {
         </button>
       </div>
 
-      <div className="flex gap-4 sm:gap-6 border-b border-neutral-200 mb-5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div role="tablist" className="flex gap-4 sm:gap-6 border-b border-neutral-200 mb-5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {([
           ["all", "All Purchases"],
           ["dues", `Payment Dues${totalDue > 0 ? ` (${dueParentIds.length})` : ""}`],
@@ -349,8 +349,10 @@ export default function PurchasesPage() {
           <button
             key={key}
             type="button"
+            role="tab"
+            aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`shrink-0 pb-2.5 px-0.5 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors whitespace-nowrap ${
+            className={`shrink-0 pb-2.5 px-0.5 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors whitespace-nowrap max-sm:min-h-[40px] ${
               tab === key ? "border-neutral-900 text-neutral-900 font-semibold" : "border-transparent text-neutral-500 hover:text-neutral-800"
             }`}
           >

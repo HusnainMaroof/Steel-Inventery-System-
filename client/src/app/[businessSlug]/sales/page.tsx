@@ -210,7 +210,7 @@ export default function SalesPage() {
         }
       />
 
-      <div className="flex gap-6 border-b border-neutral-200 mb-4">
+      <div role="tablist" className="flex gap-6 border-b border-neutral-200 mb-4">
         {([
           ["invoices", "Sales"],
           ["print", "Print"],
@@ -218,6 +218,8 @@ export default function SalesPage() {
           <button
             key={key}
             type="button"
+            role="tab"
+            aria-selected={tab === key}
             onClick={() => {
               setTab(key);
               // Keep the business slug in the URL — a bare /sales would make
@@ -226,7 +228,7 @@ export default function SalesPage() {
               const next = businessHref(key === "print" ? "/sales?tab=print" : "/sales");
               window.history.replaceState(null, "", next);
             }}
-            className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors ${
+            className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors max-sm:min-h-[40px] ${
               tab === key ? "border-black text-black font-bold" : "border-transparent text-black font-normal hover:opacity-60"
             }`}
           >

@@ -274,6 +274,7 @@ export default function SalesTable({
           <input
             type="text"
             placeholder="Search customer or product"
+            aria-label="Search customer or product"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="!w-full !pl-9 !text-xs !py-2"

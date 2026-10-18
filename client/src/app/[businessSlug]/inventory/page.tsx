@@ -214,12 +214,12 @@ export default function InventoryPage() {
       />
 
       {/* tab switcher */}
-      <div className="flex gap-6 border-b border-neutral-200 mb-4">
+      <div role="tablist" className="flex gap-6 border-b border-neutral-200 mb-4">
         {([
           ["stock", "Stock"],
           ["movements", "Movements"],
         ] as const).map(([key, label]) => (
-          <button key={key} onClick={() => { setTab(key); setMovementVariant(null); }} className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors ${tab === key ? "border-black text-black font-bold" : "border-transparent text-black font-normal hover:opacity-60"}`}>
+          <button key={key} role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setMovementVariant(null); }} className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors max-sm:min-h-[40px] ${tab === key ? "border-black text-black font-bold" : "border-transparent text-black font-normal hover:opacity-60"}`}>
             {label}
           </button>
         ))}
@@ -234,6 +234,7 @@ export default function InventoryPage() {
           <input
             type="text"
             placeholder={tab === "stock" ? "Search product, variant, attribute, lot, supplier…" : "Search movements…"}
+            aria-label="Search products"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="!w-full !pl-9 !text-xs !py-2"
