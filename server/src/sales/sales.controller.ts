@@ -14,7 +14,8 @@ import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { SalesService } from "./sales.service";
 import { CreateSaleDto } from "./dto/create-sale.dto";
-import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { SalesListQueryDto } from "./dto/sales-list-query.dto";
+import { paginate, skipTake } from "../common/dto/pagination.dto";
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("sales")
@@ -31,15 +32,14 @@ export class SalesController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query() pagination: PaginationDto,
-    @Query("customerId") customerId?: string,
+    @Query() pagination: SalesListQueryDto,
   ) {
     const { skip, take } = skipTake(pagination.page, pagination.limit);
     const [items, total] = await this.salesService.list(
       user.businessId,
       skip,
       take,
-      customerId,
+      pagination.customerId,
     );
     return paginate(items, total, pagination.page, pagination.limit);
   }

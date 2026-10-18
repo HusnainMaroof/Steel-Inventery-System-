@@ -16,7 +16,8 @@ import { sanitizePlanPages } from "../common/panel-access";
 import { sanitizeAccess, type StaffPage } from "../common/staff-access";
 import { PaymentsService } from "./payments.service";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
-import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { PaymentsListQueryDto } from "./dto/payments-list-query.dto";
+import { paginate, skipTake } from "../common/dto/pagination.dto";
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 function assertCanRecordPayment(user: AuthUser, type: CreatePaymentDto["type"]) {
@@ -55,15 +56,14 @@ export class PaymentsController {
   @RequireStaffPage("payments")
   async list(
     @CurrentUser() user: AuthUser,
-    @Query() pagination: PaginationDto,
-    @Query("type") type?: "customer" | "supplier",
+    @Query() pagination: PaymentsListQueryDto,
   ) {
     const { skip, take } = skipTake(pagination.page, pagination.limit);
     const [items, total] = await this.paymentsService.list(
       user.businessId,
       skip,
       take,
-      type,
+      pagination.type,
     );
     return paginate(items, total, pagination.page, pagination.limit);
   }

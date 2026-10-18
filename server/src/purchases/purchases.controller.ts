@@ -15,7 +15,8 @@ import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { PurchasesService } from "./purchases.service";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
-import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { PurchasesListQueryDto } from "./dto/purchases-list-query.dto";
+import { paginate, skipTake } from "../common/dto/pagination.dto";
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 import { UpdatePurchaseDto } from "./dto/update-purchase.dto";
 
@@ -33,15 +34,14 @@ export class PurchasesController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query() pagination: PaginationDto,
-    @Query("supplierId") supplierId?: string,
+    @Query() pagination: PurchasesListQueryDto,
   ) {
     const { skip, take } = skipTake(pagination.page, pagination.limit);
     const [items, total] = await this.purchasesService.list(
       user.businessId,
       skip,
       take,
-      supplierId,
+      pagination.supplierId,
     );
     return paginate(items, total, pagination.page, pagination.limit);
   }

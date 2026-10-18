@@ -14,7 +14,8 @@ import { StaffAccessGuard } from "../common/guards/staff-access.guard";
 import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorator";
 import { ExpensesService } from "./expenses.service";
 import { CreateExpenseDto } from "./dto/create-expense.dto";
-import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
+import { ExpensesListQueryDto } from "./dto/expenses-list-query.dto";
+import { paginate, skipTake } from "../common/dto/pagination.dto";
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
 @Controller("expenses")
@@ -31,17 +32,14 @@ export class ExpensesController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query() pagination: PaginationDto,
-    @Query("productId") productId?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query() pagination: ExpensesListQueryDto,
   ) {
     const { skip, take } = skipTake(pagination.page, pagination.limit);
     const [items, total] = await this.expensesService.list(
       user.businessId,
       skip,
       take,
-      { productId, from, to },
+      { productId: pagination.productId, from: pagination.from, to: pagination.to },
     );
     return paginate(items, total, pagination.page, pagination.limit);
   }

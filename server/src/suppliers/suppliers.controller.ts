@@ -16,6 +16,7 @@ import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorat
 import { SuppliersService } from "./suppliers.service";
 import { CreateSupplierDto } from "./dto/create-supplier.dto";
 import { UpdateSupplierDto } from "./dto/update-supplier.dto";
+import { SuppliersListQueryDto } from "./dto/suppliers-list-query.dto";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
@@ -33,15 +34,14 @@ export class SuppliersController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query() pagination: PaginationDto,
-    @Query("search") search?: string,
+    @Query() pagination: SuppliersListQueryDto,
   ) {
     const { skip, take } = skipTake(pagination.page, pagination.limit);
     const [items, total] = await this.suppliersService.list(
       user.businessId,
       skip,
       take,
-      search,
+      pagination.search,
     );
     return paginate(items, total, pagination.page, pagination.limit);
   }

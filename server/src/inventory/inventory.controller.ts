@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { InventoryListQueryDto } from "./dto/inventory-list-query.dto";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
 import { RequireStaffPage } from "../common/decorators/require-staff-page.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -38,17 +39,14 @@ export class InventoryController {
   @Get("movements")
   async movements(
     @CurrentUser() user: AuthUser,
-    @Query() pagination: PaginationDto,
-    @Query("productId") productId?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query() pagination: InventoryListQueryDto,
   ) {
     const { skip, take } = skipTake(pagination.page, pagination.limit);
     const [items, total] = await this.inventoryService.movements(
       user.businessId,
       skip,
       take,
-      { productId, from, to },
+      { productId: pagination.productId, from: pagination.from, to: pagination.to },
     );
     return paginate(items, total, pagination.page, pagination.limit);
   }

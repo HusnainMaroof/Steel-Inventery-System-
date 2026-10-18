@@ -16,6 +16,7 @@ import { CurrentUser, AuthUser } from "../common/decorators/current-user.decorat
 import { CustomersService } from "./customers.service";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
+import { CustomersListQueryDto } from "./dto/customers-list-query.dto";
 import { PaginationDto, paginate, skipTake } from "../common/dto/pagination.dto";
 import { ParseIdPipe } from "../common/pipes/parse-id.pipe";
 
@@ -33,15 +34,14 @@ export class CustomersController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query() pagination: PaginationDto,
-    @Query("search") search?: string,
+    @Query() pagination: CustomersListQueryDto,
   ) {
     const { skip, take } = skipTake(pagination.page, pagination.limit);
     const [items, total] = await this.customersService.list(
       user.businessId,
       skip,
       take,
-      search,
+      pagination.search,
     );
     return paginate(items, total, pagination.page, pagination.limit);
   }
