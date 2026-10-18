@@ -7,6 +7,7 @@ import { UpdatePurchaseLineDto } from "./dto/update-purchase.dto";
 describe("purchase payment history safety", () => {
   const tx = {
     $executeRaw: jest.fn().mockResolvedValue(1),
+    $queryRaw: jest.fn().mockResolvedValue([{ supplierId: "supplier-1", locked: "1" }]),
     purchase: { findFirst: jest.fn() },
   };
   const prisma = {
@@ -78,16 +79,8 @@ describe("purchase stock safety", () => {
 describe("purchase deletion ledger reversal", () => {
   const tx = {
     $executeRaw: jest.fn(),
+    $queryRaw: jest.fn(),
     purchase: { findFirst: jest.fn(), delete: jest.fn() },
-    saleLine: { count: jest.fn() },
-    payment: { findFirst: jest.fn() },
-    inventoryTransaction: {
-      groupBy: jest.fn(),
-      count: jest.fn(),
-      findMany: jest.fn(),
-      createMany: jest.fn(),
-    },
-    stockLot: { updateMany: jest.fn() },
   };
   const prisma = {
     $transaction: jest.fn((operation: (t: typeof tx) => unknown) =>
@@ -118,10 +111,41 @@ describe("purchase deletion ledger reversal", () => {
       refLabel: "LOT-1",
       purchaseLineId: "line-1",
       lotId: "lot-1",
-      qty: new Prisma.Decimal("10.500"),
-      date: new Date("2026-10-01"),
+      qty: "10.500",
+      date: "2026-10-01",
     },
   ];
+  const defaultReads = () => ({
+    sourcedSales: false,
+    linkedPayment: false,
+    legacyUnallocated: false,
+    stock: [] as Array<{ productId: string; variantId: string | null; qty: string }>,
+    originals,
+  });
+  let lockRows: Array<{ supplierId: string; locked: unknown }>;
+  let reads = defaultReads();
+
+  // The lock statement and the guard read are the same $queryRaw, told apart by SQL.
+  const isLockQuery = (strings: TemplateStringsArray) =>
+    strings.join("").includes("pg_advisory_xact_lock");
+  const cteSql = () => {
+    const calls = tx.$executeRaw.mock.calls;
+    return (calls[calls.length - 1][0] as TemplateStringsArray).join("");
+  };
+  const cteValues = () => {
+    const calls = tx.$executeRaw.mock.calls;
+    return calls[calls.length - 1].slice(1) as unknown[];
+  };
+  const cteReversals = () => {
+    const json = cteValues().find(
+      (value): value is string => typeof value === "string" && value.startsWith("["),
+    );
+    return JSON.parse(json ?? "[]") as Array<Record<string, unknown>>;
+  };
+  const cteCalled = () =>
+    tx.$executeRaw.mock.calls.some((call: unknown[]) =>
+      (call[0] as TemplateStringsArray).join("").includes('INSERT INTO "AuditLog"'),
+    );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -129,101 +153,93 @@ describe("purchase deletion ledger reversal", () => {
     tx.$executeRaw.mockResolvedValue(1);
     tx.purchase.findFirst.mockResolvedValue(purchase);
     tx.purchase.delete.mockResolvedValue(purchase);
-    tx.saleLine.count.mockResolvedValue(0);
-    tx.payment.findFirst.mockResolvedValue(null);
-    tx.inventoryTransaction.groupBy.mockResolvedValue([]);
-    tx.inventoryTransaction.count.mockResolvedValue(0);
-    tx.inventoryTransaction.findMany.mockResolvedValue(originals);
-    tx.inventoryTransaction.createMany.mockResolvedValue({ count: 1 });
-    tx.stockLot.updateMany.mockResolvedValue({ count: 1 });
     audit.logTx.mockResolvedValue(undefined);
+    lockRows = [{ supplierId: "supplier-1", locked: null }];
+    reads = defaultReads();
+    tx.$queryRaw.mockImplementation(async (strings: TemplateStringsArray) =>
+      isLockQuery(strings) ? lockRows : [reads],
+    );
   });
 
   it("carries the original line and lot identity onto the reversal and voids the lot", async () => {
     await service.remove("business-1", "purchase-1");
 
-    const { data } = tx.inventoryTransaction.createMany.mock.calls[0][0];
-    expect(data[0]).toMatchObject({ purchaseLineId: "line-1", lotId: "lot-1" });
-    expect(tx.stockLot.updateMany).toHaveBeenCalledWith({
-      where: { businessId: "business-1", purchaseId: "purchase-1" },
-      data: { status: "VOIDED" },
-    });
+    expect(cteReversals()[0]).toMatchObject({ purchaseLineId: "line-1", lotId: "lot-1" });
+    expect(cteSql()).toContain("UPDATE \"StockLot\" SET \"status\" = 'VOIDED'");
   });
 
   it("writes one negated PURCHASE_DELETE reversal per original row", async () => {
     const result = await service.remove("business-1", "purchase-1", "actor-1");
 
     expect(result).toEqual({ deleted: true, purchaseId: "purchase-1" });
-    expect(tx.inventoryTransaction.createMany).toHaveBeenCalledTimes(1);
-    const { data } = tx.inventoryTransaction.createMany.mock.calls[0][0];
-    expect(data).toHaveLength(1);
-    expect(data[0]).toMatchObject({
-      businessId: "business-1",
+    const reversals = cteReversals();
+    expect(reversals).toHaveLength(1);
+    expect(reversals[0]).toMatchObject({
       productId: "product-1",
       type: "ADJUSTMENT",
       referenceType: "PURCHASE_DELETE",
       referenceId: "purchase-1",
       unit: "kg",
       refLabel: "LOT-1",
-      date: new Date("2026-10-01"),
+      date: "2026-10-01",
     });
-    expect(new Prisma.Decimal(data[0].qty).toFixed(3)).toBe("-10.500");
+    expect(reversals[0].id).toMatch(/^c[0-9a-f]{24}$/);
+    expect(new Prisma.Decimal(reversals[0].qty as string).toFixed(3)).toBe("-10.500");
   });
 
   it("reads every purchase ledger type for reversal and never deletes original rows", async () => {
     await service.remove("business-1", "purchase-1");
 
     // PURCHASE_EDIT and PURCHASE_LINE_REVERSAL rows also belong to this purchase.
-    expect(tx.inventoryTransaction.findMany).toHaveBeenCalledWith({
-      where: {
-        businessId: "business-1",
-        referenceType: { in: ["PURCHASE", "PURCHASE_EDIT", "PURCHASE_LINE_REVERSAL"] },
-        referenceId: "purchase-1",
-      },
-    });
-    expect(tx.inventoryTransaction).not.toHaveProperty("deleteMany");
+    const readCall = tx.$queryRaw.mock.calls.find((call: unknown[]) =>
+      (call[0] as TemplateStringsArray).join("").includes('"InventoryTransaction"'),
+    );
+    expect(readCall).toBeDefined();
+    expect((readCall ?? []).slice(1)).toContainEqual([
+      "PURCHASE",
+      "PURCHASE_EDIT",
+      "PURCHASE_LINE_REVERSAL",
+    ]);
+
+    const allSql = [...tx.$queryRaw.mock.calls, ...tx.$executeRaw.mock.calls]
+      .map((call: unknown[]) => (call[0] as TemplateStringsArray).join(""))
+      .join("\n");
+    expect(allSql).not.toContain('DELETE FROM "InventoryTransaction"');
   });
 
   it("nets stock to zero: original plus reversal equals no change", async () => {
     await service.remove("business-1", "purchase-1");
 
-    const { data } = tx.inventoryTransaction.createMany.mock.calls[0][0];
     const originalQty = new Prisma.Decimal("10.500");
-    const reversalQty = new Prisma.Decimal(data[0].qty);
+    const reversalQty = new Prisma.Decimal(cteReversals()[0].qty as string);
     expect(originalQty.plus(reversalQty).toFixed(3)).toBe("0.000");
   });
 
-  it("writes an audit entry in the same transaction", async () => {
+  it("writes the audit row in the same statement as the reversal and lot void", async () => {
     await service.remove("business-1", "purchase-1", "actor-1");
 
-    expect(audit.logTx).toHaveBeenCalledWith(
-      tx,
-      expect.objectContaining({
-        businessId: "business-1",
-        actorId: "actor-1",
-        action: "purchase.deleted",
-        entityId: "purchase-1",
-      }),
-    );
+    expect(cteSql()).toContain('INSERT INTO "AuditLog"');
+    expect(cteSql()).toContain("'purchase.deleted'");
+    expect(cteValues()).toContain("actor-1");
   });
 
   it("rejects deletion when the purchase lot was sold", async () => {
-    tx.saleLine.count.mockResolvedValue(1);
+    reads = { ...defaultReads(), sourcedSales: true };
 
     await expect(service.remove("business-1", "purchase-1")).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(tx.inventoryTransaction.createMany).not.toHaveBeenCalled();
+    expect(cteCalled()).toBe(false);
     expect(tx.purchase.delete).not.toHaveBeenCalled();
   });
 
   it("rejects deletion when supplier payments reference the purchase", async () => {
-    tx.payment.findFirst.mockResolvedValueOnce({ id: "payment-1" });
+    reads = { ...defaultReads(), linkedPayment: true };
 
     await expect(service.remove("business-1", "purchase-1")).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(tx.inventoryTransaction.createMany).not.toHaveBeenCalled();
+    expect(cteCalled()).toBe(false);
     expect(tx.purchase.delete).not.toHaveBeenCalled();
   });
 
@@ -236,26 +252,17 @@ describe("purchase deletion ledger reversal", () => {
     await expect(service.remove("business-1", "purchase-1")).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(tx.inventoryTransaction.createMany).not.toHaveBeenCalled();
-  });
-
-  it("rejects a second reversal when one already exists", async () => {
-    tx.inventoryTransaction.count.mockResolvedValue(1);
-
-    await expect(service.remove("business-1", "purchase-1")).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-    expect(tx.inventoryTransaction.createMany).not.toHaveBeenCalled();
-    expect(tx.purchase.delete).not.toHaveBeenCalled();
+    expect(cteCalled()).toBe(false);
   });
 
   it("returns not found for a repeated delete after the purchase is gone", async () => {
-    tx.purchase.findFirst.mockResolvedValue(null);
+    lockRows = [];
 
     await expect(service.remove("business-1", "purchase-1")).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    expect(tx.inventoryTransaction.createMany).not.toHaveBeenCalled();
+    expect(cteCalled()).toBe(false);
+    expect(tx.purchase.delete).not.toHaveBeenCalled();
   });
 
   it("scopes the lookup to the caller's business (cross-tenant safe)", async () => {
@@ -267,6 +274,7 @@ describe("purchase deletion ledger reversal", () => {
     expect(tx.purchase.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "purchase-1", businessId: "business-2" } }),
     );
+    expect(tx.$queryRaw.mock.calls[0].slice(1)).toContain("business-2");
   });
 
   it("propagates a write failure so the caller sees the error", async () => {
@@ -351,9 +359,8 @@ describe("purchase line edit safety", () => {
   describe("update path (mocked)", () => {
     const tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      $queryRaw: jest.fn(),
       purchase: { findFirst: jest.fn(), update: jest.fn(), findUniqueOrThrow: jest.fn() },
-      saleLine: { count: jest.fn() },
-      payment: { findFirst: jest.fn().mockResolvedValue(null) },
       purchaseLine: { create: jest.fn(), update: jest.fn(), delete: jest.fn() },
       inventoryTransaction: { createMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -363,10 +370,28 @@ describe("purchase line edit safety", () => {
     const audit = { logTx: jest.fn() };
     const service = new PurchasesService(prisma as unknown as PrismaService, audit as never);
 
+    const defaultGuard = () => ({
+      sourcedSales: false,
+      linkedPayment: false,
+      legacyUnallocated: false,
+      supplierFound: true,
+      productCount: 1,
+      categories: [],
+      variants: [],
+      warehouses: [],
+      locations: [],
+      stock: [],
+    });
+
+    const isLockQuery = (strings: TemplateStringsArray) =>
+      strings.join("").includes("pg_advisory_xact_lock");
+
     beforeEach(() => {
       jest.clearAllMocks();
       tx.$executeRaw.mockResolvedValue(1);
-      tx.payment.findFirst.mockResolvedValue(null);
+      tx.$queryRaw.mockImplementation(async (strings: TemplateStringsArray, ...values: unknown[]) =>
+        isLockQuery(strings) ? (values.includes("business-2") ? [] : [{ supplierId: "supplier-1", locked: "1" }]) : [defaultGuard()],
+      );
       tx.purchase.findFirst.mockResolvedValue({
         id: "purchase-1",
         supplierId: "supplier-1",
@@ -379,31 +404,38 @@ describe("purchase line edit safety", () => {
     });
 
     it("header-only edit on a sold purchase does not touch lines or ledger rows", async () => {
-      tx.saleLine.count.mockResolvedValue(3);
+      const result = await service.update("business-1", "purchase-1", { notes: "new note" });
 
-      await service.update("business-1", "purchase-1", { notes: "new note" });
-
-      expect(tx.purchase.update).toHaveBeenCalled();
-      expect(tx.saleLine.count).not.toHaveBeenCalled();
+      expect(tx.purchase.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "purchase-1", businessId: "business-1" } }),
+      );
       expect(tx.purchaseLine.delete).not.toHaveBeenCalled();
       expect(tx.purchaseLine.update).not.toHaveBeenCalled();
       expect(tx.purchaseLine.create).not.toHaveBeenCalled();
       expect(tx.inventoryTransaction.createMany).not.toHaveBeenCalled();
+      expect(tx.purchase.findUniqueOrThrow).not.toHaveBeenCalled();
+      // No line change: the post-lock read is the final line state, no second read.
+      expect(result.lines).toHaveLength(2);
     });
 
     it("resending identical lines on a sold purchase is a no-op", async () => {
-      tx.saleLine.count.mockResolvedValue(3);
-
       await service.update("business-1", "purchase-1", {
         lines: [requested({ id: "line-1" }), requested({ id: "line-2" })],
       });
 
-      expect(tx.saleLine.count).not.toHaveBeenCalled();
+      expect(tx.purchaseLine.delete).not.toHaveBeenCalled();
+      expect(tx.purchaseLine.update).not.toHaveBeenCalled();
+      expect(tx.purchaseLine.create).not.toHaveBeenCalled();
       expect(tx.inventoryTransaction.createMany).not.toHaveBeenCalled();
+      expect(tx.purchase.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
     it("a real qty change on a sold purchase is blocked by the sale guard", async () => {
-      tx.saleLine.count.mockResolvedValue(3);
+      tx.$queryRaw.mockImplementation(async (strings: TemplateStringsArray) =>
+        isLockQuery(strings)
+          ? [{ supplierId: "supplier-1", locked: "1" }]
+          : [{ ...defaultGuard(), sourcedSales: true }],
+      );
 
       await expect(
         service.update("business-1", "purchase-1", {
@@ -414,14 +446,11 @@ describe("purchase line edit safety", () => {
     });
 
     it("rejects a duplicate line ID before any guard or write", async () => {
-      tx.saleLine.count.mockResolvedValue(3);
-
       await expect(
         service.update("business-1", "purchase-1", {
           lines: [requested({ id: "line-1" }), requested({ id: "line-1" })],
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(tx.saleLine.count).not.toHaveBeenCalled();
       expect(tx.purchaseLine.update).not.toHaveBeenCalled();
       expect(tx.inventoryTransaction.createMany).not.toHaveBeenCalled();
     });
@@ -442,9 +471,12 @@ describe("purchase line edit safety", () => {
       await expect(
         service.update("business-2", "purchase-1", { notes: "x" }),
       ).rejects.toBeInstanceOf(NotFoundException);
-      expect(tx.purchase.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "purchase-1", businessId: "business-2" } }),
+      const lockCall = tx.$queryRaw.mock.calls.find((call: unknown[]) =>
+        (call[0] as TemplateStringsArray).join("").includes("pg_advisory_xact_lock"),
       );
+      expect(lockCall).toBeDefined();
+      expect(lockCall!.slice(1)).toContain("business-2");
+      expect(tx.purchase.findFirst).not.toHaveBeenCalled();
     });
   });
 });

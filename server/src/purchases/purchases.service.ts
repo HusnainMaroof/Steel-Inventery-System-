@@ -7,7 +7,6 @@ import {
   sanitizeOptionalText,
 } from "../common/security/sanitize-text";
 import {
-  assertLineReferences,
   checkLineReferences,
   type LineReferenceRows,
 } from "../common/catalog/line-reference-validation";
@@ -20,8 +19,47 @@ import { UpdatePurchaseDto, UpdatePurchaseLineDto } from "./dto/update-purchase.
 
 type StockRow = { productId: string; variantId?: string | null; qty: number };
 
+/** Ledger row as the delete read returns it: reversalRows() rebuilds the offset from this. */
+type OriginalLedgerRow = {
+  productId: string;
+  categoryId: string | null;
+  variantId: string | null;
+  warehouseId: string | null;
+  locationId: string | null;
+  attributeSnapshot: Prisma.JsonValue;
+  unit: string;
+  refLabel: string | null;
+  purchaseLineId: string | null;
+  lotId: string | null;
+  qty: string;
+  date: string;
+};
+
+/** Every guard read and the rows to reverse, returned by one statement before a delete. */
+type PurchaseDeleteReadRow = {
+  sourcedSales: boolean;
+  linkedPayment: boolean;
+  legacyUnallocated: boolean;
+  stock: Array<{ productId: string; variantId: string | null; qty: string }> | null;
+  originals: OriginalLedgerRow[] | null;
+};
+
 /** Supplier, products and line references for a new purchase, read in one statement. */
 type PurchaseRefRow = LineReferenceRows & { supplierFound: boolean; productCount: number };
+
+/** Every guard read for a purchase line edit, returned by one statement. */
+type PurchaseUpdateGuardRow = {
+  sourcedSales: boolean;
+  linkedPayment: boolean;
+  legacyUnallocated: boolean;
+  supplierFound: boolean;
+  productCount: number;
+  categories: LineReferenceRows["categories"];
+  variants: LineReferenceRows["variants"];
+  warehouses: LineReferenceRows["warehouses"];
+  locations: LineReferenceRows["locations"];
+  stock: Array<{ productId: string; variantId: string | null; qty: string }> | null;
+};
 
 /** The stored purchase row, plus how many child rows the write inserted. */
 type PurchaseWriteRow = {
@@ -39,6 +77,7 @@ type PurchaseWriteRow = {
   lineCount: number;
   lotCount: number;
   ledgerCount: number;
+  invariantOk: number;
 };
 
 /**
@@ -282,9 +321,9 @@ export class PurchasesService {
   ) {}
 
   /**
-   * §8/§12: purchase + lines + inventory ledger rows are created inside one
-   * PostgreSQL transaction. Supplier payable is derived (goods − paid), so
-   * nothing else needs updating.
+   * §8/§12: purchase + lines + inventory ledger rows are written by one atomic
+   * statement. Supplier payable is derived (goods − paid), so nothing else needs
+   * updating. Two round trips, no transaction: a purchase takes no locks.
    */
   async create(businessId: string, dto: CreatePurchaseDto, actorId?: string) {
     if (dto.lines.length === 0) {
@@ -317,164 +356,167 @@ export class PurchasesService {
     const warehouseIds = idsOf((line) => line.warehouseId);
     const locationIds = idsOf((line) => line.locationId);
 
-    // Latency: four database round trips (BEGIN, one read for every reference
-    // check, one write for every row, COMMIT). A purchase only adds stock, so it
-    // takes no stock locks.
-    return this.prisma.$transaction(async (tx) => {
-      const [refs] = await tx.$queryRaw<PurchaseRefRow[]>`
-        SELECT
-          EXISTS (
-            SELECT 1 FROM "Supplier" WHERE "id" = ${dto.supplierId} AND "businessId" = ${businessId}
-          ) AS "supplierFound",
-          (
-            SELECT COUNT(*)::int FROM "Product"
-            WHERE "businessId" = ${businessId} AND "id" = ANY(${productIds}::text[])
-          ) AS "productCount",
-          COALESCE((
-            SELECT json_agg(json_build_object('id', c."id", 'productId', c."productId"))
-            FROM "ProductCategory" c
-            WHERE c."businessId" = ${businessId} AND c."id" = ANY(${categoryIds}::text[])
-          ), '[]'::json) AS "categories",
-          COALESCE((
-            SELECT json_agg(json_build_object('id', v."id", 'productId', v."productId", 'categoryId', v."categoryId"))
-            FROM "Variant" v
-            WHERE v."businessId" = ${businessId} AND v."id" = ANY(${variantIds}::text[])
-          ), '[]'::json) AS "variants",
-          COALESCE((
-            SELECT json_agg(json_build_object('id', w."id"))
-            FROM "Warehouse" w
-            WHERE w."businessId" = ${businessId} AND w."id" = ANY(${warehouseIds}::text[])
-          ), '[]'::json) AS "warehouses",
-          COALESCE((
-            SELECT json_agg(json_build_object('id', l."id", 'warehouseId', l."warehouseId"))
-            FROM "Location" l
-            WHERE l."businessId" = ${businessId} AND l."id" = ANY(${locationIds}::text[])
-          ), '[]'::json) AS "locations"
-      `;
-      if (!refs?.supplierFound) throw new BadRequestException("Supplier not found");
-      if (refs.productCount !== productIds.length) {
-        throw new BadRequestException("One or more products were not found");
-      }
-      checkLineReferences(dto.lines, refs);
+    // Two round trips: one read for every reference check, one write for every
+    // row. A purchase only adds stock, so it takes no stock locks.
+    const [refs] = await this.prisma.$queryRaw<PurchaseRefRow[]>`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM "Supplier" WHERE "id" = ${dto.supplierId} AND "businessId" = ${businessId}
+        ) AS "supplierFound",
+        (
+          SELECT COUNT(*)::int FROM "Product"
+          WHERE "businessId" = ${businessId} AND "id" = ANY(${productIds}::text[])
+        ) AS "productCount",
+        COALESCE((
+          SELECT json_agg(json_build_object('id', c."id", 'productId', c."productId"))
+          FROM "ProductCategory" c
+          WHERE c."businessId" = ${businessId} AND c."id" = ANY(${categoryIds}::text[])
+        ), '[]'::json) AS "categories",
+        COALESCE((
+          SELECT json_agg(json_build_object('id', v."id", 'productId', v."productId", 'categoryId', v."categoryId"))
+          FROM "Variant" v
+          WHERE v."businessId" = ${businessId} AND v."id" = ANY(${variantIds}::text[])
+        ), '[]'::json) AS "variants",
+        COALESCE((
+          SELECT json_agg(json_build_object('id', w."id"))
+          FROM "Warehouse" w
+          WHERE w."businessId" = ${businessId} AND w."id" = ANY(${warehouseIds}::text[])
+        ), '[]'::json) AS "warehouses",
+        COALESCE((
+          SELECT json_agg(json_build_object('id', l."id", 'warehouseId', l."warehouseId"))
+          FROM "Location" l
+          WHERE l."businessId" = ${businessId} AND l."id" = ANY(${locationIds}::text[])
+        ), '[]'::json) AS "locations"
+    `;
+    if (!refs?.supplierFound) throw new BadRequestException("Supplier not found");
+    if (refs.productCount !== productIds.length) {
+      throw new BadRequestException("One or more products were not found");
+    }
+    checkLineReferences(dto.lines, refs);
 
-      const goodsTotal = purchaseGoodsTotal(dto.lines);
-      const paid = dto.paid ?? 0;
-      if (paid > goodsTotal + 0.005) {
-        throw new BadRequestException(
-          `Paid amount (${paid}) cannot exceed the goods total (${goodsTotal})`,
-        );
-      }
+    const goodsTotal = purchaseGoodsTotal(dto.lines);
+    const paid = dto.paid ?? 0;
+    if (paid > goodsTotal + 0.005) {
+      throw new BadRequestException(
+        `Paid amount (${paid}) cannot exceed the goods total (${goodsTotal})`,
+      );
+    }
 
-      // Ids are generated here so every row can be written in one statement, without a readback.
-      const purchaseId = newRecordId();
-      // Same calendar day Prisma stores for a DateTime @db.Date (UTC day of the instant).
-      const purchaseDate = new Date(dto.date).toISOString().slice(0, 10);
-      const lines = dto.lines.map((line) => persistedPurchaseLine(newRecordId(), purchaseId, line));
-      const lineInput = lines.map((line) => ({
-        ...line,
-        // One lot per purchase line, and one ledger row that points at it.
-        lotId: newRecordId(),
-        txId: newRecordId(),
-        qty: line.qty.toFixed(),
-        rate: line.rate.toFixed(),
-        sellRate: line.sellRate?.toFixed() ?? null,
-        refLabel: [line.lotNumber, line.heatNumber, line.batchNumber].filter(Boolean).join(" / ") || null,
-      }));
-      const hasPayment = paid > 0;
-      // As before: a paid-at-purchase payment is dated today (UTC day), not the purchase date.
-      const paidOn = new Date().toISOString().slice(0, 10);
-      const paymentId = newRecordId();
-      const auditMeta = JSON.stringify({ supplierId: dto.supplierId, lineCount: dto.lines.length });
-      const money = (value: number | undefined) => new Prisma.Decimal(value ?? 0).toFixed();
+    // Ids are generated here so every row can be written in one statement, without a readback.
+    const purchaseId = newRecordId();
+    // Same calendar day Prisma stores for a DateTime @db.Date (UTC day of the instant).
+    const purchaseDate = new Date(dto.date).toISOString().slice(0, 10);
+    const lines = dto.lines.map((line) => persistedPurchaseLine(newRecordId(), purchaseId, line));
+    const lineInput = lines.map((line) => ({
+      ...line,
+      // One lot per purchase line, and one ledger row that points at it.
+      lotId: newRecordId(),
+      txId: newRecordId(),
+      qty: line.qty.toFixed(),
+      rate: line.rate.toFixed(),
+      sellRate: line.sellRate?.toFixed() ?? null,
+      refLabel: [line.lotNumber, line.heatNumber, line.batchNumber].filter(Boolean).join(" / ") || null,
+    }));
+    const hasPayment = paid > 0;
+    // As before: a paid-at-purchase payment is dated today (UTC day), not the purchase date.
+    const paidOn = new Date().toISOString().slice(0, 10);
+    const paymentId = newRecordId();
+    const auditMeta = JSON.stringify({ supplierId: dto.supplierId, lineCount: dto.lines.length });
+    const money = (value: number | undefined) => new Prisma.Decimal(value ?? 0).toFixed();
 
-      // One statement: purchase, lines, lots, §7 stock-in ledger rows, the optional
-      // mill payment with its allocation, and the audit row. Foreign keys between
-      // these rows are checked at the end of the statement.
-      const [written] = await tx.$queryRaw<PurchaseWriteRow[]>`
-        WITH new_purchase AS (
-          INSERT INTO "Purchase" ("id", "businessId", "date", "supplierId", "notes",
-                                  "transport", "loading", "labour", "otherCost", "paid")
-          VALUES (${purchaseId}, ${businessId}, ${purchaseDate}::date, ${dto.supplierId}, ${dto.notes ?? null},
-                  ${money(dto.transport)}::numeric, ${money(dto.loading)}::numeric, ${money(dto.labour)}::numeric,
-                  ${money(dto.otherCost)}::numeric, ${money(paid)}::numeric)
-          RETURNING "id", "businessId", "date", "supplierId", "notes", "transport", "loading",
-                    "labour", "otherCost", "paid", "createdAt"
-        ),
-        line_input AS (
-          SELECT * FROM jsonb_to_recordset(${JSON.stringify(lineInput)}::jsonb) AS l(
-            "id" text, "lotId" text, "txId" text, "productId" text, "variantId" text, "categoryId" text,
-            "item" text, "attributeSnapshot" jsonb, "qty" numeric, "unit" text, "rate" numeric,
-            "sellRate" numeric, "productName" text, "spec" text, "quality" text, "lotNumber" text,
-            "heatNumber" text, "batchNumber" text, "warehouseId" text, "locationId" text, "refLabel" text
-          )
-        ),
-        new_lines AS (
-          INSERT INTO "PurchaseLine" ("id", "purchaseId", "productId", "variantId", "categoryId", "item",
-                                      "attributeSnapshot", "qty", "unit", "rate", "sellRate", "productName",
-                                      "spec", "quality", "lotNumber", "heatNumber", "batchNumber",
-                                      "warehouseId", "locationId")
-          SELECT l."id", p."id", l."productId", l."variantId", l."categoryId", l."item",
-                 l."attributeSnapshot", l."qty", l."unit", l."rate", l."sellRate", l."productName",
-                 l."spec", l."quality", l."lotNumber", l."heatNumber", l."batchNumber",
-                 l."warehouseId", l."locationId"
-          FROM line_input l CROSS JOIN new_purchase p
-          RETURNING "id"
-        ),
-        new_lots AS (
-          INSERT INTO "StockLot" ("id", "businessId", "purchaseId", "purchaseLineId", "productId", "variantId",
-                                  "unit", "receivedQty", "receivedAt", "status")
-          SELECT l."lotId", ${businessId}, p."id", l."id", l."productId", l."variantId",
-                 l."unit", l."qty", ${purchaseDate}::date, 'ACTIVE'
-          FROM line_input l CROSS JOIN new_purchase p
-          RETURNING "id"
-        ),
-        new_ledger AS (
-          INSERT INTO "InventoryTransaction" ("id", "businessId", "productId", "categoryId", "variantId",
-                                              "purchaseLineId", "lotId", "warehouseId", "locationId",
-                                              "attributeSnapshot", "unit", "refLabel", "type", "qty",
-                                              "referenceType", "referenceId", "date")
-          SELECT l."txId", ${businessId}, l."productId", l."categoryId", l."variantId",
-                 l."id", l."lotId", l."warehouseId", l."locationId",
-                 l."attributeSnapshot", l."unit", l."refLabel", 'PURCHASE'::"InventoryTxType", l."qty",
-                 'PURCHASE', p."id", ${purchaseDate}::date
-          FROM line_input l CROSS JOIN new_purchase p
-          RETURNING "id"
-        ),
-        new_payment AS (
-          INSERT INTO "Payment" ("id", "businessId", "date", "type", "supplierId", "amount", "method",
-                                 "purchaseId", "note")
-          SELECT ${paymentId}, ${businessId}, ${paidOn}::date, 'SUPPLIER'::"PaymentType", ${dto.supplierId},
-                 ${money(paid)}::numeric, 'CASH'::"PaymentMethod", p."id",
-                 'Payment recorded with purchase ' || p."id"
-          FROM new_purchase p
-          WHERE ${hasPayment}::boolean
-          RETURNING "id"
-        ),
-        new_allocation AS (
-          INSERT INTO "PaymentAllocation" ("id", "businessId", "paymentId", "purchaseId", "amount")
-          SELECT ${newRecordId()}, ${businessId}, pay."id", p."id", ${money(paid)}::numeric
-          FROM new_payment pay CROSS JOIN new_purchase p
-          RETURNING "id"
-        ),
-        new_audit AS (
-          INSERT INTO "AuditLog" ("id", "businessId", "actorId", "action", "entityType", "entityId", "metadata")
-          VALUES (${newRecordId()}, ${businessId}, ${actorId ?? null}, 'purchase.created', 'purchase',
-                  ${purchaseId}, ${auditMeta}::jsonb)
-          RETURNING "id"
+    // One statement: purchase, lines, lots, §7 stock-in ledger rows, the optional
+    // mill payment with its allocation, and the audit row. Foreign keys between
+    // these rows are checked at the end of the statement.
+    const [written] = await this.prisma.$queryRaw<PurchaseWriteRow[]>`
+      WITH new_purchase AS (
+        INSERT INTO "Purchase" ("id", "businessId", "date", "supplierId", "notes",
+                                "transport", "loading", "labour", "otherCost", "paid")
+        VALUES (${purchaseId}, ${businessId}, ${purchaseDate}::date, ${dto.supplierId}, ${dto.notes ?? null},
+                ${money(dto.transport)}::numeric, ${money(dto.loading)}::numeric, ${money(dto.labour)}::numeric,
+                ${money(dto.otherCost)}::numeric, ${money(paid)}::numeric)
+        RETURNING "id", "businessId", "date", "supplierId", "notes", "transport", "loading",
+                  "labour", "otherCost", "paid", "createdAt"
+      ),
+      line_input AS (
+        SELECT * FROM jsonb_to_recordset(${JSON.stringify(lineInput)}::jsonb) AS l(
+          "id" text, "lotId" text, "txId" text, "productId" text, "variantId" text, "categoryId" text,
+          "item" text, "attributeSnapshot" jsonb, "qty" numeric, "unit" text, "rate" numeric,
+          "sellRate" numeric, "productName" text, "spec" text, "quality" text, "lotNumber" text,
+          "heatNumber" text, "batchNumber" text, "warehouseId" text, "locationId" text, "refLabel" text
         )
-        SELECT p.*,
-               (SELECT COUNT(*)::int FROM new_lines) AS "lineCount",
-               (SELECT COUNT(*)::int FROM new_lots) AS "lotCount",
-               (SELECT COUNT(*)::int FROM new_ledger) AS "ledgerCount"
+      ),
+      new_lines AS (
+        INSERT INTO "PurchaseLine" ("id", "purchaseId", "productId", "variantId", "categoryId", "item",
+                                    "attributeSnapshot", "qty", "unit", "rate", "sellRate", "productName",
+                                    "spec", "quality", "lotNumber", "heatNumber", "batchNumber",
+                                    "warehouseId", "locationId")
+        SELECT l."id", p."id", l."productId", l."variantId", l."categoryId", l."item",
+               l."attributeSnapshot", l."qty", l."unit", l."rate", l."sellRate", l."productName",
+               l."spec", l."quality", l."lotNumber", l."heatNumber", l."batchNumber",
+               l."warehouseId", l."locationId"
+        FROM line_input l CROSS JOIN new_purchase p
+        RETURNING "id"
+      ),
+      new_lots AS (
+        INSERT INTO "StockLot" ("id", "businessId", "purchaseId", "purchaseLineId", "productId", "variantId",
+                                "unit", "receivedQty", "receivedAt", "status")
+        SELECT l."lotId", ${businessId}, p."id", l."id", l."productId", l."variantId",
+               l."unit", l."qty", ${purchaseDate}::date, 'ACTIVE'
+        FROM line_input l CROSS JOIN new_purchase p
+        RETURNING "id"
+      ),
+      new_ledger AS (
+        INSERT INTO "InventoryTransaction" ("id", "businessId", "productId", "categoryId", "variantId",
+                                            "purchaseLineId", "lotId", "warehouseId", "locationId",
+                                            "attributeSnapshot", "unit", "refLabel", "type", "qty",
+                                            "referenceType", "referenceId", "date")
+        SELECT l."txId", ${businessId}, l."productId", l."categoryId", l."variantId",
+               l."id", l."lotId", l."warehouseId", l."locationId",
+               l."attributeSnapshot", l."unit", l."refLabel", 'PURCHASE'::"InventoryTxType", l."qty",
+               'PURCHASE', p."id", ${purchaseDate}::date
+        FROM line_input l CROSS JOIN new_purchase p
+        RETURNING "id"
+      ),
+      new_payment AS (
+        INSERT INTO "Payment" ("id", "businessId", "date", "type", "supplierId", "amount", "method",
+                               "purchaseId", "note")
+        SELECT ${paymentId}, ${businessId}, ${paidOn}::date, 'SUPPLIER'::"PaymentType", ${dto.supplierId},
+               ${money(paid)}::numeric, 'CASH'::"PaymentMethod", p."id",
+               'Payment recorded with purchase ' || p."id"
         FROM new_purchase p
-      `;
-      const { lineCount, lotCount, ledgerCount, ...purchase } = written;
-      if (lineCount !== lines.length || lotCount !== lines.length || ledgerCount !== lines.length) {
-        throw new Error("Purchase write did not insert every line");
-      }
+        WHERE ${hasPayment}::boolean
+        RETURNING "id"
+      ),
+      new_allocation AS (
+        INSERT INTO "PaymentAllocation" ("id", "businessId", "paymentId", "purchaseId", "amount")
+        SELECT ${newRecordId()}, ${businessId}, pay."id", p."id", ${money(paid)}::numeric
+        FROM new_payment pay CROSS JOIN new_purchase p
+        RETURNING "id"
+      ),
+      new_audit AS (
+        INSERT INTO "AuditLog" ("id", "businessId", "actorId", "action", "entityType", "entityId", "metadata")
+        VALUES (${newRecordId()}, ${businessId}, ${actorId ?? null}, 'purchase.created', 'purchase',
+                ${purchaseId}, ${auditMeta}::jsonb)
+        RETURNING "id"
+      )
+      SELECT p.*,
+             (SELECT COUNT(*)::int FROM new_lines) AS "lineCount",
+             (SELECT COUNT(*)::int FROM new_lots) AS "lotCount",
+             (SELECT COUNT(*)::int FROM new_ledger) AS "ledgerCount",
+             -- Fails the whole statement (division by zero) if any count is short.
+             -- The divisor depends on the CTEs, so it cannot be folded at plan time.
+             1 / (CASE WHEN (SELECT COUNT(*) FROM new_lines) = ${lines.length}
+                        AND (SELECT COUNT(*) FROM new_lots) = ${lines.length}
+                        AND (SELECT COUNT(*) FROM new_ledger) = ${lines.length}
+                       THEN 1 ELSE 0 END) AS "invariantOk"
+      FROM new_purchase p
+    `;
+    const { lineCount, lotCount, ledgerCount, invariantOk, ...purchase } = written;
+    if (lineCount !== lines.length || lotCount !== lines.length || ledgerCount !== lines.length) {
+      throw new Error("Purchase write did not insert every line");
+    }
 
-      return { ...purchase, lines: lines.map(toResponseLine) };
-    });
+    return { ...purchase, lines: lines.map(toResponseLine) };
   }
 
   async list(businessId: string, skip: number, take: number, supplierId?: string) {
@@ -525,29 +567,31 @@ export class PurchasesService {
 
   async update(businessId: string, id: string, dto: UpdatePurchaseDto, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
+      // One statement: read the purchase's supplier and lock every supplier key
+      // this edit may touch (current + requested), in byte order, before any
+      // other read. The lock call sits beside its ORDER BY (as in stock-locks.ts),
+      // so Postgres runs it after the sort. ::text because $queryRaw cannot
+      // deserialize a void lock result.
+      const [lockedPurchase] = await tx.$queryRaw<{ supplierId: string; locked: string }[]>`
+        SELECT p."supplierId",
+               (SELECT string_agg(l, '') FROM (
+                  SELECT pg_advisory_xact_lock(hashtext('suppay:' || ${businessId} || ':' || k))::text AS l
+                  FROM (SELECT DISTINCT k FROM unnest(ARRAY[p."supplierId", ${dto.supplierId ?? null}::text]) AS k
+                        WHERE k IS NOT NULL) keys
+                  ORDER BY k COLLATE "C"
+                ) taken) AS "locked"
+        FROM "Purchase" p
+        WHERE p."id" = ${id} AND p."businessId" = ${businessId}
+      `;
+      if (!lockedPurchase) throw new NotFoundException("Purchase not found");
+
+      // Fresh read after the lock, so the lines are the committed ones.
       let current = await tx.purchase.findFirst({
         where: { id, businessId },
         include: { lines: true },
       });
       if (!current) throw new NotFoundException("Purchase not found");
-
-      // Serialize purchase edits with supplier payments so a concurrent FIFO
-      // settlement cannot use stale goods/paid values. Lock both supplier
-      // buckets in stable order if a supplier change was requested.
-      const originalSupplierId = current.supplierId;
-      const supplierLocks = [...new Set([
-        originalSupplierId,
-        ...(dto.supplierId ? [dto.supplierId] : []),
-      ])].sort();
-      for (const supplierId of supplierLocks) {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`suppay:${businessId}:${supplierId}`}))`;
-      }
-      current = await tx.purchase.findFirst({
-        where: { id, businessId },
-        include: { lines: true },
-      });
-      if (!current) throw new NotFoundException("Purchase not found");
-      if (current.supplierId !== originalSupplierId) {
+      if (current.supplierId !== lockedPurchase.supplierId) {
         throw new BadRequestException("Purchase changed while being edited. Reload and try again.");
       }
 
@@ -557,35 +601,33 @@ export class PurchasesService {
         );
       }
       if (dto.supplierId && dto.supplierId !== current.supplierId) {
-        const supplier = await tx.supplier.findFirst({
-          where: { id: dto.supplierId, businessId },
-          select: { id: true },
-        });
-        if (!supplier) throw new BadRequestException("Supplier not found");
-        const [linkedPayment, legacyUnallocatedPayment] = await Promise.all([
-          tx.payment.findFirst({
-            where: {
-              businessId,
-              type: "SUPPLIER",
-              OR: [
-                { purchaseId: id },
-                { allocations: { some: { purchaseId: id } } },
-              ],
-            },
-            select: { id: true },
-          }),
-          tx.payment.findFirst({
-            where: {
-              businessId,
-              type: "SUPPLIER",
-              supplierId: current.supplierId,
-              purchaseId: null,
-              allocations: { none: {} },
-            },
-            select: { id: true },
-          }),
-        ]);
-        if (current.paid.gt(0) || linkedPayment || legacyUnallocatedPayment) {
+        const [guard] = await tx.$queryRaw<{
+          supplierFound: boolean;
+          linkedPayment: boolean;
+          legacyUnallocated: boolean;
+        }[]>`
+          SELECT
+            EXISTS (
+              SELECT 1 FROM "Supplier" WHERE "id" = ${dto.supplierId} AND "businessId" = ${businessId}
+            ) AS "supplierFound",
+            EXISTS (
+              SELECT 1 FROM "Payment" pay
+              WHERE pay."businessId" = ${businessId} AND pay."type" = 'SUPPLIER'::"PaymentType"
+                AND (pay."purchaseId" = ${id} OR EXISTS (
+                  SELECT 1 FROM "PaymentAllocation" a
+                  WHERE a."paymentId" = pay."id" AND a."purchaseId" = ${id}
+                ))
+            ) AS "linkedPayment",
+            EXISTS (
+              SELECT 1 FROM "Payment" pay
+              WHERE pay."businessId" = ${businessId} AND pay."type" = 'SUPPLIER'::"PaymentType"
+                AND pay."supplierId" = ${current.supplierId}
+                AND pay."purchaseId" IS NULL
+                AND NOT EXISTS (SELECT 1 FROM "PaymentAllocation" a WHERE a."paymentId" = pay."id")
+            ) AS "legacyUnallocated"
+        `;
+        if (!guard.supplierFound) throw new BadRequestException("Supplier not found");
+        if (current.paid.gt(0) || guard.linkedPayment || guard.legacyUnallocated) {
           throw new BadRequestException(
             "Cannot change the supplier after payment history exists for this purchase or supplier.",
           );
@@ -626,60 +668,117 @@ export class PurchasesService {
           tx,
           this.purchaseStockLockKeys(businessId, id, [...current.lines, ...(requestedLines ?? [])]),
         );
-        const [sourcedSales, linkedPayment, legacyUnallocatedPayment] = await Promise.all([
-          tx.saleLine.count({
-            where: { purchaseId: id, sale: { businessId } },
-          }),
-          tx.payment.findFirst({
-            where: {
-              businessId,
-              type: "SUPPLIER",
-              OR: [
-                { purchaseId: id },
-                { allocations: { some: { purchaseId: id } } },
-              ],
-            },
-            select: { id: true },
-          }),
-          tx.payment.findFirst({
-            where: {
-              businessId,
-              type: "SUPPLIER",
-              supplierId: current.supplierId,
-              purchaseId: null,
-              allocations: { none: {} },
-            },
-            select: { id: true },
-          }),
-        ]);
-        if (sourcedSales) {
+        // requestedLines is defined whenever lines changed: plan is null otherwise.
+        const requested = requestedLines!;
+        // Requested products must exist; stock is checked for old and new products
+        // (a removed or moved line still changes stock).
+        const requestedProductIds = [...new Set(requested.map((l) => l.productId))];
+        const productIds = [...new Set([...current.lines, ...requested].map((l) => l.productId))];
+        const categoryIds = [...new Set(requested.map((l) => l.categoryId).filter(Boolean))] as string[];
+        const variantIds = [...new Set(requested.map((l) => l.variantId).filter(Boolean))] as string[];
+        const warehouseIds = [...new Set(requested.map((l) => l.warehouseId).filter(Boolean))] as string[];
+        const locationIds = [...new Set(requested.map((l) => l.locationId).filter(Boolean))] as string[];
+
+        // One statement for every guard read: sold stock, payment history,
+        // supplier + products, line references, and remaining stock.
+        const [guard] = await tx.$queryRaw<PurchaseUpdateGuardRow[]>`
+          SELECT
+            EXISTS (
+              SELECT 1 FROM "SaleLine" sl
+              JOIN "Sale" s ON s."id" = sl."saleId"
+              WHERE sl."purchaseId" = ${id} AND s."businessId" = ${businessId}
+            ) AS "sourcedSales",
+            EXISTS (
+              SELECT 1 FROM "Payment" pay
+              WHERE pay."businessId" = ${businessId} AND pay."type" = 'SUPPLIER'::"PaymentType"
+                AND (pay."purchaseId" = ${id} OR EXISTS (
+                  SELECT 1 FROM "PaymentAllocation" a
+                  WHERE a."paymentId" = pay."id" AND a."purchaseId" = ${id}
+                ))
+            ) AS "linkedPayment",
+            EXISTS (
+              SELECT 1 FROM "Payment" pay
+              WHERE pay."businessId" = ${businessId} AND pay."type" = 'SUPPLIER'::"PaymentType"
+                AND pay."supplierId" = ${current.supplierId}
+                AND pay."purchaseId" IS NULL
+                AND NOT EXISTS (SELECT 1 FROM "PaymentAllocation" a WHERE a."paymentId" = pay."id")
+            ) AS "legacyUnallocated",
+            EXISTS (
+              SELECT 1 FROM "Supplier" WHERE "id" = ${dto.supplierId ?? current.supplierId} AND "businessId" = ${businessId}
+            ) AS "supplierFound",
+            (SELECT COUNT(*)::int FROM "Product"
+              WHERE "businessId" = ${businessId} AND "id" = ANY(${requestedProductIds}::text[])) AS "productCount",
+            COALESCE((
+              SELECT json_agg(json_build_object('id', c."id", 'productId', c."productId"))
+              FROM "ProductCategory" c
+              WHERE c."businessId" = ${businessId} AND c."id" = ANY(${categoryIds}::text[])
+            ), '[]'::json) AS "categories",
+            COALESCE((
+              SELECT json_agg(json_build_object('id', v."id", 'productId', v."productId", 'categoryId', v."categoryId"))
+              FROM "Variant" v
+              WHERE v."businessId" = ${businessId} AND v."id" = ANY(${variantIds}::text[])
+            ), '[]'::json) AS "variants",
+            COALESCE((
+              SELECT json_agg(json_build_object('id', w."id"))
+              FROM "Warehouse" w
+              WHERE w."businessId" = ${businessId} AND w."id" = ANY(${warehouseIds}::text[])
+            ), '[]'::json) AS "warehouses",
+            COALESCE((
+              SELECT json_agg(json_build_object('id', l."id", 'warehouseId', l."warehouseId"))
+              FROM "Location" l
+              WHERE l."businessId" = ${businessId} AND l."id" = ANY(${locationIds}::text[])
+            ), '[]'::json) AS "locations",
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                'productId', stock."productId", 'variantId', stock."variantId", 'qty', stock."total"))
+              FROM (
+                SELECT "productId", "variantId", SUM("qty")::text AS "total"
+                FROM "InventoryTransaction"
+                WHERE "businessId" = ${businessId}
+                  AND "productId" = ANY(${productIds}::text[])
+                  AND NOT (
+                    "referenceType" = ANY(${[...PURCHASE_LEDGER_TYPES]}::text[])
+                    AND "referenceId" = ${id}
+                  )
+                GROUP BY "productId", "variantId"
+              ) stock
+            ), '[]'::json) AS "stock"
+        `;
+        if (guard.sourcedSales) {
           throw new BadRequestException("Cannot replace purchase lines after stock from this lot was sold");
         }
-        if (current.paid.gt(0) || linkedPayment || legacyUnallocatedPayment) {
+        if (current.paid.gt(0) || guard.linkedPayment || guard.legacyUnallocated) {
           throw new BadRequestException(
             "Cannot replace purchase lines after supplier payment history exists",
           );
         }
-        if (plan && requestedLines) {
-          await this.validateReferences(tx, businessId, dto.supplierId ?? current.supplierId, requestedLines);
-          await this.assertReplacementLeavesNonNegativeStock(
-            tx,
-            businessId,
-            id,
-            requestedLines,
-            // Old lines matter too: a line that is removed or moved to another product still changes stock.
-            [...new Set([...current.lines, ...requestedLines].map((l) => l.productId))],
-          );
-          const goodsTotal = purchaseGoodsTotal(requestedLines);
-          const paid = Number(current.paid);
-          if (paid > goodsTotal + 0.005) {
-            throw new BadRequestException(`Paid amount (${paid}) cannot exceed the goods total (${goodsTotal})`);
-          }
+        if (!guard.supplierFound) throw new BadRequestException("Supplier not found");
+        if (guard.productCount !== requestedProductIds.length) {
+          throw new BadRequestException("One or more products were not found");
+        }
+        checkLineReferences(requested, {
+          categories: guard.categories ?? [],
+          variants: guard.variants ?? [],
+          warehouses: guard.warehouses ?? [],
+          locations: guard.locations ?? [],
+        });
+        this.assertStockStaysNonNegative(
+          (guard.stock ?? []).map((row) => ({
+            productId: row.productId,
+            variantId: row.variantId,
+            qty: Number(row.qty),
+          })),
+          requested,
+        );
+        const goodsTotal = purchaseGoodsTotal(requested);
+        const paid = Number(current.paid);
+        if (paid > goodsTotal + 0.005) {
+          throw new BadRequestException(`Paid amount (${paid}) cannot exceed the goods total (${goodsTotal})`);
         }
       }
 
       const purchase = await tx.purchase.update({
-        where: { id },
+        where: { id, businessId },
         data: {
           date: dto.date ? new Date(dto.date) : undefined,
           supplierId: dto.supplierId,
@@ -711,6 +810,11 @@ export class PurchasesService {
         entityId: purchase.id,
         metadata: stats,
       });
+      if (!linesChanged) {
+        // No line write happened in this transaction, so the post-lock read is
+        // the final line state: return it without a second read.
+        return { ...purchase, lines: current.lines };
+      }
       return tx.purchase.findUniqueOrThrow({ where: { id }, include: { lines: true } });
     });
   }
@@ -815,90 +919,150 @@ export class PurchasesService {
 
   async remove(businessId: string, id: string, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
-      let purchase = await tx.purchase.findFirst({
+      // Read the supplier and take the supplier lock in one statement. The lock
+      // text is the same `suppay:<business>:<supplier>` key payments use.
+      // ::text because $queryRaw cannot deserialize the lock's void result.
+      const [lockedPurchase] = await tx.$queryRaw<Array<{ supplierId: string }>>`
+        SELECT p."supplierId",
+               pg_advisory_xact_lock(hashtext('suppay:' || ${businessId} || ':' || p."supplierId"))::text AS "locked"
+        FROM "Purchase" p
+        WHERE p."id" = ${id} AND p."businessId" = ${businessId}
+      `;
+      if (!lockedPurchase) throw new NotFoundException("Purchase not found");
+
+      // Fresh read after the lock, so the lines are the committed ones.
+      const purchase = await tx.purchase.findFirst({
         where: { id, businessId },
         include: { lines: true },
       });
       if (!purchase) throw new NotFoundException("Purchase not found");
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`suppay:${businessId}:${purchase.supplierId}`}))`;
-      purchase = await tx.purchase.findFirst({
-        where: { id, businessId },
-        include: { lines: true },
-      });
-      if (!purchase) throw new NotFoundException("Purchase not found");
+
       await lockInventoryKeys(
         tx,
         this.purchaseStockLockKeys(businessId, id, purchase.lines),
       );
-      const sourcedSales = await tx.saleLine.count({
-        where: { purchaseId: id, sale: { businessId } },
-      });
-      if (sourcedSales) {
+
+      // One statement for every read guard: sales, payment history, remaining
+      // stock, and the original ledger rows that need reversing.
+      const productIds = [...new Set(purchase.lines.map((line) => line.productId))];
+      const [reads] = await tx.$queryRaw<PurchaseDeleteReadRow[]>`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM "SaleLine" sl
+            JOIN "Sale" s ON s."id" = sl."saleId"
+            WHERE sl."purchaseId" = ${id} AND s."businessId" = ${businessId}
+          ) AS "sourcedSales",
+          EXISTS (
+            SELECT 1 FROM "Payment" pay
+            WHERE pay."businessId" = ${businessId} AND pay."type" = 'SUPPLIER'::"PaymentType"
+              AND (
+                pay."purchaseId" = ${id}
+                OR EXISTS (
+                  SELECT 1 FROM "PaymentAllocation" a
+                  WHERE a."paymentId" = pay."id" AND a."purchaseId" = ${id}
+                )
+              )
+          ) AS "linkedPayment",
+          EXISTS (
+            SELECT 1 FROM "Payment" pay
+            WHERE pay."businessId" = ${businessId} AND pay."type" = 'SUPPLIER'::"PaymentType"
+              AND pay."supplierId" = ${purchase.supplierId}
+              AND pay."purchaseId" IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM "PaymentAllocation" a WHERE a."paymentId" = pay."id"
+              )
+          ) AS "legacyUnallocated",
+          COALESCE((
+            SELECT json_agg(json_build_object(
+              'productId', stock."productId", 'variantId', stock."variantId", 'qty', stock."total"))
+            FROM (
+              SELECT "productId", "variantId", SUM("qty")::text AS "total"
+              FROM "InventoryTransaction"
+              WHERE "businessId" = ${businessId}
+                AND "productId" = ANY(${productIds}::text[])
+                AND NOT (
+                  "referenceType" = ANY(${[...PURCHASE_LEDGER_TYPES]}::text[])
+                  AND "referenceId" = ${id}
+                )
+              GROUP BY "productId", "variantId"
+            ) stock
+          ), '[]'::json) AS "stock",
+          COALESCE((
+            SELECT json_agg(json_build_object(
+              'productId', t."productId", 'categoryId', t."categoryId", 'variantId', t."variantId",
+              'warehouseId', t."warehouseId", 'locationId', t."locationId",
+              'attributeSnapshot', t."attributeSnapshot", 'unit', t."unit", 'refLabel', t."refLabel",
+              'purchaseLineId', t."purchaseLineId", 'lotId', t."lotId", 'qty', t."qty"::text,
+              'date', to_char(t."date", 'YYYY-MM-DD')))
+            FROM "InventoryTransaction" t
+            WHERE t."businessId" = ${businessId}
+              AND t."referenceType" = ANY(${[...PURCHASE_LEDGER_TYPES]}::text[])
+              AND t."referenceId" = ${id}
+          ), '[]'::json) AS "originals"
+      `;
+
+      if (reads.sourcedSales) {
         throw new BadRequestException("Cannot delete a purchase lot referenced by sales");
       }
-      const [linkedPayment, legacyUnallocatedPayment] = await Promise.all([
-        tx.payment.findFirst({
-          where: {
-            businessId,
-            type: "SUPPLIER",
-            OR: [
-              { purchaseId: id },
-              { allocations: { some: { purchaseId: id } } },
-            ],
-          },
-          select: { id: true },
-        }),
-        tx.payment.findFirst({
-          where: {
-            businessId,
-            type: "SUPPLIER",
-            supplierId: purchase.supplierId,
-            purchaseId: null,
-            allocations: { none: {} },
-          },
-          select: { id: true },
-        }),
-      ]);
-      if (Number(purchase.paid) > 0 || linkedPayment || legacyUnallocatedPayment) {
+      if (Number(purchase.paid) > 0 || reads.linkedPayment || reads.legacyUnallocated) {
         throw new BadRequestException(
           "Cannot delete a purchase while supplier payment history may reference it",
         );
       }
-      await this.assertReplacementLeavesNonNegativeStock(
-        tx,
+      this.assertStockStaysNonNegative(
+        (reads.stock ?? []).map((row) => ({
+          productId: row.productId,
+          variantId: row.variantId,
+          qty: Number(row.qty),
+        })),
+        [],
+      );
+
+      // Keep the original ledger rows for audit. Offset each one with a
+      // PURCHASE_DELETE row of the opposite sign, void the lots, and write the
+      // audit row, all in one statement.
+      const reversals = this.reversalRows(
         businessId,
         id,
-        [],
-        [...new Set(purchase.lines.map((l) => l.productId))],
+        reads.originals ?? [],
+        "PURCHASE_DELETE",
       );
-      // Keep the original ledger rows for audit. Offset each one with a
-      // PURCHASE_DELETE row of the opposite sign, in this same transaction.
-      const alreadyReversed = await tx.inventoryTransaction.count({
-        where: { businessId, referenceType: "PURCHASE_DELETE", referenceId: id },
-      });
-      if (alreadyReversed > 0) {
-        throw new BadRequestException("Purchase has already been reversed");
-      }
-      const originals = await tx.inventoryTransaction.findMany({
-        where: {
-          businessId,
-          referenceType: { in: [...PURCHASE_LEDGER_TYPES] },
-          referenceId: id,
-        },
-      });
-      await tx.inventoryTransaction.createMany({
-        data: this.reversalRows(businessId, id, originals, "PURCHASE_DELETE"),
-      });
-      // Lots stay for audit history, but are marked voided with the purchase.
-      await tx.stockLot.updateMany({ where: { businessId, purchaseId: id }, data: { status: "VOIDED" } });
-      await tx.purchase.delete({ where: { id } });
-      await this.audit.logTx(tx, {
-        businessId,
-        actorId: actorId ?? null,
-        action: "purchase.deleted",
-        entityType: "purchase",
-        entityId: id,
-      });
+      await tx.$executeRaw`
+        WITH reversal_input AS (
+          SELECT * FROM jsonb_to_recordset(${JSON.stringify(reversals)}::jsonb) AS r(
+            "id" text, "productId" text, "categoryId" text, "variantId" text, "purchaseLineId" text,
+            "lotId" text, "warehouseId" text, "locationId" text, "attributeSnapshot" jsonb,
+            "unit" text, "refLabel" text, "qty" numeric, "date" date
+          )
+        ),
+        new_reversals AS (
+          INSERT INTO "InventoryTransaction" ("id", "businessId", "productId", "categoryId", "variantId",
+                                              "purchaseLineId", "lotId", "warehouseId", "locationId",
+                                              "attributeSnapshot", "unit", "refLabel", "type", "qty",
+                                              "referenceType", "referenceId", "date")
+          SELECT r."id", ${businessId}, r."productId", r."categoryId", r."variantId",
+                 r."purchaseLineId", r."lotId", r."warehouseId", r."locationId",
+                 r."attributeSnapshot", r."unit", r."refLabel", 'ADJUSTMENT'::"InventoryTxType",
+                 r."qty", 'PURCHASE_DELETE', ${id}, r."date"
+          FROM reversal_input r
+          RETURNING "id"
+        ),
+        void_lots AS (
+          UPDATE "StockLot" SET "status" = 'VOIDED'
+          WHERE "businessId" = ${businessId} AND "purchaseId" = ${id}
+          RETURNING "id"
+        ),
+        new_audit AS (
+          INSERT INTO "AuditLog" ("id", "businessId", "actorId", "action", "entityType", "entityId")
+          VALUES (${newRecordId()}, ${businessId}, ${actorId ?? null}, 'purchase.deleted', 'purchase', ${id})
+          RETURNING "id"
+        )
+        SELECT 1
+      `;
+      // Its own statement: deleting the purchase cascades its lines, and
+      // InventoryTransaction.purchaseLineId is ON DELETE SET NULL, which also
+      // nulls the reversal rows written above.
+      await tx.purchase.delete({ where: { id, businessId } });
       return { deleted: true, purchaseId: id };
     });
   }
@@ -918,13 +1082,15 @@ export class PurchasesService {
       refLabel: string | null;
       purchaseLineId?: string | null;
       lotId?: string | null;
-      qty: Prisma.Decimal;
-      date: Date;
+      qty: Prisma.Decimal | string;
+      date: Date | string;
     }>,
     referenceType: string,
     purchaseLineId?: string,
   ) {
     return rows.map((row) => ({
+      // Raw SQL and createMany both skip Prisma's cuid() default, so set the id here.
+      id: newRecordId(),
       businessId,
       productId: row.productId,
       categoryId: row.categoryId,
@@ -947,33 +1113,6 @@ export class PurchasesService {
     }));
   }
 
-  private async validateReferences(
-    tx: Prisma.TransactionClient,
-    businessId: string,
-    supplierId: string,
-    lines: Array<{
-      productId: string;
-      categoryId?: string;
-      variantId?: string;
-      warehouseId?: string;
-      locationId?: string;
-    }>,
-  ) {
-    const productIds = [...new Set(lines.map((line) => line.productId))];
-    // One statement checks the supplier and the product count together.
-    // Two separate lookups cost one extra network round trip each.
-    const [refs] = await tx.$queryRaw<{ supplierFound: boolean; productCount: bigint }[]>`
-      SELECT
-        EXISTS (SELECT 1 FROM "Supplier" WHERE id = ${supplierId} AND "businessId" = ${businessId}) AS "supplierFound",
-        (SELECT COUNT(*) FROM "Product" WHERE "businessId" = ${businessId} AND id = ANY(${productIds}::text[])) AS "productCount"
-    `;
-    if (!refs?.supplierFound) throw new BadRequestException("Supplier not found");
-    if (Number(refs.productCount) !== productIds.length) {
-      throw new BadRequestException("One or more products were not found");
-    }
-    await assertLineReferences(tx, businessId, lines);
-  }
-
   /** Stock and lot keys for every product/variant a purchase line touches. */
   private purchaseStockLockKeys(
     businessId: string,
@@ -988,31 +1127,9 @@ export class PurchasesService {
     ]);
   }
 
-  private async assertReplacementLeavesNonNegativeStock(
-    tx: Prisma.TransactionClient,
-    businessId: string,
-    purchaseId: string,
-    lines: StockRow[],
-    affectedProductIds: string[],
-  ) {
-    if (affectedProductIds.length === 0) return;
-    const grouped = await tx.inventoryTransaction.groupBy({
-      by: ["productId", "variantId"],
-      where: {
-        businessId,
-        productId: { in: affectedProductIds },
-        NOT: { referenceType: { in: [...PURCHASE_LEDGER_TYPES] }, referenceId: purchaseId },
-      },
-      _sum: { qty: true },
-    });
-    const shortage = replacementStockShortage(
-      grouped.map((row) => ({
-        productId: row.productId,
-        variantId: row.variantId,
-        qty: Number(row._sum.qty ?? 0),
-      })),
-      lines,
-    );
+  /** Throws when remaining stock plus the replacement lines would go negative. */
+  private assertStockStaysNonNegative(stockRows: StockRow[], replacementLines: StockRow[]): void {
+    const shortage = replacementStockShortage(stockRows, replacementLines);
     if (shortage) {
       throw new BadRequestException("Purchase change would make existing sold stock negative");
     }

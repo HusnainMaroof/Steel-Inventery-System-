@@ -566,43 +566,34 @@ export class SalesService {
   /**
    * Delete = reversal ledger rows + payment cleanup + invoice gone, atomically.
    *
-   * Latency: six round trips (BEGIN, read the sale with its lines and invoice in one
-   * join query, all stock locks, one cleanup statement, the sale delete, COMMIT).
+   * Latency: five round trips (BEGIN, lock statement, one cleanup statement, the
+   * sale delete, COMMIT).
    * The sale delete is its own statement: it cascades to the lines and sets
    * `saleLineId` to NULL on their ledger rows, including the reversal rows just written,
    * the same end state as before.
    */
   async remove(businessId: string, id: string, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
-      const sale = await tx.sale.findFirst({
-        relationLoadStrategy: "join",
-        where: { id, businessId },
-        include: { invoice: true, lines: true },
-      });
+      const reversalIds = Array.from({ length: LIMITS.MAX_LINES_PER_DOC }, () => newRecordId());
+
+      const [sale] = await tx.$queryRaw<{ id: string; date: string }[]>`
+        SELECT s."id", to_char(s."date", 'YYYY-MM-DD') AS "date",
+          (SELECT string_agg(l, '') FROM (
+             SELECT pg_advisory_xact_lock(hashtext(k))::text AS l
+             FROM (SELECT DISTINCT k FROM "SaleLine" sl CROSS JOIN LATERAL (VALUES
+                    ('stock:' || ${businessId} || ':' || sl."productId" || ':' || COALESCE(sl."variantId", '_')),
+                    ('stock:' || ${businessId} || ':' || sl."productId" || ':_'),
+                    (CASE WHEN sl."purchaseId" IS NOT NULL
+                          THEN 'lot:' || ${businessId} || ':' || sl."purchaseId" || ':' || sl."productId" || ':' || COALESCE(sl."variantId", '_')
+                          ELSE NULL END)) v(k)
+                   WHERE sl."saleId" = s."id" AND k IS NOT NULL) keys
+             ORDER BY k COLLATE "C") taken) AS "locked"
+        FROM "Sale" s WHERE s."id" = ${id} AND s."businessId" = ${businessId}
+      `;
       if (!sale) throw new NotFoundException("Sale not found");
 
-      const lockKeys = sale.lines.flatMap((line) => [
-        stockLockKey(businessId, line.productId, line.variantId),
-        stockLockKey(businessId, line.productId, null),
-        ...(line.purchaseId
-          ? [lotLockKey(businessId, line.purchaseId, line.productId, line.variantId)]
-          : []),
-      ]);
-      await lockInventoryKeys(tx, lockKeys);
-
-      // §7: one opposite-sign RETURN row per line, so the stock comes back.
-      const reversals = sale.lines.map((line) => ({
-        id: newRecordId(),
-        productId: line.productId,
-        categoryId: line.categoryId,
-        variantId: line.variantId,
-        saleLineId: line.id,
-        lotId: line.lotId,
-        attributeSnapshot: line.attributeSnapshot ?? null,
-        unit: line.unit,
-        qty: exact(line.qty),
-      }));
-      const saleDate = sale.date.toISOString().slice(0, 10);
+      const saleId = sale.id;
+      const saleDate = sale.date;
 
       // One statement for everything that hangs off the sale:
       // - the reversal ledger rows,
@@ -615,10 +606,16 @@ export class SalesService {
       // FIFO check reads the allocations before they are deleted.
       await tx.$executeRaw`
         WITH reversal_input AS (
-          SELECT * FROM jsonb_to_recordset(${JSON.stringify(reversals)}::jsonb) AS r(
-            "id" text, "productId" text, "categoryId" text, "variantId" text, "saleLineId" text,
-            "lotId" text, "attributeSnapshot" jsonb, "unit" text, "qty" numeric
-          )
+          -- One pre-generated id per line (a sale has at most MAX_LINES_PER_DOC lines).
+          SELECT (${reversalIds}::text[])[sl."rn"] AS "id",
+                 sl."productId", sl."categoryId", sl."variantId",
+                 sl."id" AS "saleLineId",
+                 sl."lotId", sl."attributeSnapshot", sl."unit", sl."qty"
+          FROM (
+            SELECT line.*, (row_number() OVER (ORDER BY line."id"))::int AS "rn"
+            FROM "SaleLine" line
+            WHERE line."saleId" = ${id}
+          ) sl
         ),
         new_reversals AS (
           INSERT INTO "InventoryTransaction" ("id", "businessId", "productId", "categoryId", "variantId",
@@ -626,7 +623,7 @@ export class SalesService {
                                               "qty", "referenceType", "referenceId", "date")
           SELECT r."id", ${businessId}, r."productId", r."categoryId", r."variantId",
                  r."saleLineId", r."lotId", r."attributeSnapshot", r."unit", 'RETURN'::"InventoryTxType",
-                 r."qty", 'SALE_DELETE', ${sale.id}, ${saleDate}::date
+                 r."qty", 'SALE_DELETE', ${saleId}, ${saleDate}::date
           FROM reversal_input r
           RETURNING "id"
         ),
@@ -636,39 +633,39 @@ export class SalesService {
             AND p."saleId" IS NULL
             AND p."id" IN (
               SELECT a."paymentId" FROM "PaymentAllocation" a
-              WHERE a."businessId" = ${businessId} AND a."saleId" = ${sale.id}
+              WHERE a."businessId" = ${businessId} AND a."saleId" = ${saleId}
             )
             AND NOT EXISTS (
               SELECT 1 FROM "PaymentAllocation" other
-              WHERE other."paymentId" = p."id" AND other."saleId" IS DISTINCT FROM ${sale.id}
+              WHERE other."paymentId" = p."id" AND other."saleId" IS DISTINCT FROM ${saleId}
             )
           RETURNING p."id"
         ),
         sale_payments AS (
           DELETE FROM "Payment"
-          WHERE "businessId" = ${businessId} AND "saleId" = ${sale.id}
+          WHERE "businessId" = ${businessId} AND "saleId" = ${saleId}
           RETURNING "id"
         ),
         sale_allocations AS (
           DELETE FROM "PaymentAllocation"
-          WHERE "businessId" = ${businessId} AND "saleId" = ${sale.id}
+          WHERE "businessId" = ${businessId} AND "saleId" = ${saleId}
           RETURNING "id"
         ),
         sale_invoice AS (
           DELETE FROM "Invoice"
-          WHERE "businessId" = ${businessId} AND "saleId" = ${sale.id}
+          WHERE "businessId" = ${businessId} AND "saleId" = ${saleId}
           RETURNING "id"
         ),
         new_audit AS (
           INSERT INTO "AuditLog" ("id", "businessId", "actorId", "action", "entityType", "entityId")
-          VALUES (${newRecordId()}, ${businessId}, ${actorId ?? null}, 'sale.deleted', 'sale', ${sale.id})
+          VALUES (${newRecordId()}, ${businessId}, ${actorId ?? null}, 'sale.deleted', 'sale', ${saleId})
           RETURNING "id"
         )
         SELECT 1
       `;
-      await tx.sale.delete({ where: { id: sale.id, businessId } });
+      await tx.sale.delete({ where: { id: saleId, businessId } });
 
-      return { deleted: true, saleId: sale.id };
+      return { deleted: true, saleId };
     });
   }
 }
