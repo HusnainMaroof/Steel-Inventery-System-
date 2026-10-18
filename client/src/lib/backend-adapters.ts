@@ -124,7 +124,7 @@ const dateOnly = (value: string) => value.slice(0, 10);
 const titleCase = <T extends string>(value: string) =>
   (value.charAt(0) + value.slice(1).toLowerCase()) as T;
 
-function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
+export function expandPurchaseLines(purchase: ApiPurchase): Purchase[] {
   const lines = purchase.lines;
   if (lines.length === 0) return [];
 

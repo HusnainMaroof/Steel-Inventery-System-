@@ -62,7 +62,7 @@ import type { ProductTemplate } from "./templates";
 import { useAuth } from "./auth";
 import { apiFetch, jsonBody } from "./api";
 import { userFacingError } from "./user-error";
-import { mapApiSale, normalizeBootstrap, type ApiBootstrap } from "./backend-adapters";
+import { expandPurchaseLines, mapApiSale, normalizeBootstrap, type ApiBootstrap } from "./backend-adapters";
 import { businessSlugFromPath } from "./business-path";
 
 type BootstrapResponse = { data: ApiBootstrap };
@@ -1254,7 +1254,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setPending("purchase:create");
       try {
-        const created = await apiFetch<{ id: string }>("/purchases", {
+        const created = await apiFetch<ApiBootstrap["purchases"][number]>("/purchases", {
           method: "POST",
           ...jsonBody({
             date: doc.date,
@@ -1283,11 +1283,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             })),
           }),
         });
-        try {
-          await refreshLedger();
-        } catch (reason) {
-          reportReconcileError(reason);
-        }
+        // The create response carries the stored purchase with its lines, so rows show at
+        // once. The ledger reload runs in the background instead of holding the save button.
+        const rows = expandPurchaseLines(created);
+        for (const row of rows) mergeLocal("purchases", row, setPurchases);
+        void refreshLedger().catch(reportReconcileError);
         return created.id;
       } finally {
         setPending(null);
@@ -1341,25 +1341,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!current) throw new Error("Purchase not found");
       const next = { ...current, ...patch };
       const parentId = purchaseParentId(current);
-      await mutate(`purchase:update:${parentId}`, () => apiFetch(`/purchases/${parentId}`, {
-        method: "PATCH",
-        ...jsonBody({
-          date: next.date,
-          supplierId: next.supplierId,
-          transport: next.transport,
-          loading: next.loadingCharges ?? 0,
-          labour: next.labourCharges ?? 0,
-          otherCost: next.otherCost,
-          paid: next.paid ?? 0,
-        }),
-      }));
+      setPending(`purchase:update:${parentId}`);
+      try {
+        const updated = await apiFetch<ApiBootstrap["purchases"][number]>(`/purchases/${parentId}`, {
+          method: "PATCH",
+          ...jsonBody({
+            date: next.date,
+            supplierId: next.supplierId,
+            transport: next.transport,
+            loading: next.loadingCharges ?? 0,
+            labour: next.labourCharges ?? 0,
+            otherCost: next.otherCost,
+            paid: next.paid ?? 0,
+          }),
+        });
+        setPurchases((prev) => prev.filter((purchase) => purchaseParentId(purchase) !== parentId));
+        const rows = expandPurchaseLines(updated);
+        for (const row of rows) mergeLocal("purchases", row, setPurchases);
+        void refreshLedger().catch(reportReconcileError);
+      } finally {
+        setPending(null);
+      }
     },
     deletePurchase: async (id) => {
       const current = purchases.find((purchase) => purchase.id === id);
       const parentId = current ? purchaseParentId(current) : id;
-      await mutate(`purchase:delete:${parentId}`, () =>
-        apiFetch(`/purchases/${parentId}`, { method: "DELETE" }),
-      );
+      setPending(`purchase:delete:${parentId}`);
+      try {
+        await apiFetch(`/purchases/${parentId}`, { method: "DELETE" });
+        setPurchases((prev) => prev.filter((purchase) => purchaseParentId(purchase) !== parentId));
+        void refreshLedger().catch(reportReconcileError);
+      } finally {
+        setPending(null);
+      }
     },
     addSale: async (s) => {
       setPending("sale:create");
