@@ -66,11 +66,24 @@ import { expandPurchaseLines, mapApiSale, normalizeBootstrap, type ApiBootstrap 
 import { businessSlugFromPath } from "./business-path";
 
 type BootstrapResponse = { data: ApiBootstrap };
+type TransactionsResponse = {
+  data: Pick<
+    ApiBootstrap,
+    | "customers"
+    | "suppliers"
+    | "purchases"
+    | "sales"
+    | "payments"
+    | "expenses"
+    | "stockChecks"
+  >;
+};
 
 /** An early bootstrap older than this is not trusted for the first load. */
 const EARLY_BOOTSTRAP_MAX_AGE_MS = 15_000;
 
 let earlyBootstrap: { startedAt: number; request: Promise<BootstrapResponse | null> } | null = null;
+let earlyTransactions: { startedAt: number; request: Promise<TransactionsResponse | null> } | null = null;
 
 /**
  * On a full page load of a tenant page, the bootstrap request starts right
@@ -86,12 +99,24 @@ function startEarlyBootstrap(): void {
     startedAt: Date.now(),
     request: apiFetch<BootstrapResponse>("/ledger/bootstrap").catch(() => null),
   };
+  earlyTransactions = {
+    startedAt: Date.now(),
+    request: apiFetch<TransactionsResponse>("/ledger/transactions").catch(() => null),
+  };
 }
 
 /** Hands out the early bootstrap at most once. */
 function takeEarlyBootstrap(): Promise<BootstrapResponse | null> | null {
   const early = earlyBootstrap;
   earlyBootstrap = null;
+  if (!early || Date.now() - early.startedAt > EARLY_BOOTSTRAP_MAX_AGE_MS) return null;
+  return early.request;
+}
+
+/** Hands out early transactions at most once. */
+function takeEarlyTransactions(): Promise<TransactionsResponse | null> | null {
+  const early = earlyTransactions;
+  earlyTransactions = null;
   if (!early || Date.now() - early.startedAt > EARLY_BOOTSTRAP_MAX_AGE_MS) return null;
   return early.request;
 }
@@ -497,18 +522,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // Only the newest transactions request may apply; older responses are dropped.
     const token = transactionsGuardRef.current.start();
     const startGen = writeLogRef.current.generation();
-    const payload = await apiFetch<{
-      data: Pick<
-        ApiBootstrap,
-        | "customers"
-        | "suppliers"
-        | "purchases"
-        | "sales"
-        | "payments"
-        | "expenses"
-        | "stockChecks"
-      >;
-    }>("/ledger/transactions");
+    const early = takeEarlyTransactions();
+    const payload =
+      (early && (await early)) ?? (await apiFetch<TransactionsResponse>("/ledger/transactions"));
     if (!transactionsGuardRef.current.isLatest(token)) return;
     applyTransactions(payload.data, startGen);
     setDataReady(true);
@@ -518,6 +534,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const token = bootstrapGuardRef.current.start();
     const startGen = writeLogRef.current.generation();
     setTransactionsReady(false);
+    void loadTransactions().catch((reason: unknown) => {
+      setTransactionsReady(false);
+      setError(userFacingError(reason, "Could not load the ledger transactions"));
+    });
     const early = takeEarlyBootstrap();
     const response =
       (early && (await early)) ?? (await apiFetch<BootstrapResponse>("/ledger/bootstrap"));
@@ -525,10 +545,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!bootstrapGuardRef.current.isLatest(token)) return;
     applyBootstrap(response.data, startGen);
     setDataVersion((v) => v + 1);
-    void loadTransactions().catch((reason: unknown) => {
-      setTransactionsReady(false);
-      setError(userFacingError(reason, "Could not load the ledger transactions"));
-    });
   }, [applyBootstrap, loadTransactions]);
 
   const refreshFull = useCallback(async () => {
