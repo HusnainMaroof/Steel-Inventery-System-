@@ -108,7 +108,7 @@ jobs:
              docker compose config --quiet && \
              docker compose pull && \
              mkdir -p /opt/tijaratt/backups && \
-             docker run --rm --env-file ./server/.env.production -v /opt/tijaratt/backups:/backups postgres:16 \
+             docker run --rm --env-file ./server/.env.production -v /opt/tijaratt/backups:/backups postgres:18 \
                sh -c 'set -e; url=\${DIRECT_URL#\\\"}; url=\${url%\\\"}; url=\$(printf %s \"\$url\" | sed -E \"s/([?&])schema=[^&]*&?/\\1/; s/[?&]\$//\"); file=/backups/pre-migrate-\$(date +%Y%m%d-%H%M%S).dump; pg_dump --format=custom --file=\"\$file\" \"\$url\"; pg_restore --list \"\$file\" > /dev/null; echo backup ok: \$file' && \
              docker compose run --rm backend npx prisma migrate deploy && \
              docker compose up -d"
