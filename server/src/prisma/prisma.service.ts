@@ -14,6 +14,8 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
+  private lastActivity = 0;
+  private keepWarmTimer?: NodeJS.Timeout;
 
   constructor(private readonly config: ConfigService) {
     super({
@@ -50,6 +52,18 @@ export class PrismaService
     try {
       await this.$connect();
       await this.ping();
+      await this.warm();
+      if (this.config.dbKeepWarmIdleMinutes > 0) {
+        this.keepWarmTimer = setInterval(() => {
+          if (
+            Date.now() - this.lastActivity <
+            this.config.dbKeepWarmIdleMinutes * 60_000
+          ) {
+            void this.warm();
+          }
+        }, this.config.dbKeepWarmIntervalSeconds * 1000);
+        this.keepWarmTimer.unref();
+      }
       this.logger.log(
         `database connected host=${host} name=${database} pooled=${pooled}`,
       );
@@ -63,6 +77,9 @@ export class PrismaService
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.keepWarmTimer) {
+      clearInterval(this.keepWarmTimer);
+    }
     await this.$disconnect();
     this.logger.log("database disconnected");
   }
@@ -82,5 +99,23 @@ export class PrismaService
 
   private ping(): Promise<unknown> {
     return this.$queryRaw`SELECT 1`;
+  }
+
+  async warm(): Promise<void> {
+    await Promise.all(
+      Array.from({ length: this.config.dbWarmConnections }, () => this.ping()),
+    ).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`keep-warm ping failed error=${redactSecrets(message)}`);
+    });
+  }
+
+  noteActivity(): void {
+    const idleMs = this.config.dbKeepWarmIdleMinutes * 60_000;
+    // idleMs 0 means keep-warm is off: never ping per request.
+    if (idleMs > 0 && Date.now() - this.lastActivity > idleMs) {
+      void this.warm();
+    }
+    this.lastActivity = Date.now();
   }
 }

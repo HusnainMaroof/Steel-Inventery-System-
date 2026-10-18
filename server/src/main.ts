@@ -81,6 +81,21 @@ async function bootstrap() {
     });
 
     const prisma = app.get(PrismaService);
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addHook("onRequest", (req, reply, done) => {
+        const path = (req.url ?? "").split("?")[0];
+        const isHealth =
+          path === "/health" ||
+          path === "/health/live" ||
+          path === "/api/health" ||
+          path === "/api/health/live";
+        if (!isHealth) {
+          prisma.noteActivity();
+        }
+        done();
+      });
     await app.listen(config.port, "0.0.0.0");
 
     const { host, database, pooled } = config.databaseTarget;

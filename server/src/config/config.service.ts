@@ -74,6 +74,22 @@ export class ConfigService implements OnModuleInit {
     return parseDatabaseTarget(this.databaseUrl);
   }
 
+  get dbWarmConnections(): number {
+    const value = Number(process.env.DB_WARM_CONNECTIONS ?? 4);
+    return Number.isFinite(value) ? Math.min(10, Math.max(0, Math.trunc(value))) : 4;
+  }
+
+  get dbKeepWarmIdleMinutes(): number {
+    const value = Number(process.env.DB_KEEPWARM_IDLE_MINUTES ?? 20);
+    return Number.isFinite(value) && value >= 0 ? value : 20;
+  }
+
+  /** Must stay below Neon's 5-minute suspend; bad values fall back to the default. */
+  get dbKeepWarmIntervalSeconds(): number {
+    const value = Number(process.env.DB_KEEPWARM_INTERVAL_SECONDS ?? 240);
+    return Number.isFinite(value) && value >= 30 ? value : 240;
+  }
+
   get cloudinary() {
     return {
       cloudName: (process.env.CLOUDINARY_CLOUD_NAME ?? "").trim(),
