@@ -332,8 +332,9 @@ export class SalesService {
       const shortages = [...variantShortages, ...productShortages];
       if (shortages.length > 0) {
         const first = shortages[0];
+        const shortProducts = new Set(shortages.map((s) => s.productId)).size;
         throw new BadRequestException(
-          `Insufficient inventory for ${shortages.length} product(s) — ` +
+          `Insufficient inventory for ${shortProducts} product(s) — ` +
             `first shortage: requested ${first.qty.toString()}, ` +
             `available ${availableFor(first).toString()}`,
         );
