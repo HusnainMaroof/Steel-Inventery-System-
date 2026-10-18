@@ -10,6 +10,7 @@ import { fmtDate, fmtMoney } from "@/lib/format";
 import type { Expense } from "@/lib/types";
 import Decimal from "decimal.js";
 import { toDecimal } from "../../../lib/decimal";
+import { userFacingError } from "@/lib/user-error";
 
 type DraftLine = { name: string; amount: string };
 
@@ -31,6 +32,7 @@ export default function ExpensesPage() {
   const [date, setDate] = useState(() => now.toISOString().slice(0, 10));
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [view, setView] = useState<Expense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
 
@@ -114,6 +116,8 @@ export default function ExpensesPage() {
         });
       }
       setAddOpen(false);
+    } catch (reason) {
+      setError(userFacingError(reason, "Could not save this expense."));
     } finally {
       savingExpenseRef.current = false;
       setSavingExpense(false);
@@ -170,7 +174,7 @@ export default function ExpensesPage() {
               {filtered.length}
             </p>
           </div>
-          <div className="panel p-5 bg-[#111] text-white">
+          <div className="panel p-5 !bg-[#111] text-white">
             <p className="text-[11px] uppercase tracking-[0.12em] font-medium text-white/70">
               Total spent
             </p>
@@ -396,11 +400,18 @@ export default function ExpensesPage() {
 
       <ConfirmModal
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { setDeleteTarget(null); setDeleteError(null); }}
         onConfirm={async () => {
-          if (deleteTarget) await deleteExpense(deleteTarget.id);
-          setDeleteTarget(null);
+          if (!deleteTarget) return;
+          setDeleteError(null);
+          try {
+            await deleteExpense(deleteTarget.id);
+            setDeleteTarget(null);
+          } catch (reason) {
+            setDeleteError(userFacingError(reason, "Could not delete this expense."));
+          }
         }}
+        error={deleteError}
         title={deleteTarget ? `Delete ${expenseName(deleteTarget)}?` : "Delete expense?"}
         confirmLabel="Delete"
         loading={deleteTarget ? isPending(`expense:delete:${deleteTarget.id}`) : false}

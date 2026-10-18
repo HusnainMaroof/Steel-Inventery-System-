@@ -237,13 +237,20 @@ export default function PurchasesPage() {
     }
   };
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const confirmDeletePurchase = async () => {
     if (!deleteTarget) return;
     const p = deleteTarget;
-    await deletePurchase(p.id);
-    if (selectedId === p.id) setSelectedId(null);
-    if (payId === p.id) setPayId(null);
-    setDeleteTarget(null);
+    setDeleteError(null);
+    try {
+      await deletePurchase(p.id);
+      if (selectedId === p.id) setSelectedId(null);
+      if (payId === p.id) setPayId(null);
+      setDeleteTarget(null);
+    } catch (reason) {
+      setDeleteError(userFacingError(reason, "Could not delete this purchase."));
+    }
   };
 
   // Search + date-range filter (applies to All Purchases and Payment Dues)
@@ -805,8 +812,9 @@ export default function PurchasesPage() {
       {/* Delete Purchase Confirm Modal */}
       <ConfirmModal
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { setDeleteTarget(null); setDeleteError(null); }}
         onConfirm={confirmDeletePurchase}
+        error={deleteError}
         title="Delete this purchase?"
         confirmLabel="Delete Purchase"
         loading={deleteTarget ? isPending(`purchase:delete:${purchaseParentId(deleteTarget)}`) : false}

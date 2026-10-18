@@ -8,6 +8,7 @@ import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
 import type { Sale } from "@/lib/types";
 import Decimal from "decimal.js";
 import { toDecimal } from "../../../lib/decimal";
+import { userFacingError } from "@/lib/user-error";
 
 type DateGroup = {
   date: string;
@@ -41,11 +42,18 @@ export default function CustomersPage() {
   }, []);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; shop: string; phone: string } | null>(null);
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const confirmDeleteCustomer = async () => {
     if (!deleteTarget) return;
-    await deleteCustomer(deleteTarget.id);
-    if (viewCustomerId === deleteTarget.id) setViewCustomerId(null);
-    setDeleteTarget(null);
+    setDeleteError(null);
+    try {
+      await deleteCustomer(deleteTarget.id);
+      if (viewCustomerId === deleteTarget.id) setViewCustomerId(null);
+      setDeleteTarget(null);
+    } catch (reason) {
+      setDeleteError(userFacingError(reason, "Could not delete this customer."));
+    }
   };
 
   const customerDateGroups: DateGroup[] = useMemo(() => {
@@ -79,15 +87,20 @@ export default function CustomersPage() {
   const [savingCustomer, setSavingCustomer] = useState(false);
   const savingCustomerRef = useRef(false);
 
+  const [customerError, setCustomerError] = useState<string | null>(null);
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingCustomerRef.current || !form.name.trim() || isPending("customer:create")) return;
     savingCustomerRef.current = true;
     setSavingCustomer(true);
+    setCustomerError(null);
     try {
       await addCustomer({ name: form.name.trim(), shop: form.shop.trim(), phone: form.phone.trim() });
       setForm({ name: "", shop: "", phone: "" });
       onClose();
+    } catch (reason) {
+      setCustomerError(userFacingError(reason, "Could not save this customer."));
     } finally {
       savingCustomerRef.current = false;
       setSavingCustomer(false);
@@ -330,6 +343,11 @@ export default function CustomersPage() {
       </Modal>
 
       <Modal open={open} onClose={onClose} busy={savingCustomer || isPending("customer:create")} title="New Customer">
+        {customerError && (
+          <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+            {customerError}
+          </div>
+        )}
         <form onSubmit={save} className="grid gap-4">
           <div><label>Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ahmed Steel Mart" required autoFocus /></div>
           <div><label>Shop / Area</label><input value={form.shop} onChange={(e) => setForm({ ...form, shop: e.target.value })} placeholder="e.g. Bilal Gunj, Lahore" /></div>
@@ -346,8 +364,9 @@ export default function CustomersPage() {
       {/* Delete Customer Confirm Modal */}
       <ConfirmModal
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { setDeleteTarget(null); setDeleteError(null); }}
         onConfirm={confirmDeleteCustomer}
+        error={deleteError}
         title="Delete this customer?"
         confirmLabel="Delete Customer"
         loading={deleteTarget ? isPending(`customer:delete:${deleteTarget.id}`) : false}

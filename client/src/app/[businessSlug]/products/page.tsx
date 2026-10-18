@@ -6,6 +6,7 @@ import type { AttributeDef, AttributeOption, Product, ProductCategory, Variant }
 import { attrsValuesLine, scopedDefs } from "@/lib/catalogue";
 import { PRODUCT_TEMPLATES, type ProductTemplate } from "@/lib/templates";
 import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle, RowActionsMenu } from "@/components/ui";
+import { userFacingError } from "@/lib/user-error";
 
 const UNIT_OPTIONS: { value: string; label: string }[] = [
   { value: "kg", label: "KG" },
@@ -164,6 +165,7 @@ export default function ProductsPage() {
   const [itemModal, setItemModal] = useState(false);
   const [attrModal, setAttrModal] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ kind: "product" | "category"; id: string; name: string } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<
     | { kind: "product"; p: Product }
     | { kind: "category"; c: ProductCategory }
@@ -213,18 +215,23 @@ export default function ProductsPage() {
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-    if (deleteTarget.kind === "product") {
-      await deleteProduct(deleteTarget.p.id);
-      setView({ level: "products" });
-    } else if (deleteTarget.kind === "category") {
-      await deleteCategory(deleteTarget.c.id);
-      setView({ level: "product", productId: deleteTarget.c.productId });
-    } else if (deleteTarget.kind === "variant") {
-      await deleteVariant(deleteTarget.v.id);
-    } else {
-      await deleteAttribute(deleteTarget.d.id);
+    setDeleteError(null);
+    try {
+      if (deleteTarget.kind === "product") {
+        await deleteProduct(deleteTarget.p.id);
+        setView({ level: "products" });
+      } else if (deleteTarget.kind === "category") {
+        await deleteCategory(deleteTarget.c.id);
+        setView({ level: "product", productId: deleteTarget.c.productId });
+      } else if (deleteTarget.kind === "variant") {
+        await deleteVariant(deleteTarget.v.id);
+      } else {
+        await deleteAttribute(deleteTarget.d.id);
+      }
+      setDeleteTarget(null);
+    } catch (reason) {
+      setDeleteError(userFacingError(reason, "Could not delete this item."));
     }
-    setDeleteTarget(null);
   };
 
   const usesCats = product?.usesCategories === true;
@@ -510,8 +517,9 @@ export default function ProductsPage() {
 
       <ConfirmModal
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { setDeleteTarget(null); setDeleteError(null); }}
         onConfirm={confirmDelete}
+        error={deleteError}
         title={
           deleteTarget?.kind === "product"
             ? `Delete "${deleteTarget.p.name}"?`
@@ -1114,8 +1122,8 @@ function AddProductModal({
 }: {
   existingNames: string[];
   onClose: () => void;
-  onScratch: (name: string, unit: string, description: string | undefined, usesCategories: boolean) => void;
-  onTemplate: (t: ProductTemplate) => void;
+  onScratch: (name: string, unit: string, description: string | undefined, usesCategories: boolean) => Promise<void>;
+  onTemplate: (t: ProductTemplate) => Promise<void>;
 }) {
   const { isPending } = useStore();
   const [mode, setMode] = useState<"scratch" | "template">("scratch");
@@ -1127,18 +1135,26 @@ function AddProductModal({
   const [error, setError] = useState<string | null>(null);
   const taken = (n: string) => existingNames.some((x) => x.toLowerCase() === n.trim().toLowerCase());
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mode === "template") {
       const t = PRODUCT_TEMPLATES.find((x) => x.id === tplId);
       if (!t) return setError("Pick a template.");
       if (taken(t.product.name)) return setError(`${t.product.name} already exists — open it from the list instead.`);
-      onTemplate(t);
+      try {
+        await onTemplate(t);
+      } catch (reason) {
+        setError(userFacingError(reason, "Could not add this product."));
+      }
       return;
     }
     if (!name.trim()) return setError("Give the product a name.");
     if (taken(name)) return setError("A product with that name already exists.");
-    onScratch(name.trim(), unit, description.trim() || undefined, usesCategories);
+    try {
+      await onScratch(name.trim(), unit, description.trim() || undefined, usesCategories);
+    } catch (reason) {
+      setError(userFacingError(reason, "Could not create this product."));
+    }
   };
 
   return (
@@ -1267,7 +1283,7 @@ function AddCategoryModal({
 }: {
   productName: string;
   onClose: () => void;
-  onAdd: (name: string, description: string | undefined, active: boolean) => void;
+  onAdd: (name: string, description: string | undefined, active: boolean) => Promise<void>;
 }) {
   const { isPending } = useStore();
   const [name, setName] = useState("");
@@ -1284,10 +1300,14 @@ function AddCategoryModal({
       )}
       <form
         className="flex flex-col gap-4"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           if (!name.trim()) return setError("Give the category a name.");
-          onAdd(name.trim(), description.trim() || undefined, active);
+          try {
+            await onAdd(name.trim(), description.trim() || undefined, active);
+          } catch (reason) {
+            setError(userFacingError(reason, "Could not save this category."));
+          }
         }}
       >
         <div>
@@ -1318,7 +1338,7 @@ function AddAttributeModal({
 }: {
   scopeName: string;
   onClose: () => void;
-  onAdd: (def: { name: string; type: AttributeDef["type"]; required: boolean; unit?: string; options?: string[] }) => void;
+  onAdd: (def: { name: string; type: AttributeDef["type"]; required: boolean; unit?: string; options?: string[] }) => Promise<void>;
 }) {
   const { isPending } = useStore();
   const [name, setName] = useState("");
@@ -1328,12 +1348,16 @@ function AddAttributeModal({
   const [options, setOptions] = useState<string[]>([""]);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const opts = options.map((s) => s.trim()).filter(Boolean);
     if (!name.trim()) return setError("Give the attribute a name.");
     if (type === "select" && opts.length === 0) return setError("A dropdown needs at least one option.");
-    onAdd({ name: name.trim(), type, required, unit: unit.trim() || undefined, options: type === "select" ? opts : undefined });
+    try {
+      await onAdd({ name: name.trim(), type, required, unit: unit.trim() || undefined, options: type === "select" ? opts : undefined });
+    } catch (reason) {
+      setError(userFacingError(reason, "Could not save this attribute."));
+    }
   };
 
   return (
@@ -1417,17 +1441,28 @@ function RenameModal({
   title: string;
   value: string;
   onClose: () => void;
-  onSave: (n: string) => void;
+  onSave: (n: string) => Promise<void>;
 }) {
   const { isPending } = useStore();
   const [name, setName] = useState(value);
+  const [error, setError] = useState<string | null>(null);
   return (
     <Modal open onClose={onClose} title={title} busy={isPending()}>
+      {error && (
+        <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+          {error}
+        </div>
+      )}
       <form
         className="flex flex-col gap-4"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (name.trim()) onSave(name.trim());
+          if (!name.trim()) return;
+          try {
+            await onSave(name.trim());
+          } catch (reason) {
+            setError(userFacingError(reason, "Could not save the name."));
+          }
         }}
       >
         <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />

@@ -427,11 +427,13 @@ export function ConfirmModal({
   title = "Are you sure?",
   confirmLabel = "Delete",
   loading = false,
+  error = null,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
+  error?: string | null;
   title?: string;
   confirmLabel?: string;
   loading?: boolean;
@@ -440,6 +442,11 @@ export function ConfirmModal({
   const busy = Boolean(loading);
   return (
     <Modal open={open} onClose={onClose} busy={busy} title={title}>
+      {error && (
+        <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+          {error}
+        </div>
+      )}
       <div className="mb-6">{children}</div>
       <div className="flex justify-end gap-3">
         <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>

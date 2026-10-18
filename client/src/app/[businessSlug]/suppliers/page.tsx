@@ -10,6 +10,7 @@ import {
 import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
 import { attrsValuesLine } from "@/lib/catalogue";
+import { userFacingError } from "@/lib/user-error";
 import type { Purchase, Supplier } from "@/lib/types";
 import Decimal from "decimal.js";
 import { toDecimal } from "../../../lib/decimal";
@@ -44,12 +45,18 @@ export default function SuppliersPage() {
     if (id) setViewSupplierId(id);
   }, []);
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const confirmDeleteSupplier = async () => {
     if (!deleteTarget) return;
-    await deleteSupplier(deleteTarget.id);
-    if (viewSupplierId === deleteTarget.id) setViewSupplierId(null);
-    setDeleteTarget(null);
+    setDeleteError(null);
+    try {
+      await deleteSupplier(deleteTarget.id);
+      if (viewSupplierId === deleteTarget.id) setViewSupplierId(null);
+      setDeleteTarget(null);
+    } catch (reason) {
+      setDeleteError(userFacingError(reason, "Could not delete this supplier."));
+    }
   };
 
   const parentFirstLineIds = useMemo(() => {
@@ -106,16 +113,20 @@ export default function SuppliersPage() {
 
   const [savingSupplier, setSavingSupplier] = useState(false);
   const savingSupplierRef = useRef(false);
+  const [supplierError, setSupplierError] = useState<string | null>(null);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingSupplierRef.current || !form.name.trim() || isPending("supplier:create")) return;
     savingSupplierRef.current = true;
     setSavingSupplier(true);
+    setSupplierError(null);
     try {
       await addSupplier({ name: form.name.trim(), mill: form.mill.trim(), phone: form.phone.trim() });
       setForm({ name: "", mill: "", phone: "" });
       onClose();
+    } catch (reason) {
+      setSupplierError(userFacingError(reason, "Could not save this supplier."));
     } finally {
       savingSupplierRef.current = false;
       setSavingSupplier(false);
@@ -258,6 +269,11 @@ export default function SuppliersPage() {
 
       {/* New Supplier Modal */}
       <Modal open={open} onClose={onClose} busy={savingSupplier || isPending("supplier:create")} title="New Supplier">
+        {supplierError && (
+          <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+            {supplierError}
+          </div>
+        )}
         <form onSubmit={save} className="grid gap-4">
           <div><label>Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Malik Traders" required autoFocus /></div>
           <div><label>City</label><input value={form.mill} onChange={(e) => setForm({ ...form, mill: e.target.value })} placeholder="e.g. Lahore" /></div>
@@ -373,8 +389,9 @@ export default function SuppliersPage() {
       {/* Delete Supplier Confirm Modal */}
       <ConfirmModal
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { setDeleteTarget(null); setDeleteError(null); }}
         onConfirm={confirmDeleteSupplier}
+        error={deleteError}
         title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete supplier?"}
         loading={deleteTarget ? isPending(`supplier:delete:${deleteTarget.id}`) : false}
         confirmLabel="Delete Supplier"
