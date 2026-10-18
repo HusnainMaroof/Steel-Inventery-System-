@@ -26,6 +26,7 @@ export const homeFor = (user?: AuthUser | null) => homePathFor(user);
 interface Auth {
   user: AuthUser | null;
   ready: boolean;
+  blockedMessage: string | null;
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
 }
@@ -34,12 +35,23 @@ const AuthCtx = createContext<Auth | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   const hydrate = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/me", { cache: "no-store" });
       if (!res.ok) {
+        if (res.status === 403) {
+          try {
+            const body = (await res.json()) as { message?: string };
+            setBlockedMessage(body?.message ?? "Your access to this business is blocked. Contact the platform administrator.");
+          } catch {
+            setBlockedMessage("Your access to this business is blocked. Contact the platform administrator.");
+          }
+        } else {
+          setBlockedMessage(null);
+        }
         if (res.status === 401) {
           const { clearSessionAction } = await import("@/app/actions/auth");
           await clearSessionAction();
@@ -47,9 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         return;
       }
+      setBlockedMessage(null);
       const body = (await res.json()) as AuthUser;
       setUser(body);
     } catch {
+      setBlockedMessage(null);
       setUser(null);
     } finally {
       setReady(true);
@@ -74,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthCtx.Provider value={{ user, ready, login, logout }}>
+    <AuthCtx.Provider value={{ user, ready, blockedMessage, login, logout }}>
       {children}
     </AuthCtx.Provider>
   );

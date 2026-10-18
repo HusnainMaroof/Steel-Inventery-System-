@@ -652,10 +652,12 @@ export function ErrorState({
   title,
   message,
   onRetry,
+  retryLabel = "Try again",
 }: {
   title: string;
   message?: string | null;
   onRetry?: () => void;
+  retryLabel?: string;
 }) {
   return (
     <div
@@ -668,7 +670,7 @@ export function ErrorState({
       )}
       {onRetry && (
         <button type="button" className="btn-primary mt-5" onClick={onRetry}>
-          Try again
+          {retryLabel}
         </button>
       )}
     </div>

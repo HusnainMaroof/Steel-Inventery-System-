@@ -15,6 +15,7 @@ import {
 import { canOpenPath, pagesFor } from "@/lib/staff-access";
 import { useUiPreferences } from "@/lib/preferences";
 import { AuthBootstrapSkeleton, skeletonForPath } from "@/components/skeletons";
+import { ErrorState } from "@/components/ui";
 
 const ICONS: Record<string, ReactNode> = {
   dashboard: <path d="M2 8.5 8 3l6 5.5V14a.5.5 0 0 1-.5.5h-3v-4h-3v4h-3A.5.5 0 0 1 2 14Z" />,
@@ -306,9 +307,17 @@ function MobileNav({
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { user, ready, logout } = useAuth();
+  const { user, ready, logout, blockedMessage } = useAuth();
   const { prefs } = useUiPreferences();
   const router = useRouter();
+
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onShow as EventListener);
+    return () => window.removeEventListener("pageshow", onShow as EventListener);
+  }, []);
 
   const isMarketingRoute =
     pathname === "/pricing" ||
@@ -366,6 +375,12 @@ export default function Shell({ children }: { children: ReactNode }) {
     }
   }, [pathname, user, ready, isAdminRoute, isMarketingRoute, roleHome, router]);
 
+  const onSignOut = () => {
+    void logout().then(() => {
+      window.location.replace("/");
+    });
+  };
+
   if (!ready) {
     if (isPublic) return <>{children}</>;
     return <AuthBootstrapSkeleton />;
@@ -373,12 +388,18 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   if (!user) {
     if (isPublic) return <>{children}</>;
+    if (blockedMessage) {
+      return (
+        <ErrorState
+          title="Access blocked"
+          message={blockedMessage}
+          onRetry={onSignOut}
+          retryLabel="Sign out"
+        />
+      );
+    }
     return null;
   }
-
-  const onSignOut = () => {
-    void logout().then(() => router.replace("/"));
-  };
 
   const brand =
     user.role === "SUPERADMIN"
