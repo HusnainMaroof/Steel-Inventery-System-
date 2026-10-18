@@ -5,6 +5,8 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { availableParallelism } from "node:os";
 import { ConfigService } from "../config/config.service";
 import { redactSecrets } from "../common/database-target";
 
@@ -19,6 +21,7 @@ export class PrismaService
 
   constructor(private readonly config: ConfigService) {
     super({
+      adapter: new PrismaPg(PrismaService.poolConfig(config.databaseUrl)),
       log: [
         { emit: "event", level: "error" },
         { emit: "event", level: "warn" },
@@ -42,6 +45,39 @@ export class PrismaService
     this.$on("warn", (event) => {
       this.logger.warn(redactSecrets(event.message));
     });
+  }
+
+  // The pg adapter combines parse, bind, and execute into one network round trip.
+  // Keep idle connections for five minutes so they survive the four-minute
+  // keep-warm interval.
+  private static poolConfig(databaseUrl: string) {
+    const config = {
+      connectionString: databaseUrl,
+      max: availableParallelism() * 2 + 1,
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 300_000,
+    };
+
+    try {
+      const url = new URL(databaseUrl);
+      const connectionLimit = Number(url.searchParams.get("connection_limit"));
+      if (Number.isInteger(connectionLimit) && connectionLimit > 0) {
+        config.max = connectionLimit;
+      }
+      const poolTimeoutValue = url.searchParams.get("pool_timeout");
+      const poolTimeout = Number(poolTimeoutValue);
+      if (
+        poolTimeoutValue !== null &&
+        poolTimeout >= 0 &&
+        Number.isFinite(poolTimeout)
+      ) {
+        config.connectionTimeoutMillis = poolTimeout * 1000;
+      }
+    } catch {
+      // Keep defaults so $connect reports invalid connection strings as usual.
+    }
+
+    return config;
   }
 
   async onModuleInit(): Promise<void> {
