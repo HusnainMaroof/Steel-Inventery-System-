@@ -30,9 +30,8 @@ export class ReportsService {
     const period = this.periodOf(input);
     const productId = input.productId;
 
-    // ---- every independent query starts concurrently ----
-    // (they used to be awaited one by one, stacking a full DB round trip
-    // per query; the report only needs two sequential phases)
+    // Prisma query builders are lazy, so await independent queries together below.
+    // Cost purchases depend on sales and run in phase 2.
     const salesPromise = this.prisma.sale.findMany({
       relationLoadStrategy: "join",
       where: {
@@ -186,8 +185,29 @@ export class ReportsService {
       WHERE p."businessId" = ${businessId}
     `;
 
-    const sales = await salesPromise;
-    const expenses = await expensesPromise;
+    const [
+      sales,
+      expenses,
+      products,
+      stockRows,
+      customerDueRows,
+      supplierDueRows,
+      customerCash,
+      supplierCash,
+      lineWeights,
+      chargeTotals,
+    ] = await Promise.all([
+      salesPromise,
+      expensesPromise,
+      productsPromise,
+      stockRowsPromise,
+      customerDueRowsPromise,
+      supplierDueRowsPromise,
+      customerCashPromise,
+      supplierCashPromise,
+      lineWeightsPromise,
+      chargeTotalsPromise,
+    ]);
 
     const productIdsInSales = [
       ...new Set(sales.flatMap((s) => s.lines.map((l) => l.productId))),
@@ -224,27 +244,7 @@ export class ReportsService {
             orderBy: [{ date: "asc" }, { createdAt: "asc" }],
           });
 
-    const [
-      costPurchases,
-      products,
-      stockRows,
-      customerDueRows,
-      supplierDueRows,
-      customerCash,
-      supplierCash,
-      lineWeights,
-      chargeTotals,
-    ] = await Promise.all([
-      costPurchasesPromise,
-      productsPromise,
-      stockRowsPromise,
-      customerDueRowsPromise,
-      supplierDueRowsPromise,
-      customerCashPromise,
-      supplierCashPromise,
-      lineWeightsPromise,
-      chargeTotalsPromise,
-    ]);
+    const costPurchases = await costPurchasesPromise;
 
     // ---- landed cost per unit keyed by source purchase + product ----
     // Unit cost stays exact Decimal here: never rounded before multiplying by qty.
