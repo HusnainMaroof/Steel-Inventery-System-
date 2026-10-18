@@ -145,27 +145,28 @@ export class InventoryService {
    * returns `qty: null`, `unit: null`, `mixedUnits: true` and a `units` breakdown.
    */
   async stock(businessId: string) {
-    const grouped = await this.prisma.inventoryTransaction.groupBy({
-      by: ["productId", "unit"],
-      where: { businessId },
-      _sum: { qty: true },
-    });
-
-    const products = await this.prisma.product.findMany({
-      where: { businessId, active: true },
-      select: { id: true, name: true, unit: true },
-    });
+    const [grouped, products] = await Promise.all([
+      this.prisma.inventoryTransaction.groupBy({
+        by: ["productId", "unit"],
+        where: { businessId },
+        _sum: { qty: true },
+      }),
+      this.prisma.product.findMany({
+        where: { businessId, active: true },
+        select: { id: true, name: true, unit: true },
+      }),
+    ]);
 
     return unitSafeProductStock(products, grouped);
   }
 
   async stockByVariant(businessId: string) {
-    const grouped = await this.prisma.inventoryTransaction.groupBy({
-      by: ["productId", "categoryId", "variantId", "unit"],
-      where: { businessId },
-      _sum: { qty: true },
-    });
-    const [products, categories, variants] = await Promise.all([
+    const [grouped, products, categories, variants] = await Promise.all([
+      this.prisma.inventoryTransaction.groupBy({
+        by: ["productId", "categoryId", "variantId", "unit"],
+        where: { businessId },
+        _sum: { qty: true },
+      }),
       this.prisma.product.findMany({ where: { businessId }, select: { id: true, name: true, unit: true } }),
       this.prisma.productCategory.findMany({ where: { businessId }, select: { id: true, name: true } }),
       this.prisma.variant.findMany({ where: { businessId }, select: { id: true, shortName: true, attributes: true } }),
