@@ -110,7 +110,9 @@ export default function NewSaleModal({
                   </button>
                 </div>
                 <select value={existingId} onChange={(e) => setExistingId(e.target.value)} className="w-full">
-                  {customers.length === 0 && <option value="">No customers yet — add one</option>}
+                  {customers.length === 0
+                    ? <option value="" disabled>No customers yet — add one</option>
+                    : <option value="" disabled>Select customer</option>}
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>{c.name} — {c.shop}</option>
                   ))}

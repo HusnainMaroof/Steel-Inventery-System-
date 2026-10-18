@@ -41,7 +41,7 @@ export default function SalesPage() {
   const [newCustError, setNewCustError] = useState("");
 
   /* ---- sale header ---- */
-  const [existingId, setExistingId] = useState(customers[0]?.id ?? "");
+  const [existingId, setExistingId] = useState("");
   const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
   const [discountPct, setDiscountPct] = useState(0);
   const [taxPct, setTaxPct] = useState(0);
@@ -80,7 +80,7 @@ export default function SalesPage() {
     setPayError("");
     setSubmitError("");
     setSaleDate(new Date().toISOString().slice(0, 10));
-    setExistingId(activeCustomers[0]?.id ?? "");
+    setExistingId("");
     setNewOpen(true);
   };
 
