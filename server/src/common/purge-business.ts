@@ -11,6 +11,7 @@ export async function purgeBusiness(
   await tx.inventoryTransaction.deleteMany({ where: { businessId } });
   await tx.sale.deleteMany({ where: { businessId } });
   await tx.purchase.deleteMany({ where: { businessId } });
+  await tx.stockLot.deleteMany({ where: { businessId } });
   await tx.stockCheck.deleteMany({ where: { businessId } });
   await tx.expense.deleteMany({ where: { businessId } });
   await tx.attributeDef.deleteMany({ where: { businessId } });

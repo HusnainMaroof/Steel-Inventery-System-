@@ -365,15 +365,15 @@ export class UsersService {
       throw new ForbiddenException("Only business-owner accounts can be deleted");
     }
 
-    await this.audit.log({
-      businessId: user.businessId,
-      actorId: actorId ?? null,
-      action: "owner.deleted",
-      entityType: "business",
-      entityId: user.businessId,
-    });
     await this.prisma.$transaction(async (tx) => {
       await purgeBusiness(tx, user.businessId);
+      await this.audit.logTx(tx, {
+        businessId: user.businessId,
+        actorId: actorId ?? null,
+        action: "owner.deleted",
+        entityType: "business",
+        entityId: user.businessId,
+      });
     });
     // The purge hard-deletes logins without a tokenVersion bump — drop the
     // business's cached JWT entries so deleted tokens die with the account.
