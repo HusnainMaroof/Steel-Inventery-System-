@@ -60,7 +60,7 @@ export class ExpensesService {
           }
         : {}),
     };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.expense.findMany({ where, skip, take, orderBy: { date: "desc" } }),
       this.prisma.expense.count({ where }),
     ]);
@@ -108,8 +108,10 @@ export class ExpensesService {
   }
 
   async remove(businessId: string, id: string, actorId?: string) {
-    await this.byId(businessId, id);
-    await this.prisma.expense.delete({ where: { id } });
+    const { count } = await this.prisma.expense.deleteMany({
+      where: { id, businessId },
+    });
+    if (count === 0) throw new NotFoundException("Expense not found");
     await this.audit.log({
       businessId,
       actorId: actorId ?? null,

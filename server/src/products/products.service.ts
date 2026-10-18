@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogueCache } from "../ledger/catalogue-cache";
+import { rethrowNotFound } from "../common/prisma/query-helpers";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
@@ -39,9 +40,10 @@ export class ProductsService {
 
   async list(businessId: string, skip: number, take: number) {
     const where = { businessId };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
+        relationLoadStrategy: "join",
         include: {
           categories: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
           attributeDefs: {
@@ -69,9 +71,8 @@ export class ProductsService {
   }
 
   async update(businessId: string, id: string, dto: UpdateProductDto) {
-    await this.assertExists(businessId, id);
     const product = await this.prisma.product.update({
-      where: { id },
+      where: { id, businessId },
       data: {
         name: dto.name,
         unit: dto.unit,
@@ -80,7 +81,7 @@ export class ProductsService {
         usesCategories: dto.usesCategories,
         active: dto.active,
       },
-    });
+    }).catch(rethrowNotFound("Product not found"));
     this.catalogue.invalidate(businessId);
     return product;
   }
@@ -126,15 +127,14 @@ export class ProductsService {
   }
 
   async updateCategory(businessId: string, id: string, dto: UpdateCategoryDto) {
-    await this.assertCategory(businessId, id);
-    const category = await this.prisma.productCategory.update({ where: { id }, data: dto });
+    const category = await this.prisma.productCategory.update({ where: { id, businessId }, data: dto }).catch(rethrowNotFound("Category not found"));
     this.catalogue.invalidate(businessId);
     return category;
   }
 
   async removeCategory(businessId: string, id: string) {
     await this.assertCategory(businessId, id);
-    const [purchases, sales] = await this.prisma.$transaction([
+    const [purchases, sales] = await Promise.all([
       this.prisma.purchaseLine.count({ where: { purchase: { businessId }, categoryId: id } }),
       this.prisma.saleLine.count({ where: { sale: { businessId }, categoryId: id } }),
     ]);
@@ -178,8 +178,7 @@ export class ProductsService {
   }
 
   async updateAttribute(businessId: string, id: string, dto: UpdateAttributeDto) {
-    await this.assertAttribute(businessId, id);
-    const attribute = await this.prisma.attributeDef.update({ where: { id }, data: dto });
+    const attribute = await this.prisma.attributeDef.update({ where: { id, businessId }, data: dto }).catch(rethrowNotFound("Attribute not found"));
     this.catalogue.invalidate(businessId);
     return attribute;
   }
@@ -327,15 +326,14 @@ export class ProductsService {
   }
 
   async updateVariant(businessId: string, id: string, dto: UpdateVariantDto) {
-    await this.assertVariant(businessId, id);
-    const variant = await this.prisma.variant.update({ where: { id }, data: dto });
+    const variant = await this.prisma.variant.update({ where: { id, businessId }, data: dto }).catch(rethrowNotFound("Variant not found"));
     this.catalogue.invalidate(businessId);
     return variant;
   }
 
   async removeVariant(businessId: string, id: string) {
     await this.assertVariant(businessId, id);
-    const [purchases, sales] = await this.prisma.$transaction([
+    const [purchases, sales] = await Promise.all([
       this.prisma.purchaseLine.count({ where: { purchase: { businessId }, variantId: id } }),
       this.prisma.saleLine.count({ where: { sale: { businessId }, variantId: id } }),
     ]);

@@ -76,7 +76,7 @@ export class UsersService {
 
   async listOwners(skip: number, take: number) {
     const where = { role: "ADMIN" as const };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         select: ownerSelect,
@@ -382,7 +382,7 @@ export class UsersService {
 
   async listStaff(businessId: string, skip: number, take: number) {
     const where = { businessId, role: "SUBADMIN" as const, active: true };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         select: staffSelect,

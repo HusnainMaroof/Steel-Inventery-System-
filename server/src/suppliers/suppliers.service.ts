@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { rethrowNotFound } from "../common/prisma/query-helpers";
 import { purchaseGoodsTotal } from "../domain/money";
 import { supplierPayable } from "../domain/payment-settlement";
 import { CreateSupplierDto } from "./dto/create-supplier.dto";
@@ -29,7 +30,7 @@ export class SuppliersService {
           }
         : {}),
     };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.supplier.findMany({
         where,
         skip,
@@ -67,9 +68,9 @@ export class SuppliersService {
    * Transport/loading/labour/other charges are on us, never owed (§27).
    */
   async payables(businessId: string, id: string, skip: number, take: number) {
-    await this.byId(businessId, id);
     const where = { businessId, supplierId: id };
-    const [purchases, total, dueRows] = await Promise.all([
+    const [, purchases, total, dueRows] = await Promise.all([
+      this.byId(businessId, id),
       this.prisma.purchase.findMany({
         where,
         include: { lines: true },
@@ -108,18 +109,16 @@ export class SuppliersService {
   }
 
   async update(businessId: string, id: string, dto: UpdateSupplierDto) {
-    await this.byId(businessId, id);
     return this.prisma.supplier.update({
-      where: { id },
+      where: { id, businessId },
       data: { name: dto.name, mill: dto.mill, phone: dto.phone },
-    });
+    }).catch(rethrowNotFound("Supplier not found"));
   }
 
   async deactivate(businessId: string, id: string) {
-    await this.byId(businessId, id);
     return this.prisma.supplier.update({
-      where: { id },
+      where: { id, businessId },
       data: { active: false },
-    });
+    }).catch(rethrowNotFound("Supplier not found"));
   }
 }

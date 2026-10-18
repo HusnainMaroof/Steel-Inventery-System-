@@ -1,4 +1,15 @@
+import { NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+
+/** Maps Prisma P2025 (no row matched `where`) to a 404. */
+export function rethrowNotFound(message: string) {
+  return (error: unknown): never => {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      throw new NotFoundException(message);
+    }
+    throw error;
+  };
+}
 
 /** Sold qty keyed by `purchaseId:productId:variantId` (empty string when variant is null). */
 export async function consumedQtyByLot(

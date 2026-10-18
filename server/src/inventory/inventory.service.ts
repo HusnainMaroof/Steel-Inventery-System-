@@ -165,7 +165,7 @@ export class InventoryService {
       where: { businessId },
       _sum: { qty: true },
     });
-    const [products, categories, variants] = await this.prisma.$transaction([
+    const [products, categories, variants] = await Promise.all([
       this.prisma.product.findMany({ where: { businessId }, select: { id: true, name: true, unit: true } }),
       this.prisma.productCategory.findMany({ where: { businessId }, select: { id: true, name: true } }),
       this.prisma.variant.findMany({ where: { businessId }, select: { id: true, shortName: true, attributes: true } }),
@@ -246,7 +246,7 @@ export class InventoryService {
           }
         : {}),
     };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.inventoryTransaction.findMany({
         where,
         orderBy: [{ date: "desc" }, { createdAt: "desc" }],

@@ -6,7 +6,7 @@ export class InvoicesService {
   constructor(private readonly prisma: PrismaService) {}
 
   list(businessId: string, skip: number, take: number, dueOnly: boolean) {
-    return this.prisma.$transaction([
+    return Promise.all([
       this.prisma.invoice.findMany({
         where: {
           businessId,
@@ -14,6 +14,7 @@ export class InvoicesService {
         },
         skip,
         take,
+        relationLoadStrategy: "join",
         include: {
           sale: { include: { customer: { select: { id: true, name: true, shop: true } } } },
         },

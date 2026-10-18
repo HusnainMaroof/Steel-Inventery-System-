@@ -8,29 +8,28 @@ export class StockChecksService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(businessId: string, dto: CreateStockCheckDto) {
-    return this.prisma.$transaction(async (tx) => {
-      const product = await tx.product.findFirst({
+    const [product, grouped] = await Promise.all([
+      this.prisma.product.findFirst({
         where: { id: dto.productId, businessId },
         select: { id: true },
-      });
-      if (!product) throw new BadRequestException("Product not found");
-
-      const grouped = await tx.inventoryTransaction.aggregate({
+      }),
+      this.prisma.inventoryTransaction.aggregate({
         where: { businessId, productId: dto.productId },
         _sum: { qty: true },
-      });
-      const systemQty = Number(grouped._sum.qty ?? 0);
+      }),
+    ]);
+    if (!product) throw new BadRequestException("Product not found");
+    const systemQty = Number(grouped._sum.qty ?? 0);
 
-      return tx.stockCheck.create({
-        data: {
-          businessId,
-          date: new Date(dto.date),
-          productId: dto.productId,
-          physicalQty: dto.physicalQty,
-          systemQty,
-          note: dto.note,
-        },
-      });
+    return this.prisma.stockCheck.create({
+      data: {
+        businessId,
+        date: new Date(dto.date),
+        productId: dto.productId,
+        physicalQty: dto.physicalQty,
+        systemQty,
+        note: dto.note,
+      },
     });
   }
 
@@ -60,9 +59,10 @@ export class StockChecksService {
           }
         : {}),
     };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.stockCheck.findMany({
         where,
+        relationLoadStrategy: "join",
         include: { product: { select: { id: true, name: true, unit: true } } },
         orderBy: [{ date: "desc" }, { createdAt: "desc" }],
         skip,

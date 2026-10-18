@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { rethrowNotFound } from "../common/prisma/query-helpers";
 import { CatalogueCache } from "../ledger/catalogue-cache";
 import {
   CreateLocationDto,
@@ -17,9 +18,10 @@ export class WarehousesService {
 
   async list(businessId: string, skip: number, take: number) {
     const where = { businessId };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.warehouse.findMany({
         where,
+        relationLoadStrategy: "join",
         include: { locations: { orderBy: { name: "asc" } } },
         orderBy: { name: "asc" },
         skip,
@@ -37,8 +39,7 @@ export class WarehousesService {
   }
 
   async update(businessId: string, id: string, dto: UpdateWarehouseDto) {
-    await this.assertWarehouse(businessId, id);
-    const warehouse = await this.prisma.warehouse.update({ where: { id }, data: dto });
+    const warehouse = await this.prisma.warehouse.update({ where: { id, businessId }, data: dto }).catch(rethrowNotFound("Warehouse not found"));
     this.catalogue.invalidate(businessId);
     return warehouse;
   }
@@ -64,8 +65,7 @@ export class WarehousesService {
   }
 
   async updateLocation(businessId: string, id: string, dto: UpdateLocationDto) {
-    await this.assertLocation(businessId, id);
-    const location = await this.prisma.location.update({ where: { id }, data: dto });
+    const location = await this.prisma.location.update({ where: { id, businessId }, data: dto }).catch(rethrowNotFound("Location not found"));
     this.catalogue.invalidate(businessId);
     return location;
   }

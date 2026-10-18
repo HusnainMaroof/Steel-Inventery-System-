@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { roundMoneyDecimal } from "../domain/money";
 import { openBalance } from "../domain/report-money";
+import { rethrowNotFound } from "../common/prisma/query-helpers";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
 
@@ -29,7 +30,7 @@ export class CustomersService {
           }
         : {}),
     };
-    const [items, total] = await this.prisma.$transaction([
+    const [items, total] = await Promise.all([
       this.prisma.customer.findMany({
         where,
         skip,
@@ -67,9 +68,9 @@ export class CustomersService {
    * never a stored number (§27).
    */
   async ledger(businessId: string, id: string, skip: number, take: number) {
-    await this.byId(businessId, id);
     const where = { businessId, customerId: id };
-    const [sales, total, dueRows] = await Promise.all([
+    const [, sales, total, dueRows] = await Promise.all([
+      this.byId(businessId, id),
       this.prisma.sale.findMany({
         where,
         include: { invoice: true },
@@ -99,18 +100,16 @@ export class CustomersService {
   }
 
   async update(businessId: string, id: string, dto: UpdateCustomerDto) {
-    await this.byId(businessId, id);
     return this.prisma.customer.update({
-      where: { id },
+      where: { id, businessId },
       data: { name: dto.name, shop: dto.shop, phone: dto.phone },
-    });
+    }).catch(rethrowNotFound("Customer not found"));
   }
 
   async deactivate(businessId: string, id: string) {
-    await this.byId(businessId, id);
     return this.prisma.customer.update({
-      where: { id },
+      where: { id, businessId },
       data: { active: false },
-    });
+    }).catch(rethrowNotFound("Customer not found"));
   }
 }
