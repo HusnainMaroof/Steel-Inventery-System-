@@ -64,5 +64,8 @@
       "src/**/*.(t|j)s"
     ],
     "testEnvironment": "node"
+  },
+  "overrides": {
+    "fastify": "5.12.7"
   }
 }
