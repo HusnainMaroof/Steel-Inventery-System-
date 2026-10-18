@@ -269,7 +269,9 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {reportLoading && !hasAny ? <ReportsSkeleton /> : null}
+      {/* Until the first server report arrives, show the skeleton instead of
+          the browser-side estimate, so the page never shows two different totals. */}
+      {reportLoading && !serverReport ? <ReportsSkeleton /> : null}
 
       {reportError && !reportLoading && !hasAny ? (
         <ErrorState
@@ -308,7 +310,7 @@ export default function ReportsPage() {
             </BusinessLink>
           }
         />
-      ) : hasAny ? (
+      ) : hasAny && (serverReport || !reportLoading) ? (
         <div>
           <div
             role="tablist"
