@@ -35,6 +35,33 @@ type CacheEntry<T> = {
  */
 const pageCache = new Map<string, CacheEntry<unknown>>();
 
+const EARLY_PAGE_MAX_AGE_MS = 15_000;
+const earlyPages = new Map<
+  string,
+  { startedAt: number; request: Promise<Paginated<unknown> | null> }
+>();
+
+/** Starts the first page request before the gated page mounts. */
+export function startEarlyPage(path: string, limit = DEFAULT_PAGE_SIZE): void {
+  if (typeof window === "undefined") return;
+  const url = `${path}?page=1&limit=${limit}`;
+  if (earlyPages.has(url)) return;
+  earlyPages.set(url, {
+    startedAt: Date.now(),
+    request: apiFetch<Paginated<unknown>>(url).catch(() => null),
+  });
+}
+
+/** Hands out an early page at most once. */
+function takeEarlyPage(
+  url: string,
+): Promise<Paginated<unknown> | null> | null {
+  const early = earlyPages.get(url);
+  earlyPages.delete(url);
+  if (!early || Date.now() - early.startedAt > EARLY_PAGE_MAX_AGE_MS) return null;
+  return early.request;
+}
+
 /**
  * In-flight fetches keyed by page + dataVersion. React Strict Mode runs every
  * effect twice on mount — without this, each mount fired the same request
@@ -65,9 +92,9 @@ export function useServerPaginated<T>({
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch<Paginated<unknown>>(
-        `${path}?page=${page}&limit=${limit}`,
-      );
+      const url = `${path}?page=${page}&limit=${limit}`;
+      const early = takeEarlyPage(url);
+      const res = (early && (await early)) ?? (await apiFetch<Paginated<unknown>>(url));
       const mapped = res.items.map(mapItem);
       pageCache.set(cacheKey, {
         items: mapped,
