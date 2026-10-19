@@ -13,6 +13,8 @@ import {
   pagePathFromBusinessRoute,
 } from "@/lib/business-path";
 import { MARKETING_PATHS, isPublicPath } from "@/lib/app-routes";
+import AppSidebar from "@/components/shell/AppSidebar";
+import AppTopbar from "@/components/shell/AppTopbar";
 import { canOpenPath, pagesFor } from "@/lib/staff-access";
 import { useUiPreferences } from "@/lib/preferences";
 import { AuthBootstrapSkeleton, skeletonForPath } from "@/components/skeletons";
@@ -45,6 +47,12 @@ const PLATFORM_ADMIN_NAV = [
   { key: "system" as const, href: "/admin/system", label: "System" },
 ];
 
+function userSubtitle(user: AuthUser): string {
+  if (user.role === "SUPERADMIN") return roleLabel(user.role);
+  if (user.role === "SUBADMIN") return `${roleLabel(user.role, user.title)} · ${user.businessName}`;
+  return `${roleLabel(user.role)} · ${user.businessName}`;
+}
+
 function UserBlock({
   user,
   onSignOut,
@@ -62,12 +70,7 @@ function UserBlock({
     .slice(0, 2)
     .toUpperCase();
 
-  const subtitle =
-    user.role === "SUPERADMIN"
-      ? roleLabel(user.role)
-      : user.role === "SUBADMIN"
-        ? `${roleLabel(user.role, user.title)} · ${user.businessName}`
-        : `${roleLabel(user.role)} · ${user.businessName}`;
+  const subtitle = userSubtitle(user);
 
   if (collapsed)
     return (
@@ -106,23 +109,6 @@ function UserBlock({
         Sign out
       </button>
     </div>
-  );
-}
-
-function Chevron({ collapsed }: { collapsed: boolean }) {
-  return (
-    <motion.svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      animate={{ rotate: collapsed ? 180 : 0 }}
-      transition={{ type: "spring", stiffness: 300, damping: 24 }}
-    >
-      <path d="M6 3.5 10.5 8 6 12.5" strokeLinecap="round" strokeLinejoin="round" />
-    </motion.svg>
   );
 }
 
@@ -307,7 +293,6 @@ function MobileNav({
 
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
   const { user, ready, logout, blockedMessage } = useAuth();
   const { prefs } = useUiPreferences();
   const router = useRouter();
@@ -420,9 +405,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             href={n.href}
             title={n.label}
             onClick={onNavigate}
-            className={`group relative flex items-center gap-2.5 px-2.5 py-2 text-[13px] rounded-sm transition-colors duration-150 hover:bg-neutral-100 ${
-              collapsed ? "md:justify-center md:px-2" : ""
-            }`}
+            className="group relative flex items-center gap-2.5 px-2.5 py-2 text-[13px] rounded-sm transition-colors duration-150 hover:bg-neutral-100"
           >
             {active && (
               <motion.span
@@ -436,17 +419,13 @@ export default function Shell({ children }: { children: ReactNode }) {
                 {ICONS[n.key]}
               </svg>
             </span>
-            {!collapsed && (
-              <motion.span
-                initial={false}
-                animate={{ opacity: 1 }}
-                className={`relative whitespace-nowrap ${
-                  active ? "text-white" : "text-neutral-700 group-hover:text-black"
-                }`}
-              >
-                {n.label}
-              </motion.span>
-            )}
+            <span
+              className={`relative whitespace-nowrap ${
+                active ? "text-white" : "text-neutral-700 group-hover:text-black"
+              }`}
+            >
+              {n.label}
+            </span>
           </Link>
         );
       })}
@@ -469,49 +448,23 @@ export default function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
       <div className="hidden md:flex">
-        <motion.aside
-          animate={{ width: collapsed ? 84 : 260 }}
-          transition={{ type: "spring", stiffness: 260, damping: 30 }}
-          className={`shrink-0 bg-white border-r border-neutral-200 flex flex-col justify-between py-6 sticky top-0 h-screen no-print ${
-            collapsed ? "px-2" : "px-4"
-          }`}
-        >
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-            <div
-              className={`mb-8 ${
-                collapsed
-                  ? "flex flex-col items-center gap-2.5"
-                  : "flex items-start justify-between gap-2"
-              }`}
-            >
-              <Link
-                href={roleHome}
-                title={brand}
-                className={`leading-tight min-w-0 ${
-                  collapsed ? "flex w-full justify-center" : "block flex-1"
-                }`}
-              >
-                <BrandMark brand={brand} logoSrc={logoSrc} collapsed={collapsed} logoPlaceholder={useLogoPlaceholder} />
-              </Link>
-              <button
-                type="button"
-                onClick={() => setCollapsed((c) => !c)}
-                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                className={`shrink-0 flex items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-neutral-600 hover:text-black hover:bg-neutral-100 hover:border-neutral-300 transition-colors duration-150 active:scale-95 ${
-                  collapsed ? "w-9 h-9" : "w-8 h-8 mt-1"
-                }`}
-              >
-                <Chevron collapsed={collapsed} />
-              </button>
-            </div>
-            {navLinks()}
-          </div>
-          <div className="shrink-0">
-            <UserBlock user={user} onSignOut={onSignOut} collapsed={collapsed} />
-          </div>
-        </motion.aside>
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{mainContent}</main>
+        <AppSidebar
+          items={roleNav.map((n) => ({ key: n.key, href: n.href, label: n.label }))}
+          pathname={pathname}
+          onSignOut={onSignOut}
+          helpHref="mailto:contact@tijartt.com"
+        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <AppTopbar
+            brand={brand}
+            logoSrc={logoSrc}
+            homeHref={roleHome}
+            userName={displayName(user)}
+            userSubtitle={userSubtitle(user)}
+            onSignOut={onSignOut}
+          />
+          <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{mainContent}</main>
+        </div>
       </div>
 
       <MobileNav
