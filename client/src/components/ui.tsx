@@ -383,7 +383,6 @@ export function Modal({
             : size === "lg"
               ? "max-w-3xl"
               : "max-w-xl";
-  const scrollBody = full || !!footer;
   return (
     <AnimatePresence>
       {open && (
@@ -405,7 +404,7 @@ export function Modal({
               full
                 ? "max-w-[96vw] xl:max-w-[1400px] h-[94vh] sm:h-[92vh]"
                 : `${maxW} max-h-[94vh] sm:max-h-[92vh]`
-            } ${scrollBody ? "" : "overflow-y-auto"} rounded-xl`}
+            } rounded-xl`}
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -413,14 +412,13 @@ export function Modal({
           >
             <div className="flex items-start justify-between gap-4 px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-neutral-100 shrink-0">
               <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-semibold tracking-tight text-neutral-900">{title}</h2>
-           
+                <h2 className="text-base sm:text-lg font-semibold tracking-tight text-[#171717]">{title}</h2>
               </div>
               <button
                 type="button"
                 onClick={guardedClose}
                 disabled={busy}
-                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-neutral-400 hover:text-black hover:bg-neutral-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                className="shrink-0 -mr-2 -mt-1 w-10 h-10 flex items-center justify-center rounded-lg text-[#171717]/60 hover:text-[#171717] hover:bg-[#F8F8F7] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 aria-label="Close"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -428,11 +426,8 @@ export function Modal({
                 </svg>
               </button>
             </div>
-            {scrollBody ? (
-              <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-7 py-5 sm:py-6">{children}</div>
-            ) : (
-              <div className="px-5 sm:px-7 pb-5 sm:pb-7">{children}</div>
-            )}
+            {/* the body scrolls under a fixed header, with room above the first field */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-7 py-5 sm:py-6">{children}</div>
             {footer && (
               <div className="shrink-0 px-5 sm:px-7 py-4 border-t border-neutral-100 bg-neutral-50/50">
                 {footer}
