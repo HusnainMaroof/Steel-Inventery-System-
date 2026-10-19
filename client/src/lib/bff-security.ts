@@ -13,6 +13,22 @@ export function assertSafeProxyPath(segments: string[]): string | null {
 }
 
 /**
+ * The configured origin plus its "www." twin (or the bare domain when the
+ * configured one has "www."). Both serve this app, so both are same-site.
+ */
+export function allowedOrigins(clientOrigin: string): Set<string> {
+  const url = new URL(clientOrigin);
+  const origins = new Set([url.origin]);
+  if (url.hostname === "localhost" || /^[\d.]+$/.test(url.hostname)) return origins;
+  const twin = new URL(url.origin);
+  twin.hostname = url.hostname.startsWith("www.")
+    ? url.hostname.slice(4)
+    : `www.${url.hostname}`;
+  origins.add(twin.origin);
+  return origins;
+}
+
+/**
  * CSRF defense for cookie-authenticated BFF mutations.
  * SameSite=strict on the session cookie is the primary guard; this blocks
  * cross-origin fetches that somehow include the cookie.
@@ -21,12 +37,12 @@ export function assertSameOrigin(request: Request): string | null {
   const method = request.method.toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return null;
 
-  const allowedOrigin = new URL(getClientOrigin()).origin;
+  const allowed = allowedOrigins(getClientOrigin());
   const origin = request.headers.get("origin");
 
   if (origin) {
     try {
-      if (new URL(origin).origin !== allowedOrigin) {
+      if (!allowed.has(new URL(origin).origin)) {
         return "Cross-origin request blocked";
       }
     } catch {
@@ -39,7 +55,7 @@ export function assertSameOrigin(request: Request): string | null {
   if (!referer) return "Cross-origin request blocked";
 
   try {
-    if (new URL(referer).origin !== allowedOrigin) {
+    if (!allowed.has(new URL(referer).origin)) {
       return "Cross-origin request blocked";
     }
   } catch {
