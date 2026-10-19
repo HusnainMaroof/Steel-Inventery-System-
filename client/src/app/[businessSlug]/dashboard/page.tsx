@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { useBusinessHref } from "@/components/BusinessLink";
+import { useBusinessHref, useCanOpenPage } from "@/components/BusinessLink";
 import { Page, Stagger, StaggerItem } from "@/components/ui";
 import { Skeleton } from "@/components/skeletons";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -109,6 +109,7 @@ function Kpi({
   zeroAsDash?: boolean;
 }) {
   const businessHref = useBusinessHref();
+  const canOpen = useCanOpenPage();
   const valueClass =
     value > 0 && tone === "in"
       ? "text-success"
@@ -127,15 +128,17 @@ function Kpi({
             {label}
           </p>
         </div>
-        <Link
-          href={businessHref(href)}
-          aria-label={`Open ${label}`}
-          className="flex size-11 shrink-0 items-center justify-center rounded-full text-[#171717]/70 transition-colors hover:text-[#171717] focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-        >
-          <span className="flex size-9 items-center justify-center rounded-full border border-[#E5E5E5] hover:bg-[#F8F8F7]">
-            <ArrowUpRight aria-hidden="true" className="size-4" />
-          </span>
-        </Link>
+        {canOpen(href) && (
+          <Link
+            href={businessHref(href)}
+            aria-label={`Open ${label}`}
+            className="flex size-11 shrink-0 items-center justify-center rounded-full text-[#171717]/70 transition-colors hover:text-[#171717] focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+          >
+            <span className="flex size-9 items-center justify-center rounded-full border border-[#E5E5E5] hover:bg-[#F8F8F7]">
+              <ArrowUpRight aria-hidden="true" className="size-4" />
+            </span>
+          </Link>
+        )}
       </div>
       <div>
         {loading ? (

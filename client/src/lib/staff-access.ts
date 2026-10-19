@@ -87,6 +87,12 @@ function planPageSet(pages?: BusinessPanelPage[]): Set<BusinessPanelPage> {
   return new Set(sanitizePlanPages(pages));
 }
 
+/** Staff pages the business plan includes (staff can never get more than the plan). */
+export function staffPagesInPlan(planPages?: BusinessPanelPage[]): StaffPage[] {
+  const plan = planPageSet(planPages);
+  return STAFF_PAGES.filter((page) => plan.has(page));
+}
+
 export function pageLabel(key: StaffPage): string {
   return APP_PAGES.find((p) => p.key === key)?.label ?? key;
 }

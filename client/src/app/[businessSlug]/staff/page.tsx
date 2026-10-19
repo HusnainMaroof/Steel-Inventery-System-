@@ -7,9 +7,9 @@ import { useStore } from "@/lib/store";
 import type { StaffMember } from "@/lib/types";
 import {
   accessSummary,
-  allStaffPages,
   pageLabel,
   STAFF_TITLE_PRESETS,
+  staffPagesInPlan,
   type StaffPage,
 } from "@/lib/staff-access";
 import { BusyButton, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
@@ -31,6 +31,8 @@ export default function StaffPage() {
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const planStaffPages = staffPagesInPlan(user?.planPages);
 
   if (user?.role !== "ADMIN") return null;
 
@@ -88,7 +90,7 @@ export default function StaffPage() {
                 <p className="text-base font-semibold text-[#171717] truncate">{member.name}</p>
                 <p className="text-[13px] text-[#171717]/70 truncate mt-0.5">{member.email}</p>
                 <p className="text-[13px] text-[#171717]/70 mt-1">
-                  {member.title ?? "Staff"} · {accessSummary(member.access)}
+                  {member.title ?? "Staff"} · {accessSummary(member.access.filter((p) => planStaffPages.includes(p)))}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -136,6 +138,7 @@ function StaffModal({
   onSaved: () => void;
 }) {
   const { addStaff, updateStaff } = useStore();
+  const { user } = useAuth();
   const editing = !!member;
   const [form, setForm] = useState({
     name: member?.name ?? "",
@@ -148,7 +151,9 @@ function StaffModal({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const accessPages = useMemo(() => allStaffPages(), []);
+  // only pages the business plan includes can be given to staff
+  const accessPages = useMemo(() => staffPagesInPlan(user?.planPages), [user?.planPages]);
+  const chosenAccess = form.access.filter((page) => accessPages.includes(page));
 
   useEffect(() => {
     if (!open) return;
@@ -179,7 +184,7 @@ function StaffModal({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.access.length) {
+    if (!chosenAccess.length) {
       setError("Select at least one page they can access.");
       return;
     }
@@ -194,7 +199,7 @@ function StaffModal({
         await updateStaff(member!.id, {
           name: form.name,
           title: form.title,
-          access: form.access,
+          access: chosenAccess,
           password: form.password || undefined,
         });
       } else {
@@ -203,7 +208,7 @@ function StaffModal({
           email: form.email,
           password: form.password,
           title: form.title,
-          access: form.access,
+          access: chosenAccess,
         });
       }
       onSaved();

@@ -221,7 +221,7 @@ export function MoneySides({ report }: { report: ProfitReport }) {
         className="!mb-0"
         title="Money to Pay"
         action={
-          <BusinessLink href="/purchases?tab=dues"           className="text-sm font-medium min-h-[40px] inline-flex items-center">
+          <BusinessLink href="/purchases?tab=dues" hideWhenBlocked className="text-sm font-medium min-h-[40px] inline-flex items-center">
             Payment Dues →
           </BusinessLink>
         }
@@ -234,7 +234,7 @@ export function MoneySides({ report }: { report: ProfitReport }) {
         className="!mb-0"
         title="Money to Receive"
         action={
-          <BusinessLink href="/sales"           className="text-sm font-medium min-h-[40px] inline-flex items-center">
+          <BusinessLink href="/sales" hideWhenBlocked className="text-sm font-medium min-h-[40px] inline-flex items-center">
             Sales & Invoices →
           </BusinessLink>
         }
@@ -257,7 +257,7 @@ export function Expenses({
   const { user } = useAuth();
   const canAddExpense = !!user && pagesFor(user).some((page) => page.key === "expenses");
     const addButton = canAddExpense ? (
-      <BusinessLink href="/expenses" className="btn-ghost inline-flex items-center">
+      <BusinessLink href="/expenses" hideWhenBlocked className="btn-ghost inline-flex items-center">
         + Add Expense
       </BusinessLink>
     ) : undefined;

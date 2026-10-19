@@ -467,7 +467,7 @@ export default function InventoryPage() {
             icon={<Tag />}
             title="No stock yet"
             hint="Inventory builds itself as you record purchases and sales."
-            action={<BusinessLink href="/purchases" className="btn-primary">+ Add Purchase</BusinessLink>}
+            action={<BusinessLink href="/purchases" hideWhenBlocked className="btn-primary">+ Add Purchase</BusinessLink>}
             />
           ) : filtered.length === 0 ? (
           <EmptyState

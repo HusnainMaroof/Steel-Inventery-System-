@@ -298,7 +298,7 @@ export default function ReportsPage() {
           title="Nothing to show yet"
           hint="Add a purchase or a sale and this page will fill in."
           action={
-            <BusinessLink href="/purchases" className="btn-primary">
+            <BusinessLink href="/purchases" hideWhenBlocked className="btn-primary">
               + Add Purchase
             </BusinessLink>
           }
