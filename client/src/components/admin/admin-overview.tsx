@@ -139,11 +139,11 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
             <h2 className="text-sm font-semibold mb-3">Catalog & plans</h2>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <dt className="text-neutral-500 text-xs uppercase tracking-wider">Templates</dt>
+                <dt className="text-[#171717]/60 text-xs font-medium">Templates</dt>
                 <dd className="font-semibold tabular-nums mt-0.5">{catalog.templates}</dd>
               </div>
               <div>
-                <dt className="text-neutral-500 text-xs uppercase tracking-wider">Active plans</dt>
+                <dt className="text-[#171717]/60 text-xs font-medium">Active plans</dt>
                 <dd className="font-semibold tabular-nums mt-0.5">
                   {catalog.activePlans}
                   <span className="text-neutral-400 font-normal text-xs"> / {catalog.totalPlans}</span>

@@ -503,7 +503,7 @@ export function SubscriptionPlanModal({
               return (
                 <label
                   key={page}
-                  className="flex items-center justify-center h-10 cursor-pointer text-[13px]"
+                  className="block"
                   title={panelPageLabel(page)}
                 >
                   <input
@@ -516,8 +516,8 @@ export function SubscriptionPlanModal({
                   <span
                     className={
                       selected
-                        ? "inline-flex items-center justify-center h-10 px-3 rounded-lg bg-ink text-white text-[13px] font-medium"
-                        : "inline-flex items-center justify-center h-10 px-3 rounded-lg border border-[#E5E5E5] bg-white text-[#171717] text-[13px] font-medium"
+                        ? "flex w-full items-center justify-center h-10 px-3 rounded-lg bg-ink text-white text-[13px] font-medium"
+                        : "flex w-full items-center justify-center h-10 px-3 rounded-lg border border-[#E5E5E5] bg-white text-[#171717] text-[13px] font-medium hover:bg-[#F8F8F7]"
                     }
                   >
                     {panelPageLabel(page)}

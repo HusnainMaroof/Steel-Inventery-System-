@@ -71,13 +71,13 @@ export default function AdminSystemPage() {
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">System</h1>
         <p className="text-[#171717]/70 text-xs mt-1 max-w-xl">
-          Quick checks for the Tijaratt app and API — use this when owners report login or sync issues.
+          Quick checks for the app and API. Use this when owners report login or sync issues.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <div className="panel p-5">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">App health</p>
+          <p className="text-xs font-medium text-[#171717]/60">App health</p>
           <p className="text-2xl font-semibold mt-2">
             {apiOk === null ? "Checking…" : apiOk ? "Online" : "Unreachable"}
           </p>
@@ -101,11 +101,11 @@ export default function AdminSystemPage() {
         </div>
 
         <div className="panel p-5">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Your role</p>
+          <p className="text-xs font-medium text-[#171717]/60">Your role</p>
           <p className="text-lg font-semibold mt-2">Super Admin</p>
           <p className="text-xs text-neutral-500 mt-2 leading-relaxed">
             You manage businesses, subscription plans, and catalogue templates. You do not operate tenant
-            ledgers from this panel — owners and staff use their business URLs.
+            ledgers from this panel. Owners and staff use their business URLs.
           </p>
         </div>
       </div>

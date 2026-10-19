@@ -99,7 +99,7 @@ export default function AdminProductsPage() {
         <div className="space-y-8">
           {builtIn.length > 0 ? (
             <section>
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500 mb-3">
+              <h2 className="text-sm font-semibold text-[#171717] mb-3">
                 Built-in trade types
               </h2>
               <div className="space-y-3">
@@ -116,7 +116,7 @@ export default function AdminProductsPage() {
           ) : null}
           {custom.length > 0 ? (
             <section>
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500 mb-3">
+              <h2 className="text-sm font-semibold text-[#171717] mb-3">
                 Custom templates
               </h2>
               <div className="space-y-3">

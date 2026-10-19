@@ -289,8 +289,8 @@ body {
   background: transparent;
 }
 
-/* inputs */
-input,
+/* inputs (checkboxes and radios keep their own small size, see below) */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
 select,
 textarea {
   width: 100%;
@@ -331,6 +331,28 @@ label {
   font-weight: 500;
   font-family: var(--font-sans);
   margin-bottom: 5px;
+}
+
+/* checkboxes and radios: a fixed 18px box in the brand colour, never stretched */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+/* a label that wraps a checkbox or radio is a row of normal text, not a field caption */
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 400;
+  margin-bottom: 0;
 }
 
 /* interaction affordance — pointer everywhere clickable */

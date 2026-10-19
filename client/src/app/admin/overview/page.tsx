@@ -21,7 +21,7 @@ export default function AdminOverviewPage() {
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Overview</h1>
         <p className="text-[#171717]/70 text-xs mt-1 max-w-2xl">
-          Platform health, subscriptions, and every business in one place — without noise from tenant ledgers.
+          Platform health, plans and every business in one place.
         </p>
       </div>
 

@@ -26,41 +26,36 @@ export function AdminTemplatePickCard({
 
   return (
     <label
-      className={`flex items-start gap-3 border rounded-lg p-3.5 cursor-pointer transition-colors border-l-4 ${
-        meta?.accentClass ?? "border-l-neutral-300"
-      } ${
+      className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
         selected
-          ? "border-neutral-900 bg-white ring-1 ring-neutral-900/10"
-          : "border-neutral-200 bg-white hover:border-neutral-300"
+          ? "border-ink bg-[#F8F8F7]"
+          : "border-[#E5E5E5] bg-white hover:bg-[#F8F8F7]"
       }`}
     >
-      <input
-        type="checkbox"
-        className="mt-1 shrink-0"
-        checked={selected}
-        onChange={onChange}
-      />
+      <input type="checkbox" className="mt-0.5" checked={selected} onChange={onChange} />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-neutral-900">{label}</span>
+          <span className="text-sm font-semibold text-[#171717]">{label}</span>
           {meta ? (
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+            <span className="rounded bg-[#F0F0EE] px-1.5 py-0.5 text-xs font-medium text-[#171717]/70">
               {meta.trade}
             </span>
           ) : isCustom ? (
-            <span className="text-xs uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+            <span className="rounded bg-[#F0F0EE] px-1.5 py-0.5 text-xs font-medium text-[#171717]/70">
               Custom
             </span>
           ) : null}
+          {assigned ? (
+            <span className="rounded bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success">
+              Already on this business
+            </span>
+          ) : null}
         </span>
-        <span className="block text-xs text-neutral-600 mt-1">
+        <span className="mt-1 block text-[13px] text-[#171717]/70">
           {productName} · {productUnit}
           {usesCategories != null ? ` · ${catalogStructureLabel(usesCategories)}` : ""}
         </span>
-        {meta ? <span className="block text-xs text-neutral-500 mt-1 leading-snug">{meta.hint}</span> : null}
-        {assigned ? (
-          <span className="block text-xs text-emerald-700 font-medium mt-1.5">Already on this business</span>
-        ) : null}
+        {meta ? <span className="mt-0.5 block text-[13px] leading-snug text-[#171717]/70">{meta.hint}</span> : null}
       </span>
     </label>
   );

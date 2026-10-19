@@ -62,7 +62,7 @@ export function TemplateCatalogCard({
 
   return (
     <article
-      className={`panel overflow-hidden border-l-4 ${meta?.accentClass ?? "border-l-neutral-200"}`}
+      className="panel overflow-hidden"
     >
       <button
         type="button"
@@ -73,11 +73,11 @@ export function TemplateCatalogCard({
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[14px] font-semibold text-neutral-900">{template.label}</span>
             {meta ? (
-              <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+              <span className="text-xs font-medium text-[#171717]/70 bg-[#F0F0EE] px-1.5 py-0.5 rounded">
                 {meta.trade}
               </span>
             ) : isCustom ? (
-              <span className="text-xs uppercase tracking-widest text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+              <span className="text-xs font-medium text-[#171717]/70 bg-[#F0F0EE] px-1.5 py-0.5 rounded">
                 Custom
               </span>
             ) : null}
