@@ -80,7 +80,29 @@ jobs:
             docker-compose.yml \
             "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/tijaratt/docker-compose.yml.new"
 
+      # Remembers the running image tag and Compose file so a failed deploy can
+      # roll back to them. Database migrations are not rolled back; use the
+      # pre-migrate backup for that.
+      - name: Record running version
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'cd /opt/tijaratt && \
+             tag=$(docker inspect --format "{{.Config.Image}}" tijaratt-backend 2>/dev/null | sed "s/.*://" || true) && \
+             printf "%s" "$tag" > .rollback_image_tag && \
+             if [ -f docker-compose.yml ]; then cp -f docker-compose.yml docker-compose.yml.rollback; fi && \
+             echo "Running version: ${tag:-none}"'
+
       - name: Deploy to VPS
+        id: deploy
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -129,16 +151,60 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "cd /opt/tijaratt && docker compose ps"
 
+          # Readiness from inside the backend container first. This wakes a
+          # suspended Neon compute, whose cold start can exceed the 6s timeout
+          # of the public /api/health route.
+          echo "Checking backend database readiness..."
+
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'cd /opt/tijaratt && \
+             for i in $(seq 1 30); do \
+               if docker compose exec -T backend node -e "fetch(\"http://127.0.0.1:4000/health\").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"; then \
+                 echo "Backend ready."; exit 0; \
+               fi; \
+               sleep 3; \
+             done; \
+             echo "Backend /health did not become ready."; \
+             docker compose logs --tail 80 backend; \
+             exit 1'
+
           echo "Checking public health endpoint..."
 
           curl \
             --fail \
             --silent \
             --show-error \
-            --retry 10 \
-            --retry-delay 3 \
+            --retry 20 \
+            --retry-delay 5 \
             --retry-connrefused \
             https://tijartt.com/api/health
 
           echo
           echo "Production deployment verified successfully."
+
+      - name: Roll back to the previous version
+        if: failure() && steps.deploy.outcome != 'skipped'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'cd /opt/tijaratt && \
+             tag=$(cat .rollback_image_tag 2>/dev/null || true) && \
+             if [ -z "$tag" ] || [ ! -f docker-compose.yml.rollback ]; then \
+               echo "No previous version recorded. Nothing to roll back to."; exit 1; \
+             fi && \
+             cp -f docker-compose.yml.rollback docker-compose.yml && \
+             IMAGE_TAG="$tag" docker compose up -d && \
+             echo "Rolled back to image tag $tag." && \
+             docker compose ps'
