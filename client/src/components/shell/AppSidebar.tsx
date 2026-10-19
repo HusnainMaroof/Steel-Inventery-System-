@@ -54,7 +54,7 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 const itemBase =
-  "flex min-h-11 w-full items-center gap-3 rounded-full px-3.5 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  "flex min-h-11 w-full items-center gap-3 rounded-md px-3.5 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 
 function isItemActive(pathname: string | null, href: string) {
   return pathname === href || (pathname?.startsWith(`${href}/`) ?? false);
@@ -68,7 +68,7 @@ export default function AppSidebar({ items, pathname, onSignOut, helpHref }: App
       className="no-print sticky top-[72px] hidden h-[calc(100dvh-72px)] w-[232px] shrink-0 flex-col gap-4 pb-5 pl-4 pr-2 md:flex"
     >
       <div className="flex min-h-0 flex-1 items-center">
-        <ul className="flex max-h-full w-full flex-col gap-0.5 overflow-y-auto rounded-3xl bg-white p-2">
+        <ul className="flex max-h-full w-fit min-w-[168px] flex-col gap-0.5 overflow-y-auto rounded-lg bg-white p-1.5">
           {items.map((item) => {
             const Icon = ICONS[item.key] ?? Circle;
             const active = isItemActive(pathname, item.href);
@@ -84,7 +84,7 @@ export default function AppSidebar({ items, pathname, onSignOut, helpHref }: App
                   }`}
                 >
                   <Icon size={18} strokeWidth={1.8} aria-hidden="true" className="shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  <span className="whitespace-nowrap pr-1">{item.label}</span>
                 </Link>
               </li>
             );
@@ -92,7 +92,7 @@ export default function AppSidebar({ items, pathname, onSignOut, helpHref }: App
         </ul>
       </div>
 
-      <div className="flex shrink-0 flex-col gap-0.5 rounded-3xl bg-white p-2">
+      <div className="flex w-fit min-w-[168px] shrink-0 flex-col gap-0.5 rounded-lg bg-white p-1.5">
         <Link
           href={helpHref}
           className={`${itemBase} text-[#171717]/75 hover:bg-[#F1F1EF] hover:text-[#171717]`}
