@@ -74,9 +74,9 @@ export default function AdminProductsPage() {
     <Page>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Product templates</h1>
+          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Catalog</h1>
           <p className="text-[#171717]/70 text-xs mt-1 max-w-xl">
-            Trade catalogue blueprints for new businesses — steel, cement, wire, paint, and tiles, plus any custom templates you add.
+            Product templates for new businesses: steel, cement, wire, paint, tiles, and any custom ones you add.
           </p>
         </div>
         <button className="btn-primary w-full sm:w-auto" onClick={() => setAddOpen(true)}>

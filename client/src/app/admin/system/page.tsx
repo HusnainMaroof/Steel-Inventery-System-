@@ -89,7 +89,7 @@ export default function AdminSystemPage() {
             type="button"
             onClick={() => void runCheck(true)}
             disabled={checking}
-            className="mt-3 text-xs font-medium text-[#145aff] hover:underline disabled:opacity-50 disabled:cursor-wait"
+            className="btn-ghost min-h-11"
           >
             {checking ? "Checking…" : "Check again"}
           </button>
@@ -117,25 +117,25 @@ export default function AdminSystemPage() {
             <Link href="/admin/businesses" className="font-medium hover:underline">
               Businesses
             </Link>
-            — register owners, reset passwords, assign templates.
+            : register owners, reset passwords, assign templates.
           </li>
           <li>
             <Link href="/admin/subscriptions" className="font-medium hover:underline">
               Plans
             </Link>
-            — control billing type and which sidebar modules each plan includes.
+            : control billing type and which sidebar modules each plan includes.
           </li>
           <li>
             <Link href="/admin/products" className="font-medium hover:underline">
               Catalog
             </Link>
-            — edit trade templates before assigning them to new shops.
+            : edit trade templates before assigning them to new shops.
           </li>
           <li>
             <Link href="/admin/overview" className="font-medium hover:underline">
               Overview
             </Link>
-            — subscription mix, expiring access, and per-business activity.
+            : subscription mix, expiring access, and per-business activity.
           </li>
         </ul>
       </section>

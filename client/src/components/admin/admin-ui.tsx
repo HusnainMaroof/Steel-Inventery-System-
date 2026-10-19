@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -34,20 +35,20 @@ export function StatusBadge({ active }: { active: boolean }) {
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-        active ? "bg-emerald-50 text-emerald-800" : "bg-neutral-100 text-neutral-600"
+        active ? "bg-success/10 text-success" : "bg-[#E5E5E5] text-[#171717]/70"
       }`}
     >
-      {active ? "Active" : "Revoked"}
+      {active ? "Active" : "Login off"}
     </span>
   );
 }
 
 export function SubBadge({ active, status }: { active: boolean; status?: string | null }) {
   const cls = active
-    ? "bg-emerald-50 text-emerald-800"
+    ? "bg-success/10 text-success"
     : status === "CANCELLED"
-      ? "bg-neutral-100 text-neutral-600"
-      : "bg-[#faf5f2] text-[#a12b1f]";
+      ? "bg-[#E5E5E5] text-[#171717]/70"
+      : "bg-destructive/10 text-destructive";
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>
       {active ? "Subscribed" : status === "EXPIRED" ? "Expired" : status ?? "Inactive"}
@@ -59,6 +60,49 @@ export function planLabel(
   business?: { subscriptionPlanDef?: { label?: string } | null } | null,
 ) {
   return business?.subscriptionPlanDef?.label ?? "—";
+}
+
+/**
+ * One status per business row (replaces the old StatusBadge + SubBadge pair).
+ * Active = login on and subscription active. Expired = subscription ended.
+ * Login off = owner login revoked.
+ */
+export type BusinessStatus = "Active" | "Expired" | "Login off";
+
+/** The one status a business row shows; the list filter uses the same rule. */
+export function businessStatus(owner: OwnerAccount): BusinessStatus {
+  if (!owner.active) return "Login off";
+  if (owner.business.subscriptionStatus !== "ACTIVE") return "Expired";
+  return "Active";
+}
+
+export function BusinessStatusBadge({
+  ownerActive,
+  subscriptionActive,
+}: {
+  ownerActive: boolean;
+  subscriptionActive: boolean;
+  subscriptionStatus?: string | null;
+}) {
+  if (!ownerActive) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-[#E5E5E5] px-2 py-0.5 text-[11px] font-medium text-[#171717]/70">
+        Login off
+      </span>
+    );
+  }
+  if (!subscriptionActive) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
+        Expired
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+      Active
+    </span>
+  );
 }
 
 export function isLifetimeBusiness(
@@ -212,83 +256,98 @@ export function BusinessListTable({
   owners: OwnerAccount[];
   planFor: (owner: OwnerAccount) => string;
 }) {
+  const router = useRouter();
   return (
     <>
       <ul className="md:hidden space-y-3">
-        {owners.map((owner) => (
-          <li key={owner.id}>
-            <Link
-              href={`/admin/businesses/${owner.id}`}
-              className={`panel block p-4 transition-colors hover:bg-neutral-50/80 active:bg-neutral-50 ${owner.active ? "" : "opacity-75"}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[15px] font-semibold text-neutral-900 truncate">{owner.business.name}</p>
-                  <p className="text-[11px] text-neutral-400 mt-0.5 font-mono truncate">/{owner.business.slug}</p>
-                  <p className="text-[12px] text-neutral-600 mt-2 truncate">{owner.name}</p>
-                  <p className="font-mono text-[11px] text-neutral-500 truncate">{owner.email}</p>
+        {owners.map((owner) => {
+          const subActive = owner.business.subscriptionStatus === "ACTIVE";
+          return (
+            <li key={owner.id}>
+              <Link
+                href={`/admin/businesses/${owner.id}`}
+                className="panel block p-4 transition-colors hover:bg-[#F8F8F7] cursor-pointer"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-semibold text-[#171717] truncate">{owner.business.name}</p>
+                    <p className="text-[11px] text-[#171717]/70 mt-0.5 font-mono truncate">/{owner.business.slug}</p>
+                    <p className="text-[12px] text-[#171717]/70 mt-2 truncate">{owner.name}</p>
+                    <p className="font-mono text-[11px] text-[#171717]/70 truncate">{owner.email}</p>
+                  </div>
+                  <span className="shrink-0 text-[11px] font-medium text-[#171717]/70">View →</span>
                 </div>
-                <span className="shrink-0 text-[11px] font-medium text-neutral-500">View →</span>
-              </div>
-              <div className="mt-3 pt-3 border-t border-neutral-100 flex flex-wrap items-center gap-2">
-                <span className="text-[12px] font-medium text-neutral-800">{planFor(owner)}</span>
-                <StatusBadge active={owner.active} />
-                <SubBadge
-                  active={owner.business.subscriptionStatus === "ACTIVE"}
-                  status={owner.business.subscriptionStatus}
-                />
-              </div>
-            </Link>
-          </li>
-        ))}
+                <div className="mt-3 pt-3 border-t border-[#E5E5E5] flex flex-wrap items-center gap-2">
+                  <span className="text-[12px] font-medium text-[#171717]">{planFor(owner)}</span>
+                  <BusinessStatusBadge
+                    ownerActive={owner.active}
+                    subscriptionActive={subActive}
+                    subscriptionStatus={owner.business.subscriptionStatus}
+                  />
+                </div>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
 
       <div className="hidden md:block panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left">
           <thead>
-            <tr className="border-b border-neutral-100 bg-neutral-50/80">
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">
+            <tr className="border-b border-[#E5E5E5] bg-[#F8F8F7]">
+              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-[#171717]/70">
                 Business
               </th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">
+              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-[#171717]/70">
                 Email
               </th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">
+              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-[#171717]/70">
                 Subscription
               </th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500 text-right">
+              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-[#171717]/70 text-right">
                 Action
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {owners.map((owner) => (
-              <tr key={owner.id} className={`hover:bg-neutral-50/60 ${owner.active ? "" : "opacity-70"}`}>
-                <td className="px-4 py-3">
-                  <p className="text-[13px] font-semibold text-neutral-900 truncate">{owner.business.name}</p>
-                  <p className="text-[11px] text-neutral-400 mt-0.5 truncate">/{owner.business.slug}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <p className="font-mono text-[12px] text-neutral-700 truncate">{owner.email}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <p className="text-[12px] font-medium text-neutral-800">{planFor(owner)}</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    <StatusBadge active={owner.active} />
-                    <SubBadge
-                      active={owner.business.subscriptionStatus === "ACTIVE"}
-                      status={owner.business.subscriptionStatus}
-                    />
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Link href={`/admin/businesses/${owner.id}`} className="btn-ghost !py-1.5 !px-3 text-[12px]">
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
+          <tbody className="divide-y divide-[#E5E5E5]">
+            {owners.map((owner) => {
+              const subActive = owner.business.subscriptionStatus === "ACTIVE";
+              return (
+                <tr
+                  key={owner.id}
+                  className="hover:bg-[#F8F8F7] cursor-pointer"
+                  onClick={() => router.push(`/admin/businesses/${owner.id}`)}
+                >
+                  <td className="px-4 py-3">
+                    <p className="text-[13px] font-semibold text-[#171717] truncate">{owner.business.name}</p>
+                    <p className="text-[11px] text-[#171717]/70 mt-0.5 truncate">/{owner.business.slug}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="font-mono text-[12px] text-[#171717]/70 truncate">{owner.email}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-[12px] font-medium text-[#171717]">{planFor(owner)}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      <BusinessStatusBadge
+                        ownerActive={owner.active}
+                        subscriptionActive={subActive}
+                        subscriptionStatus={owner.business.subscriptionStatus}
+                      />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      href={`/admin/businesses/${owner.id}`}
+                      className="btn-ghost !py-1.5 !px-3 text-[12px]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      View
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         </div>

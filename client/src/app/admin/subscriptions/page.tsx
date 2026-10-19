@@ -34,7 +34,7 @@ export default function AdminSubscriptionsPage() {
     <Page>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Subscriptions</h1>
+          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Plans</h1>
           <p className="text-[#171717]/70 text-xs mt-1 max-w-xl">
             Four billing types — monthly, yearly, lifetime, or custom days — plus which modules each plan unlocks.
           </p>

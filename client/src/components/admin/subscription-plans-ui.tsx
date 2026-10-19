@@ -36,7 +36,7 @@ export function BillingCycleBadge({
   const meta = billingCycleMeta(cycle);
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.badgeClass}`}
+      className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-0.5 text-[11px] font-medium text-[#171717]"
     >
       {meta.short}
       {cycle === "CUSTOM_DAYS" && durationDays ? ` · ${durationDays}d` : ""}
@@ -100,7 +100,7 @@ export function SubscriptionPlanTable({
               </div>
               <span
                 className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  plan.active ? "bg-emerald-50 text-emerald-800" : "bg-neutral-100 text-neutral-600"
+                  plan.active ? "bg-success/10 text-success" : "bg-[#E5E5E5] text-[#171717]/70"
                 }`}
               >
                 {plan.active ? "Active" : "Hidden"}
@@ -169,7 +169,7 @@ export function SubscriptionPlanTable({
                 <td className="px-4 py-3">
                   <span
                     className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                      plan.active ? "bg-emerald-50 text-emerald-800" : "bg-neutral-100 text-neutral-600"
+                      plan.active ? "bg-success/10 text-success" : "bg-[#E5E5E5] text-[#171717]/70"
                     }`}
                   >
                     {plan.active ? "Active" : "Hidden"}
