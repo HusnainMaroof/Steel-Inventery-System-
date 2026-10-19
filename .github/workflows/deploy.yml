@@ -135,7 +135,9 @@ jobs:
              docker run --rm --env-file ./server/.env.production -v /opt/tijaratt/backups:/backups postgres:18 \
                sh -c 'set -e; url=\$(printf %s \"\$DIRECT_URL\" | tr -d \"\\042\\047\" | sed -E \"s/([?&])schema=[^&]*&?/\\1/; s/[?&]\$//\"); file=/backups/pre-migrate-\$(date +%Y%m%d-%H%M%S).dump; pg_dump --format=custom --file=\"\$file\" \"\$url\"; pg_restore --list \"\$file\" > /dev/null; echo backup ok: \$file' && \
              docker compose run --rm backend npx prisma migrate deploy && \
-             docker compose up -d"
+             docker compose up -d && \
+             touch .env && sed -i \"/^IMAGE_TAG=/d\" .env && \
+             echo \"IMAGE_TAG=${SHORT_SHA}\" >> .env"
 
       - name: Verify deployment
         env:
@@ -208,5 +210,7 @@ jobs:
              fi && \
              cp -f docker-compose.yml.rollback docker-compose.yml && \
              IMAGE_TAG="$tag" docker compose up -d && \
+             touch .env && sed -i "/^IMAGE_TAG=/d" .env && \
+             echo "IMAGE_TAG=$tag" >> .env && \
              echo "Rolled back to image tag $tag." && \
              docker compose ps'
