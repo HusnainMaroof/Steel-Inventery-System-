@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowUpRight,
+  Boxes,
+  Factory,
+  HandCoins,
+  Warehouse,
+  type LucideIcon,
+} from "lucide-react";
 import { useStore } from "@/lib/store";
+import { useBusinessHref } from "@/components/BusinessLink";
 import { Page, Stagger, StaggerItem } from "@/components/ui";
 import { Skeleton } from "@/components/skeletons";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -29,10 +39,12 @@ function MoneyFigure({
   value,
   loading,
   large = false,
+  valueClassName = "text-white",
 }: {
   value: number;
   loading: boolean;
   large?: boolean;
+  valueClassName?: string;
 }) {
   if (loading) {
     return (
@@ -44,10 +56,14 @@ function MoneyFigure({
   const cls = large
     ? "text-[clamp(2rem,11cqi,3.5rem)] font-bold leading-[1.05] tracking-tight tabular-nums"
     : "text-[26px] sm:text-[32px] font-bold tabular-nums leading-[1.05]";
-  return <span className={`${cls} block [overflow-wrap:anywhere]`}>{fmtMoney(value)}</span>;
+  return (
+    <span className={`${cls} ${valueClassName} block [overflow-wrap:anywhere]`}>
+      {fmtMoney(value)}
+    </span>
+  );
 }
 
-/* ---------- shared primitives (monochrome, 8px radius) ---------- */
+/* ---------- shared dashboard cards ---------- */
 
 function Card({
   children,
@@ -60,8 +76,8 @@ function Card({
 }) {
   return (
     <div
-      className={`panel overflow-hidden ${
-        dark ? "!bg-[#111] !border-[#111]" : "bg-white"
+      className={`@container h-full overflow-hidden rounded-2xl border ${
+        dark ? "border-ink bg-ink text-white" : "border-[#E5E5E5] bg-white"
       } ${className}`}
     >
       {children}
@@ -73,119 +89,108 @@ function Kpi({
   label,
   value,
   hint,
-  prefix = "",
+  href,
+  icon: Icon,
   suffix = "",
-  dark = false,
   money = true,
   loading = false,
+  tone,
+  zeroAsDash = false,
 }: {
   label: string;
   value: number;
-  hint?: string;
-  prefix?: string;
+  hint: string;
+  href: string;
+  icon: LucideIcon;
   suffix?: string;
-  dark?: boolean;
   money?: boolean;
   loading?: boolean;
+  tone?: "in" | "out";
+  zeroAsDash?: boolean;
 }) {
+  const businessHref = useBusinessHref();
+  const valueClass =
+    value > 0 && tone === "in"
+      ? "text-success"
+      : value > 0 && tone === "out"
+        ? "text-destructive"
+        : "text-[#171717]";
+
   return (
-    <Card
-      dark={dark}
-      className="@container p-5 h-full flex flex-col justify-between gap-5"
-    >
-      <p
-        className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${
-          dark ? "text-white" : "text-[#171717]"
-        }`}
-      >
-        {label}
-      </p>
-      <div>
-        <div className={dark ? "text-white" : "text-[#171717]"}>
-          {loading ? (
-            <Skeleton className={`h-9 w-24 rounded-md ${dark ? "!bg-white/20" : ""}`} />
-          ) : money ? (
-            <span className="block text-[clamp(1.25rem,12cqi,2.625rem)] [overflow-wrap:anywhere] font-bold leading-[1.05] tracking-tight tabular-nums">
-              {prefix}
-              {fmtMoney(value)}
-              {suffix}
-            </span>
-          ) : (
-            <span className="block text-[clamp(1.25rem,12cqi,2.625rem)] [overflow-wrap:anywhere] font-bold leading-[1.05] tracking-tight tabular-nums">
-              {fmtQtyNumber(value)}
-              {suffix}
-            </span>
-          )}
-        </div>
-        {hint && (
-          <p
-            className={`mt-2.5 text-[11px] font-normal ${
-              dark ? "text-white" : "text-[#171717]"
-            }`}
-          >
-            {hint}
+    <Card className="flex flex-col justify-between gap-5 p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#F4F4F3] text-[#171717]/70">
+            <Icon aria-hidden="true" className="size-[18px]" />
+          </span>
+          <p className="min-w-0 text-[13px] font-medium leading-snug text-[#171717]/70">
+            {label}
           </p>
-        )}
-      </div>
-    </Card>
-  );
-}
-function SalesProfitHero({
-  salesTotal,
-  profitValue,
-  loading,
-}: {
-  salesTotal: number;
-  profitValue: number;
-  loading: boolean;
-}) {
-  return (
-    <Card dark className="@container p-6 sm:p-8 h-full min-h-[220px] flex flex-col justify-between gap-6">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
-          Net profit
-        </p>
-        <div className="mt-3 text-white">
-          <MoneyFigure value={profitValue} loading={loading} large />
         </div>
+        <Link
+          href={businessHref(href)}
+          aria-label={`Open ${label}`}
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-[#171717]/70 transition-colors hover:text-[#171717] focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+        >
+          <span className="flex size-9 items-center justify-center rounded-full border border-[#E5E5E5] hover:bg-[#F8F8F7]">
+            <ArrowUpRight aria-hidden="true" className="size-4" />
+          </span>
+        </Link>
       </div>
-      <div className="pt-5 border-t border-neutral-800">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
-          Sales made
-        </p>
-        <div className="mt-2 text-white">
-          <MoneyFigure value={salesTotal} loading={loading} />
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/* dues card — numbers only, no party names */
-function DueCard({
-  label,
-  value,
-  tone,
-  loading,
-}: {
-  label: string;
-  value: number;
-  tone: "in" | "out";
-  loading: boolean;
-}) {
-  const accent = tone === "in" ? "text-[#2e6b2e]" : "text-[#a12b1f]";
-
-  return (
-    <Card className="@container p-5 h-full flex flex-col justify-between max-sm:justify-start gap-4 min-h-[140px] max-sm:min-h-0">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#171717]">{label}</p>
       <div>
         {loading ? (
           <Skeleton className="h-8 w-32 rounded-md" />
         ) : (
-          <p className={`text-[clamp(1.25rem,12cqi,2rem)] [overflow-wrap:anywhere] font-bold tabular-nums leading-[1.05] ${value > 0 ? accent : "text-[#171717]"}`}>
-            {value > 0 ? fmtMoney(value) : "—"}
+          <p
+            className={`text-[clamp(1.25rem,10cqi,2rem)] font-bold leading-[1.05] tracking-tight tabular-nums [overflow-wrap:anywhere] ${valueClass}`}
+          >
+            {zeroAsDash && value <= 0
+              ? "—"
+              : money
+                ? fmtMoney(value)
+                : `${fmtQtyNumber(value)}${suffix}`}
           </p>
         )}
+        <p className="mt-2 whitespace-nowrap text-xs leading-4 text-[#171717]/70">{hint}</p>
+      </div>
+    </Card>
+  );
+}
+
+function SalesProfitHero({
+  salesTotal,
+  profitValue,
+  loading,
+  activePeriod,
+}: {
+  salesTotal: number;
+  profitValue: number;
+  loading: boolean;
+  activePeriod: string;
+}) {
+  return (
+    <Card dark className="flex min-h-[240px] flex-col justify-between gap-6 p-6 sm:p-8">
+      <div>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-[13px] font-medium text-white/80">Net profit</p>
+          <span className="shrink-0 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white">
+            {activePeriod}
+          </span>
+        </div>
+        <div className="mt-3">
+          <MoneyFigure
+            value={profitValue}
+            loading={loading}
+            large
+            valueClassName={profitValue < 0 ? "text-[#ff8a7a]" : "text-white"}
+          />
+        </div>
+      </div>
+      <div className="border-t border-white/10 pt-5">
+        <p className="text-xs font-medium text-white/70">Sales made</p>
+        <div className="mt-2 text-white">
+          <MoneyFigure value={salesTotal} loading={loading} />
+        </div>
       </div>
     </Card>
   );
@@ -347,50 +352,72 @@ export default function DashboardPage() {
 
       {/* ===== Stats — loaded from database for the selected dates ===== */}
       {summaryError && (
-        <p className="text-sm text-[#a12b1f] mb-4" role="alert">
+        <p className="text-sm text-destructive mb-4" role="alert">
           {summaryError}
         </p>
       )}
       <Stagger
-        className={`grid grid-cols-1 lg:grid-cols-12 gap-3.5 ${summaryLoading && summary ? "opacity-70" : ""}`}
+        className={`grid grid-cols-1 gap-3.5 lg:grid-cols-12 ${summaryLoading && summary ? "opacity-70" : ""}`}
       >
         <StaggerItem className="lg:col-span-12 xl:col-span-6">
           <SalesProfitHero
             salesTotal={salesTotal}
             profitValue={profitValue}
             loading={statsLoading}
+            activePeriod={
+              rangeActive
+                ? "Selected dates"
+                : period === "today"
+                  ? "Today"
+                  : period === "monthly"
+                    ? "This month"
+                    : "This year"
+            }
           />
         </StaggerItem>
         <StaggerItem className="lg:col-span-6 xl:col-span-3">
-          <DueCard
+          <Kpi
             label="Customer dues"
             value={customerDue}
+            hint="To collect from customers"
+            href="/customers"
+            icon={HandCoins}
             tone="in"
-            loading={statsLoading}
-          />
-        </StaggerItem>
-        <StaggerItem className="lg:col-span-6 xl:col-span-3">
-          <DueCard
-            label="Mill dues"
-            value={supplierDue}
-            tone="out"
+            zeroAsDash
             loading={statsLoading}
           />
         </StaggerItem>
         <StaggerItem className="lg:col-span-6 xl:col-span-3">
           <Kpi
-            dark
-            label={isAll ? "Products in Stock" : "Stock in Hand"}
+            label="Mill dues"
+            value={supplierDue}
+            hint="To pay to mills"
+            href="/suppliers"
+            icon={Factory}
+            tone="out"
+            zeroAsDash
+            loading={statsLoading}
+          />
+        </StaggerItem>
+        <StaggerItem className="lg:col-span-6 xl:col-span-6">
+          <Kpi
+            label={isAll ? "Products in stock" : "Stock in hand"}
             value={stockCount}
+            hint={isAll ? "Products with stock left" : "In hand"}
+            href="/inventory"
+            icon={Boxes}
             money={false}
             suffix={stockSuffix}
             loading={statsLoading}
           />
         </StaggerItem>
-        <StaggerItem className="lg:col-span-6 xl:col-span-3">
+        <StaggerItem className="lg:col-span-6 xl:col-span-6">
           <Kpi
-            label="Stock Worth"
+            label="Stock worth"
             value={stockValue}
+            hint="Value of stock still in hand"
+            href="/inventory"
+            icon={Warehouse}
             loading={statsLoading}
           />
         </StaggerItem>
