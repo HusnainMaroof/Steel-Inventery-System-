@@ -53,6 +53,9 @@ export default function SalesPage() {
   const [submitError, setSubmitError] = useState("");
   const [savingSale, setSavingSale] = useState(false);
   const savingSaleRef = useRef(false);
+  // One key per sale draft. A retry of the same draft reuses it, so the server
+  // returns the sale it already saved instead of creating a duplicate.
+  const saleRequestRef = useRef<{ draft: string; id: string } | null>(null);
 
   /* ---- money on the current draft ---- */
   const subtotal = api.lines.reduce((a, l) => a.plus(toDecimal((Number(l.qty) || 0) * (Number(l.rate) || 0))), new Decimal(0)).toNumber();
@@ -114,7 +117,7 @@ export default function SalesPage() {
     setPayError("");
     setSubmitError("");
     try {
-      const saleId = await addSale({
+      const draft = {
       date: saleDate,
       customerId: existingId,
       discountPct,
@@ -135,7 +138,13 @@ export default function SalesPage() {
         supplierId: l.supplierId || undefined,
         purchaseId: l.purchaseId || undefined,
       })),
-    });
+    };
+      const draftKey = JSON.stringify(draft);
+      if (saleRequestRef.current?.draft !== draftKey) {
+        saleRequestRef.current = { draft: draftKey, id: crypto.randomUUID() };
+      }
+      const saleId = await addSale({ ...draft, clientRequestId: saleRequestRef.current.id });
+      saleRequestRef.current = null;
       api.removeAll();
       setNewOpen(false);
       setViewId(saleId);

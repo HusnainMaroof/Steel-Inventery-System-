@@ -410,6 +410,9 @@ model Sale {
   loadingCharges   Decimal  @default(0) @db.Decimal(14, 2)
   transportCharges Decimal  @default(0) @db.Decimal(14, 2)
   labourCharges    Decimal  @default(0) @db.Decimal(14, 2)
+  /// Client-generated key for one sale draft. A repeated POST with the same key
+  /// returns the first sale instead of creating a duplicate.
+  clientRequestId  String?
   createdAt        DateTime @default(now())
 
   business Business        @relation(fields: [businessId], references: [id])
@@ -425,6 +428,7 @@ model Sale {
   @@index([customerId])
   // Tenant-safe target for SaleLine(saleId, businessId).
   @@unique([id, businessId])
+  @@unique([businessId, clientRequestId])
 }
 
 model SaleLine {

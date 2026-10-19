@@ -386,6 +386,49 @@ describeIfSafe("StockLot schema and purchase reversals (e2e, disposable local DB
       expect(Number(saleRow?.qty)).toBe(-2.5);
     });
 
+    it("creates one sale for two concurrent requests with the same clientRequestId", async () => {
+      const f = await fixture("sale-idem");
+      const customerId = await customerFor(f.businessId);
+      const purchase = await buy(f, [{ qty: 10, rate: 100 }]);
+      const lotId = await lotOfPurchase(f.businessId, purchase.id);
+      const dto = {
+        date: "2026-10-02",
+        customerId,
+        clientRequestId: "3d0f6a2e-8b1c-4f5d-9a7e-2c4b6d8e0f13",
+        lines: [{ productId: f.productId, item: "Steel", qty: 2, unit: "kg", rate: 100, lotId }],
+      } as unknown as CreateSaleDto;
+
+      const [a, b] = await Promise.all([
+        salesService.create(f.businessId, { ...dto }),
+        salesService.create(f.businessId, { ...dto }),
+      ]);
+
+      expect(a.sale.id).toBe(b.sale.id);
+      expect(a.invoice.number).toBe(b.invoice.number);
+      expect(await prisma.sale.count({ where: { businessId: f.businessId } })).toBe(1);
+      expect(await lotBalance(lotId)).toBe("8.000");
+    });
+
+    it("returns the saved sale on a retry even when its stock is used up", async () => {
+      const f = await fixture("sale-idem-retry");
+      const customerId = await customerFor(f.businessId);
+      const purchase = await buy(f, [{ qty: 3, rate: 100 }]);
+      const lotId = await lotOfPurchase(f.businessId, purchase.id);
+      const dto = {
+        date: "2026-10-02",
+        customerId,
+        clientRequestId: "7a5b3c1d-9e8f-4a6b-8c2d-1e0f9a8b7c6d",
+        lines: [{ productId: f.productId, item: "Steel", qty: 3, unit: "kg", rate: 100, lotId }],
+      } as unknown as CreateSaleDto;
+
+      const first = await salesService.create(f.businessId, { ...dto });
+      const retry = await salesService.create(f.businessId, { ...dto });
+
+      expect(retry.sale.id).toBe(first.sale.id);
+      expect(await prisma.sale.count({ where: { businessId: f.businessId } })).toBe(1);
+      expect(await lotBalance(lotId)).toBe("0.000");
+    });
+
     it("rejects a line larger than its lot, even when total product stock is enough", async () => {
       const f = await fixture("sale-lot-short");
       const customerId = await customerFor(f.businessId);

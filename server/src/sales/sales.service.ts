@@ -125,7 +125,7 @@ export class SalesService {
     const purchaseIds = [...new Set(dto.lines.map((l) => l.purchaseId).filter(Boolean))] as string[];
     const lotIds = [...new Set(dto.lines.map((l) => l.lotId).filter(Boolean))] as string[];
 
-    return this.prisma.$transaction(async (tx) => {
+    const write = () => this.prisma.$transaction(async (tx) => {
       // Round trip 1 (after BEGIN): every stock key, in sorted order.
       const lockKeys = dto.lines.flatMap((line) => {
         // Product-level key too: product-total sales and variant sales must serialize.
@@ -399,10 +399,10 @@ export class SalesService {
       const [written] = await tx.$queryRaw<SaleWriteRow[]>`
         WITH new_sale AS (
           INSERT INTO "Sale" ("id", "businessId", "date", "customerId", "notes", "discountPct", "taxPct",
-                              "loadingCharges", "transportCharges", "labourCharges")
+                              "loadingCharges", "transportCharges", "labourCharges", "clientRequestId")
           VALUES (${saleId}, ${businessId}, ${saleDate}::date, ${dto.customerId}, ${dto.notes ?? null},
                   ${discountPct}::numeric, ${taxPct}::numeric, ${loadingCharges}::numeric,
-                  ${transportCharges}::numeric, ${labourCharges}::numeric)
+                  ${transportCharges}::numeric, ${labourCharges}::numeric, ${dto.clientRequestId ?? null})
           RETURNING "id", "createdAt"
         ),
         line_input AS (
@@ -515,6 +515,28 @@ export class SalesService {
       };
       return { sale, invoice: { ...invoice, total: totals.grandTotal.toNumber() } };
     });
+
+    try {
+      return await write();
+    } catch (error) {
+      // A repeat of a saved request (double click, retry after a timeout) fails on the
+      // (businessId, clientRequestId) unique index or on a stock check that the first
+      // sale used up. Answer it with the sale the first request created.
+      if (dto.clientRequestId) {
+        const existing = await this.byClientRequestId(businessId, dto.clientRequestId);
+        if (existing) return existing;
+      }
+      throw error;
+    }
+  }
+
+  private async byClientRequestId(businessId: string, clientRequestId: string) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { businessId, clientRequestId },
+      include: { invoice: true, lines: true },
+    });
+    if (!sale?.invoice) return null;
+    return { sale, invoice: { ...sale.invoice, total: sale.invoice.total.toNumber() } };
   }
 
   async list(businessId: string, skip: number, take: number, customerId?: string) {

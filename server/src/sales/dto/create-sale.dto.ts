@@ -6,6 +6,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -123,4 +124,9 @@ export class CreateSaleDto {
   @Min(0)
   @Max(LIMITS.MAX_MONEY)
   paidNow?: number;
+
+  /** One key per sale draft. A repeat with the same key returns the first sale. */
+  @IsOptional()
+  @IsUUID()
+  clientRequestId?: string;
 }

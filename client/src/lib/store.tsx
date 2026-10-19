@@ -285,7 +285,7 @@ interface Store {
   addPurchaseBatch: (docs: CreatePurchaseInput[]) => Promise<void>;
   updatePurchase: (id: string, patch: Partial<Purchase>) => Promise<void>;
   deletePurchase: (id: string) => Promise<void>;
-  addSale: (s: Omit<Sale, "id" | "invoiceNo" | "createdAt"> & { paidNow?: number }) => Promise<string>;
+  addSale: (s: Omit<Sale, "id" | "invoiceNo" | "createdAt"> & { paidNow?: number; clientRequestId?: string }) => Promise<string>;
   deleteSale: (id: string) => Promise<void>;
   addPayment: (p: Omit<Payment, "id">) => Promise<void>;
   addCustomer: (c: Omit<Customer, "id">) => Promise<string>;
@@ -1405,6 +1405,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             transportCharges: s.transportCharges ?? 0,
             labourCharges: s.labourCharges ?? 0,
             paidNow: s.paidNow ?? 0,
+            clientRequestId: s.clientRequestId,
             lines: s.lines.map((line) => {
               const variant = line.variantId ? variants.find((item) => item.id === line.variantId) : undefined;
               const product = products.find((item) => item.id === variant?.productId);
