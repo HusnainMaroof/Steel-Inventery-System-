@@ -12,7 +12,10 @@ import {
 import { readCache, writeCache } from "@/lib/query-cache";
 import { fetchServerProfitReport, type ApiProfitReport } from "@/lib/server-report";
 import { userFacingError } from "@/lib/user-error";
-import { fmtMoney, fmtQtyNumber, qtyUnitLabel } from "@/lib/format";
+import { fmtMoney as fmtMoneyRaw, fmtQtyNumber, qtyUnitLabel } from "@/lib/format";
+
+/** Keeps the currency sign on the same line as its number when a long value wraps. */
+const fmtMoney = (n: number) => fmtMoneyRaw(n).replace(" ", "\u00a0");
 
 type Period = "today" | "monthly" | "yearly";
 
@@ -39,9 +42,9 @@ function MoneyFigure({
     );
   }
   const cls = large
-    ? "text-[clamp(2rem,11cqi,3.5rem)] font-bold leading-none tracking-tight tabular-nums"
-    : "text-[26px] sm:text-[32px] font-bold tabular-nums leading-none";
-  return <span className={`${cls} whitespace-nowrap`}>{fmtMoney(value)}</span>;
+    ? "text-[clamp(2rem,11cqi,3.5rem)] font-bold leading-[1.05] tracking-tight tabular-nums"
+    : "text-[26px] sm:text-[32px] font-bold tabular-nums leading-[1.05]";
+  return <span className={`${cls} block [overflow-wrap:anywhere]`}>{fmtMoney(value)}</span>;
 }
 
 /* ---------- shared primitives (monochrome, 8px radius) ---------- */
@@ -102,13 +105,13 @@ function Kpi({
           {loading ? (
             <Skeleton className={`h-9 w-24 rounded-md ${dark ? "!bg-white/20" : ""}`} />
           ) : money ? (
-            <span className="text-[clamp(1.25rem,12cqi,2.625rem)] whitespace-nowrap font-bold leading-none tracking-tight tabular-nums">
+            <span className="block text-[clamp(1.25rem,12cqi,2.625rem)] [overflow-wrap:anywhere] font-bold leading-[1.05] tracking-tight tabular-nums">
               {prefix}
               {fmtMoney(value)}
               {suffix}
             </span>
           ) : (
-            <span className="text-[clamp(1.25rem,12cqi,2.625rem)] whitespace-nowrap font-bold leading-none tracking-tight tabular-nums">
+            <span className="block text-[clamp(1.25rem,12cqi,2.625rem)] [overflow-wrap:anywhere] font-bold leading-[1.05] tracking-tight tabular-nums">
               {fmtQtyNumber(value)}
               {suffix}
             </span>
@@ -179,7 +182,7 @@ function DueCard({
         {loading ? (
           <Skeleton className="h-8 w-32 rounded-md" />
         ) : (
-          <p className={`text-[clamp(1.25rem,12cqi,2rem)] whitespace-nowrap font-bold tabular-nums leading-none ${value > 0 ? accent : "text-[#171717]"}`}>
+          <p className={`text-[clamp(1.25rem,12cqi,2rem)] [overflow-wrap:anywhere] font-bold tabular-nums leading-[1.05] ${value > 0 ? accent : "text-[#171717]"}`}>
             {value > 0 ? fmtMoney(value) : "—"}
           </p>
         )}
