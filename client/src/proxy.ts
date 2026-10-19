@@ -1,9 +1,7 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isKnownAppPath } from "@/lib/app-routes";
-
-const PUBLIC_PATHS = new Set(["/", "/login", "/offline", "/404"]);
+import { isKnownAppPath, isPublicPath } from "@/lib/app-routes";
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -15,7 +13,7 @@ export function proxy(request: NextRequest) {
   }
 
   const session = request.cookies.get("session")?.value;
-  const isPublic = PUBLIC_PATHS.has(pathname);
+  const isPublic = isPublicPath(pathname);
 
   if (!session && !isPublic) {
     const login = new URL("/login", request.url);

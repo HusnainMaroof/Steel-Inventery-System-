@@ -12,6 +12,7 @@ import {
   legacyBusinessPath,
   pagePathFromBusinessRoute,
 } from "@/lib/business-path";
+import { MARKETING_PATHS, isPublicPath } from "@/lib/app-routes";
 import { canOpenPath, pagesFor } from "@/lib/staff-access";
 import { useUiPreferences } from "@/lib/preferences";
 import { AuthBootstrapSkeleton, skeletonForPath } from "@/components/skeletons";
@@ -319,16 +320,8 @@ export default function Shell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("pageshow", onShow as EventListener);
   }, []);
 
-  const isMarketingRoute =
-    pathname === "/pricing" ||
-    pathname === "/privacy-policy" ||
-    pathname === "/terms-and-conditions";
-  const isPublic =
-    pathname === "/" ||
-    pathname === "/login" ||
-    pathname === "/offline" ||
-    pathname === "/404" ||
-    isMarketingRoute;
+  const isMarketingRoute = MARKETING_PATHS.has(pathname ?? "");
+  const isPublic = isPublicPath(pathname ?? "");
   const isAdminRoute = pathname === "/admin" || pathname?.startsWith("/admin/");
   const isMarketingPage = pathname === "/" || isMarketingRoute;
   const tenantPage = pagePathFromBusinessRoute(pathname ?? "") ?? "";

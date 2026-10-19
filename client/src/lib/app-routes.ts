@@ -1,4 +1,19 @@
-const PUBLIC_PATHS = new Set(["/", "/login", "/offline", "/404"]);
+/** Public marketing and legal pages. They render with the public header and footer. */
+export const MARKETING_PATHS = new Set([
+  "/pricing",
+  "/about",
+  "/contact",
+  "/privacy-policy",
+  "/terms-and-conditions",
+  "/refund-policy",
+]);
+
+const PUBLIC_PATHS = new Set(["/", "/login", "/offline", "/404", ...MARKETING_PATHS]);
+
+/** Pages that open without a session. */
+export function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.has(pathname);
+}
 
 const ADMIN_STATIC = new Set([
   "/admin",
