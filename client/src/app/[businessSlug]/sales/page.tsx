@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { usePaginatedSales } from "@/hooks/use-paginated-sales";
 import { useStore } from "@/lib/store";
 import { fmtMoney } from "@/lib/format";
@@ -12,6 +12,7 @@ import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import SalesTable from "@/components/sales/SalesTable";
 import NewSaleModal from "@/components/sales/NewSaleModal";
 import PrintPack from "@/components/sales/PrintPack";
+import CustomerDuesTab from "@/components/sales/CustomerDuesTab";
 import { useSaleDraft } from "@/components/sales/useSaleDraft";
 import { productUsesCategories, resolveDefs } from "@/lib/catalogue";
 import { useUiPreferences } from "@/lib/preferences";
@@ -19,7 +20,7 @@ import Decimal from "decimal.js";
 import { toDecimal } from "../../../lib/decimal";
 
 export default function SalesPage() {
-  const { sales, customers, inventory, products, categories, attributeDefs, addSale, addCustomer, deleteSale, salePaid, isPending, transactionsReady } = useStore();
+  const { sales, customers, inventory, products, categories, attributeDefs, addSale, addCustomer, deleteSale, salePaid, customerBalance, isPending, transactionsReady } = useStore();
   const invoiceList = usePaginatedSales();
   const activeCustomers = customers.filter((customer) => customer.active !== false);
   const api = useSaleDraft();
@@ -28,11 +29,13 @@ export default function SalesPage() {
   const [viewId, setViewId] = useState<string | null>(null);
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
-  const [tab, setTab] = useState<"invoices" | "print">("invoices");
+  const [tab, setTab] = useState<"invoices" | "dues" | "print">("invoices");
+  const duesCustomerCount = useMemo(() => customers.filter((customer) => customerBalance(customer.id) > 0.005).length, [customers, customerBalance]);
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("tab") === "print") {
-      setTab("print");
-    }
+    const initialTab = new URLSearchParams(window.location.search).get("tab");
+    if (initialTab !== "dues" && initialTab !== "print") return;
+    const frame = window.requestAnimationFrame(() => setTab(initialTab));
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   // customer add (the only popup left — a secondary action)
@@ -222,6 +225,7 @@ export default function SalesPage() {
       <div role="tablist" className="flex gap-6 border-b border-[#E5E5E5] mb-6">
         {([
           ["invoices", "Sales"],
+          ["dues", `Customer dues (${duesCustomerCount})`],
           ["print", "Print"],
         ] as const).map(([key, label]) => (
           <button
@@ -234,7 +238,7 @@ export default function SalesPage() {
               // Keep the business slug in the URL — a bare /sales would make
               // the router treat "sales" as an unknown tenant and bounce to
               // the dashboard.
-              const next = businessHref(key === "print" ? "/sales?tab=print" : "/sales");
+              const next = businessHref(key === "invoices" ? "/sales" : `/sales?tab=${key}`);
               window.history.replaceState(null, "", next);
             }}
             className={`min-h-10 pb-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -270,6 +274,8 @@ export default function SalesPage() {
           onDelete={(id) => deleteSale(id)}
           onNewSale={startNewSale}
         />
+      ) : tab === "dues" ? (
+        <CustomerDuesTab onReceive={(id) => setPaySaleId(id)} />
       ) : (
         <PrintPack sales={sales} salePaid={salePaid} />
       )}

@@ -6,10 +6,11 @@ import { saleGrandTotal } from "@/lib/store";
 import type { Sale } from "@/lib/types";
 import { useBusinessHref } from "@/components/BusinessLink";
 import { EmptyState } from "@/components/ui";
-import { DateRangePicker, formatRangeLabel } from "@/components/ui/date-range-picker";
-import { dateInIsoRange, todayIsoDay } from "@/lib/date-range-filter";
+import { DateRangePicker, formatRangeLabel, toISODate } from "@/components/ui/date-range-picker";
+import { dateInIsoRange, todayIsoDay, type IsoRange } from "@/lib/date-range-filter";
 import PeriodInvoice from "@/components/sales/PeriodInvoice";
-import { fmtMoney } from "@/lib/format";
+import { fmtDate, fmtMoney } from "@/lib/format";
+import { CalendarX2 } from "lucide-react";
 import Decimal from "decimal.js";
 import { toDecimal } from "../../lib/decimal";
 
@@ -34,11 +35,19 @@ export default function PrintPack({
   const router = useRouter();
   const businessHref = useBusinessHref();
   const today = todayIsoDay();
-  const [range, setRange] = useState<{ from: string | null; to: string | null }>({
-    from: today,
-    to: today,
-  });
-  const { from, to } = range;
+  // null means "follow the latest day that has sales until the user picks a range".
+  const [range, setRange] = useState<IsoRange | null>(null);
+
+  const latestSaleDay = useMemo(() => {
+    let latest = "";
+    for (const sale of sales) {
+      if (sale.date > latest) latest = sale.date;
+    }
+    return latest || null;
+  }, [sales]);
+
+  const defaultDay = latestSaleDay ?? today;
+  const { from, to } = range ?? { from: defaultDay, to: defaultDay };
 
   const filtered = useMemo(() => {
     return sales
@@ -46,8 +55,16 @@ export default function PrintPack({
       .sort((a, b) => a.date.localeCompare(b.date) || a.invoiceNo.localeCompare(b.invoiceNo));
   }, [sales, from, to]);
 
-  const total = filtered.reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber();
-  const due = filtered.reduce((a, s) => a.plus(toDecimal(Math.max(0, saleGrandTotal(s) - salePaid(s.id)))), new Decimal(0)).toNumber();
+  const total = filtered
+    .reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0))
+    .toNumber();
+  const due = filtered
+    .reduce(
+      (a, s) =>
+        a.plus(Decimal.max(0, toDecimal(saleGrandTotal(s)).minus(toDecimal(salePaid(s.id))))),
+      new Decimal(0),
+    )
+    .toNumber();
 
   const title = rangeTitle(from, to);
   const invoiceNo = rangeInvoiceNo(from, to);
@@ -64,27 +81,51 @@ export default function PrintPack({
     router.push(printHref);
   };
 
+  const showLatestDay = () => setRange({ from: defaultDay, to: defaultDay });
+
+  const showThisMonth = () => {
+    const now = new Date();
+    setRange({
+      from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)),
+      to: toISODate(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+    });
+  };
+
   return (
-    <div className="max-w-[210mm]">
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <DateRangePicker
-          from={from}
-          to={to}
-          onChange={setRange}
-          placeholder="Today"
-          ariaLabel="Pick sales date"
-        />
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
-          <span className="tabular-nums text-neutral-700">
-            <span className="font-semibold text-neutral-900">{filtered.length}</span> sale{filtered.length === 1 ? "" : "s"}
+    <div className="w-full">
+      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <DateRangePicker
+            from={from}
+            to={to}
+            onChange={setRange}
+            placeholder="Today"
+            ariaLabel="Pick sales date"
+          />
+          <button type="button" className="btn-ghost" onClick={showLatestDay}>
+            Latest day
+          </button>
+          <button type="button" className="btn-ghost" onClick={showThisMonth}>
+            This month
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <span className="tabular-nums text-[#171717]/70">
+            <span className="font-semibold text-[#171717]">{filtered.length}</span> sale
+            {filtered.length === 1 ? "" : "s"}
           </span>
-          <span className="tabular-nums text-neutral-700">{fmtMoney(total)}</span>
-          <span className={`tabular-nums font-medium ${due > 0 ? "text-[#a12b1f]" : "text-neutral-700"}`}>
+          <span className="tabular-nums font-semibold text-[#171717]">{fmtMoney(total)}</span>
+          <span
+            className={`tabular-nums font-semibold ${
+              due > 0 ? "text-destructive" : "text-[#171717]"
+            }`}
+          >
             Due {fmtMoney(due)}
           </span>
           <button
             type="button"
-            className="btn-primary !py-2 !px-4 text-[13px]"
+            className="btn-primary"
             onClick={openPrint}
             disabled={filtered.length === 0}
           >
@@ -95,11 +136,25 @@ export default function PrintPack({
 
       {filtered.length === 0 ? (
         <EmptyState
+          icon={<CalendarX2 className="size-6" aria-hidden />}
           title={`No sales on ${title}`}
-          hint="Pick another date, or record a sale first."
+          hint={
+            latestSaleDay
+              ? `Latest sales day is ${fmtDate(latestSaleDay)}. Pick another date, or record a sale first.`
+              : "Pick another date, or record a sale first."
+          }
+          action={
+            latestSaleDay ? (
+              <button type="button" className="btn-ghost" onClick={showLatestDay}>
+                Show latest sales day
+              </button>
+            ) : undefined
+          }
         />
       ) : (
-        <PeriodInvoice sales={filtered} title={title} invoiceNo={invoiceNo} />
+        <div className="w-full max-w-[210mm]">
+          <PeriodInvoice sales={filtered} title={title} invoiceNo={invoiceNo} />
+        </div>
       )}
     </div>
   );

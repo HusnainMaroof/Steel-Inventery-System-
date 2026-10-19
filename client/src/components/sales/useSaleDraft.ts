@@ -230,6 +230,32 @@ export function useSaleDraft() {
     ? scopedDefs(attributeDefs, pick.productId, pickUsesCats ? pick.categoryId || undefined : undefined).filter((d) => d.active)
     : [];
 
+  /* ---- attribute choices: only values that are in stock ----
+     Each field lists the values of stocked items that match the fields above it,
+     so every combination the operator can pick has stock. */
+  const stockSnaps = pick.productId
+    ? stocked
+        .filter((r) => r.productId === pick.productId && (!pickUsesCats || !pick.categoryId || r.categoryId === pick.categoryId))
+        .map((r) => r.attributeSnapshot ?? varById.get(r.variantId)?.attributes ?? {})
+    : [];
+  const orderedDefs = [...pickDefs].sort((a, b) => a.sortOrder - b.sortOrder);
+  const fitAttrs = (attrs: Record<string, string>) => {
+    const next = { ...attrs };
+    const choices: { def: (typeof pickDefs)[number]; values: string[] }[] = [];
+    let pool = stockSnaps;
+    for (const def of orderedDefs) {
+      const values = [...new Set(pool.map((s) => (s[def.key] ?? "").trim()))];
+      if (values.length > 0 && !values.includes((next[def.key] ?? "").trim())) next[def.key] = values[0];
+      choices.push({ def, values });
+      const chosen = (next[def.key] ?? "").trim();
+      pool = pool.filter((s) => (s[def.key] ?? "").trim() === chosen);
+    }
+    return { attrs: next, choices };
+  };
+  const attrChoices = fitAttrs(pick.attrs).choices;
+  const onAttrPick = (key: string, value: string) =>
+    setPickState((d) => ({ ...d, attrs: fitAttrs({ ...d.attrs, [key]: value }).attrs, lotId: "" }));
+
   /* ---- added lines ---- */
   const [lines, setLines] = useState<SaleDraftLine[]>([]);
 
@@ -324,6 +350,8 @@ export function useSaleDraft() {
     onProduct,
     onCategory,
     onAttrs,
+    attrChoices,
+    onAttrPick,
     pickProduct,
     pickUsesCats,
     pickCategory,

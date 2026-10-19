@@ -65,7 +65,7 @@ export default function AppSidebar({ items, pathname, onSignOut, helpHref }: App
   return (
     <nav
       aria-label="Main"
-      className="no-print sticky top-[72px] hidden h-[calc(100dvh-72px)] w-[232px] shrink-0 flex-col gap-4 pb-5 pl-4 pr-2 md:flex"
+      className="no-print sticky top-[72px] hidden h-[calc(100dvh-72px)] w-fit shrink-0 flex-col gap-4 pb-5 pl-4 pr-2 md:flex"
     >
       <div className="flex min-h-0 flex-1 items-center">
         <ul className="flex max-h-full w-fit min-w-[168px] flex-col gap-0.5 overflow-y-auto rounded-lg bg-white p-1.5">

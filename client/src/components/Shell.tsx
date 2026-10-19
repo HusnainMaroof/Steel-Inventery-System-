@@ -452,7 +452,6 @@ export default function Shell({ children }: { children: ReactNode }) {
         logoPlaceholder={useLogoPlaceholder}
         homeHref={roleHome}
         userName={displayName(user)}
-        userSubtitle={userSubtitle(user)}
         userEmail={user.email}
         settingsHref={roleNav.find((n) => n.key === "settings")?.href}
         staffHref={roleNav.find((n) => n.key === "staff")?.href}
@@ -478,7 +477,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           onSignOut={onSignOut}
           helpHref="mailto:contact@tijartt.com"
         />
-        <main className="min-w-0 flex-1 p-4 max-md:overflow-x-auto md:px-6 md:pb-8 md:pt-2 lg:px-8">{mainContent}</main>
+        <main className="min-w-0 flex-1 p-4 max-md:overflow-x-auto md:pb-8 md:pl-4 md:pr-6 md:pt-2 lg:pl-6 lg:pr-8">{mainContent}</main>
       </div>
     </div>
   );

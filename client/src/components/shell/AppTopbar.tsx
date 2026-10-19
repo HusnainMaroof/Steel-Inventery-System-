@@ -20,7 +20,6 @@ type AppTopbarProps = {
   logoPlaceholder: boolean;
   homeHref: string;
   userName: string;
-  userSubtitle: string;
   userEmail?: string;
   settingsHref?: string;
   staffHref?: string;
@@ -61,7 +60,6 @@ export default function AppTopbar({
   logoPlaceholder,
   homeHref,
   userName,
-  userSubtitle,
   userEmail,
   settingsHref,
   staffHref,
@@ -165,7 +163,7 @@ export default function AppTopbar({
 
   return (
     <header className="no-print sticky top-0 z-30 hidden md:flex h-[72px] items-center justify-between bg-[#F8F8F7] pr-4 sm:pr-6">
-      <div className="flex w-[232px] shrink-0 items-center pl-4 pr-2">
+      <div className="flex w-[192px] shrink-0 items-center pl-4 pr-2">
         <Link
           href={homeHref}
           title={brand}
@@ -240,9 +238,6 @@ export default function AppTopbar({
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-sm font-semibold leading-snug text-[#171717]">
                     {userName}
-                  </p>
-                  <p className="mt-0.5 text-[12px] leading-snug text-[#171717]/70">
-                    {userSubtitle}
                   </p>
                   {email ? (
                     <p className="mt-0.5 break-all text-[12px] leading-snug text-[#171717]/70">
