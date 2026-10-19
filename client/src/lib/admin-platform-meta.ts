@@ -10,25 +10,25 @@ export const BILLING_CYCLE_META: Record<
   MONTHLY: {
     label: "Monthly",
     short: "Monthly",
-    hint: "Renews every month — typical SaaS billing.",
+    hint: "Renews every month.",
     badgeClass: "bg-sky-50 text-sky-900 border-sky-100",
   },
   YEARLY: {
     label: "Yearly",
     short: "Yearly",
-    hint: "One renewal per year — often discounted vs monthly.",
+    hint: "Renews once a year.",
     badgeClass: "bg-violet-50 text-violet-900 border-violet-100",
   },
   LIFETIME: {
     label: "Lifetime",
     short: "Lifetime",
-    hint: "No expiry — access does not end on a schedule.",
+    hint: "Access never ends.",
     badgeClass: "bg-emerald-50 text-emerald-900 border-emerald-100",
   },
   CUSTOM_DAYS: {
     label: "Custom days",
     short: "Custom",
-    hint: "Trial or promo — you choose how many days it lasts.",
+    hint: "Trial or promo. You choose how many days it lasts.",
     badgeClass: "bg-amber-50 text-amber-900 border-amber-100",
   },
 };
@@ -47,12 +47,12 @@ export type BuiltinTemplateMeta = {
 export const BUILTIN_TEMPLATE_META: Record<string, BuiltinTemplateMeta> = {
   "tpl-steel": {
     trade: "Steel",
-    hint: "Size, grade & mill — one product, flat attributes",
+    hint: "Size, grade and mill on one product",
     accentClass: "border-l-[#171717]",
   },
   "tpl-cement": {
     trade: "Cement",
-    hint: "Grey & white cement — separate categories",
+    hint: "Grey and white cement as separate categories",
     accentClass: "border-l-stone-500",
   },
   "tpl-wire": {

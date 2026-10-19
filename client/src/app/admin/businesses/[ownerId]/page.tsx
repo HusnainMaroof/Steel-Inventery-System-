@@ -18,7 +18,6 @@ import {
 import {
   DetailRow,
   fmtDate,
-  isLifetimeBusiness,
   planLabel,
   ResetPasswordModal,
   StatusBadge,
@@ -26,12 +25,17 @@ import {
   SubscriptionModal,
   TemplatesModal,
   ActionMenu,
+  AdminCard,
+  ActivityStatStrip,
+  CopyButton,
+  SubscriptionExpHint,
 } from "@/components/admin/admin-ui";
 import { AdminBusinessDetailSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/lib/auth";
 import { invalidateAdminCache } from "@/lib/admin-cache";
 import { planPagesSummary, sanitizePlanPages } from "@/lib/staff-access";
-import { BusyButton, ConfirmModal, Page } from "@/components/ui";
+import { ConfirmModal, Page } from "@/components/ui";
+import { ChevronLeft } from "lucide-react";
 
 type OwnerResult = Awaited<ReturnType<typeof getOwnerAction>>;
 type TemplatesResult = Awaited<ReturnType<typeof listProductTemplatesAction>>;
@@ -40,7 +44,7 @@ type PlansResult = Awaited<ReturnType<typeof listSubscriptionPlansAction>>;
 /**
  * Module-level in-flight dedupe. Next.js dev remounts this page (Strict Mode
  * double-mount) and each fresh instance re-runs its load effects with brand
- * new refs — only module scope survives remounts. `force` bypasses the
+ * new refs - only module scope survives remounts. `force` bypasses the
  * dedupe for explicit reloads after mutations.
  */
 const ownerInFlight = new Map<string, Promise<OwnerResult>>();
@@ -173,76 +177,46 @@ export default function AdminBusinessDetailPage() {
 
   return (
     <Page>
-      <Link href="/admin/businesses" className="text-[12px] text-neutral-500 hover:text-black mb-4 inline-block">
-        ← Back to businesses
+      <Link
+        href="/admin/businesses"
+        className="text-[13px] text-[#171717]/70 hover:text-[#171717] mb-4 inline-flex items-center gap-1"
+      >
+        <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+        Back to businesses
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">{owner.business.name}</h1>
-          <p className="text-[#171717]/70 text-xs mt-1 font-mono">/{owner.business.slug}</p>
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold text-[#171717] truncate">
+            {owner.business.name}
+          </h1>
+          <p className="text-[#171717]/70 text-[13px] mt-1 font-mono truncate">/{owner.business.slug}</p>
           <div className="flex flex-wrap gap-1.5 mt-2">
             <StatusBadge active={owner.active} />
             <SubBadge active={subActive} status={owner.business.subscriptionStatus} />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <div className="hidden sm:flex flex-wrap gap-2">
-            <button type="button" className="btn-ghost !text-[12px]" onClick={() => setSubOpen(true)}>
-              Subscription
-            </button>
-            <button type="button" className="btn-ghost !text-[12px]" onClick={() => setTemplatesOpen(true)}>
-              Templates
-            </button>
-            <button type="button" className="btn-ghost !text-[12px]" onClick={() => setResetOpen(true)}>
-              Reset password
-            </button>
-            {owner.active ? (
-              <BusyButton
-                type="button"
-                variant="ghost"
-                className="!text-[12px] text-[#a12b1f]"
-                onClick={() => void revoke()}
-                loading={revoking}
-              >
-                Revoke login
-              </BusyButton>
-            ) : (
-              <BusyButton
-                type="button"
-                variant="ghost"
-                className="!text-[12px]"
-                onClick={() => void reactivate()}
-                loading={reactivating}
-              >
-                Reactivate login
-              </BusyButton>
-            )}
-            <BusyButton
-              type="button"
-              variant="ghost"
-              className="!text-[12px] !text-[#a12b1f]"
-              onClick={() => setDeleteOpen(true)}
-              loading={deleting}
-            >
-              Delete business
-            </BusyButton>
-          </div>
-          <div className="sm:hidden w-full flex justify-end">
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button type="button" className="btn-primary flex-1 sm:flex-none" onClick={() => setSubOpen(true)}>
+            Subscription
+          </button>
+          <button type="button" className="btn-ghost flex-1 sm:flex-none" onClick={() => setTemplatesOpen(true)}>
+            Templates
+          </button>
+          <div className="shrink-0">
             <ActionMenu
               items={[
-                { label: "Subscription", onClick: () => setSubOpen(true) },
-                { label: "Templates", onClick: () => setTemplatesOpen(true) },
                 { label: "Reset password", onClick: () => setResetOpen(true) },
                 owner.active
                   ? {
-                      label: revoking ? "Revoking…" : "Revoke login",
+                      label: revoking ? "Revoking..." : "Revoke login",
                       onClick: () => void revoke(),
                       danger: true,
                       disabled: revoking,
                     }
                   : {
-                      label: reactivating ? "Reactivating…" : "Reactivate login",
+                      label: reactivating ? "Reactivating..." : "Reactivate login",
                       onClick: () => void reactivate(),
                       disabled: reactivating,
                     },
@@ -258,43 +232,47 @@ export default function AdminBusinessDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="panel p-4 sm:p-5">
-          <h2 className="text-[13px] font-semibold mb-1">Owner login</h2>
-          <p className="text-xs text-neutral-500 mb-3">Credentials shared with the business owner.</p>
-          <DetailRow label="Owner name">{owner.name}</DetailRow>
-          <DetailRow label="Email">
-            <span className="font-mono text-[12px]">{owner.email}</span>
-          </DetailRow>
-          <DetailRow label="Password">
-            <span className="text-[12px] text-neutral-500">
-              Stored securely (hashed). Use Reset password to issue a new one.
-            </span>
-          </DetailRow>
-        </div>
+      {/* usage strip on its own row, so it never stretches to a tall empty card */}
+      <div className="mb-4">
+        <ActivityStatStrip activity={activity} />
+      </div>
 
-        <div className="panel p-4 sm:p-5">
-          <h2 className="text-[13px] font-semibold mb-1">Subscription</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <AdminCard title="Owner login">
+          <p className="text-[13px] text-[#171717]/70 mb-4">
+            Credentials shared with the business owner.
+          </p>
+          <DetailRow label="Owner name">{owner.name}</DetailRow>
+          <DetailRow label="Email">{owner.email}</DetailRow>
+          <DetailRow label="Password">
+            <span className="text-[13px] text-[#171717]/70">Hidden for security</span>
+          </DetailRow>
+        </AdminCard>
+
+        <AdminCard title="Subscription">
           <DetailRow label="Plan">{planLabel(owner.business)}</DetailRow>
           <DetailRow label="Panel modules">
             {planPagesSummary(
               sanitizePlanPages(owner.business.subscriptionPlanDef?.allowedPages),
             )}
           </DetailRow>
-          <DetailRow label="Status">{owner.business.subscriptionStatus ?? "—"}</DetailRow>
+          <DetailRow label="Status">
+            <SubBadge active={subActive} status={owner.business.subscriptionStatus} />
+          </DetailRow>
           <DetailRow label="Started">{fmtDate(owner.business.subscriptionStartsAt)}</DetailRow>
           <DetailRow label="Access until">
-            {isLifetimeBusiness(owner.business)
-              ? "No expiry (lifetime)"
-              : fmtDate(owner.business.subscriptionEndsAt)}
+            <SubscriptionExpHint business={owner.business} />
           </DetailRow>
-        </div>
+        </AdminCard>
 
-        <div className="panel p-4 sm:p-5">
-          <h2 className="text-[13px] font-semibold mb-1">Business</h2>
+        <AdminCard title="Business">
           <DetailRow label="Registered">{fmtDate(owner.createdAt)}</DetailRow>
           <DetailRow label="Business ID">
-            <span className="font-mono text-xs text-neutral-600">{owner.business.id}</span>
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-mono text-[13px] text-[#171717] break-all">{owner.business.id}</span>
+              <CopyButton text={owner.business.id} label="Copy ID" />
+            </span>
           </DetailRow>
           <DetailRow label="Templates applied">{fmtDate(owner.business.templatesAppliedAt)}</DetailRow>
           <DetailRow label="Assigned templates">
@@ -303,37 +281,17 @@ export default function AdminBusinessDetailPage() {
                 {templateTags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600"
+                    className="inline-flex rounded-full bg-[#F8F8F7] px-2 py-0.5 text-xs text-[#171717]/70"
                   >
                     {tag}
                   </span>
                 ))}
               </div>
             ) : (
-              <span className="text-neutral-400">None</span>
+              <span className="text-[13px] text-[#171717]/70">None</span>
             )}
           </DetailRow>
-        </div>
-
-        <div className="panel p-4 sm:p-5">
-          <h2 className="text-[13px] font-semibold mb-1">Activity · last 30 days</h2>
-          {activity ? (
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-1">
-              {[
-                ["Sales", activity.sales],
-                ["Purchases", activity.purchases],
-                ["Payments", activity.payments],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-neutral-100 bg-neutral-50/50 px-2 sm:px-3 py-2 sm:py-2.5 min-w-0">
-                  <p className="text-xs sm:text-xs uppercase tracking-widest text-neutral-400 truncate">{label}</p>
-                  <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1">{value}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[12px] text-neutral-400">No activity data yet.</p>
-          )}
-        </div>
+        </AdminCard>
       </div>
 
       <ResetPasswordModal
@@ -361,9 +319,9 @@ export default function AdminBusinessDetailPage() {
         confirmLabel="Delete permanently"
         loading={deleting}
       >
-        <p className="text-sm text-neutral-700">
+        <p className="text-sm text-[#171717]/70">
           This permanently removes the business owner account, all staff logins, and every record
-          for this business — products, inventory, sales, purchases, payments, and expenses.
+          for this business: products, inventory, sales, purchases, payments, and expenses.
         </p>
         <p className="text-sm text-[#a12b1f] mt-2 font-medium">This cannot be undone.</p>
       </ConfirmModal>

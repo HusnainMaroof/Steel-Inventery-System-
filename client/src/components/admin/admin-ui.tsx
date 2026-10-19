@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { ChevronRight, Copy, Check } from "lucide-react";
 import {
   applyOwnerTemplatesAction,
   createOwnerAction,
   updateOwnerAction,
   updateOwnerSubscriptionAction,
   type OwnerAccount,
+  type OwnerBusiness,
 } from "@/app/actions/users";
 import type {
   ProductTemplateOption,
@@ -23,7 +25,7 @@ import { BillingCycleBadge } from "@/components/admin/subscription-plans-ui";
 import { BusyButton, Modal } from "@/components/ui";
 
 export function fmtDate(value?: string | null) {
-  if (!value) return "—";
+  if (!value) return "-";
   return new Date(value).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
@@ -59,7 +61,7 @@ export function SubBadge({ active, status }: { active: boolean; status?: string 
 export function planLabel(
   business?: { subscriptionPlanDef?: { label?: string } | null } | null,
 ) {
-  return business?.subscriptionPlanDef?.label ?? "—";
+  return business?.subscriptionPlanDef?.label ?? "-";
 }
 
 /**
@@ -111,17 +113,128 @@ export function isLifetimeBusiness(
   return business?.subscriptionPlanDef?.billingCycle === "LIFETIME";
 }
 
+/** Days remaining before subscription ends. Returns null for lifetime. */
+export function daysUntilExpiry(business: OwnerBusiness): number | null {
+  if (isLifetimeBusiness(business)) return null;
+  const end = business.subscriptionEndsAt;
+  if (!end) return null;
+  const ms = new Date(end).getTime() - Date.now();
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+}
+
+/** Coloured hint text for the subscription expiry line in lists and cards. */
+export function SubscriptionExpHint({ business }: { business: OwnerBusiness }) {
+  const d = daysUntilExpiry(business);
+  if (d === null) {
+    return <span className="text-[13px] text-[#171717]/70">No expiry</span>;
+  }
+  if (d < 0) {
+    return (
+      <span className="text-[13px] text-destructive">
+        Ended {Math.abs(d)} days ago
+      </span>
+    );
+  }
+  if (d <= 7) {
+    return (
+      <span className="text-[13px] text-warning">
+        Until {fmtDate(business.subscriptionEndsAt)} ({d} days left)
+      </span>
+    );
+  }
+  return (
+    <span className="text-[13px] text-[#171717]/70">
+      Until {fmtDate(business.subscriptionEndsAt)} ({d} days left)
+    </span>
+  );
+}
+
+/** Copy-to-clipboard text button with "Copied" feedback. */
+export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={copied ? "Copied" : `Copy ${label}`}
+      className="inline-flex min-h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-[#171717]/70 hover:bg-[#F8F8F7] hover:text-[#171717]"
+    >
+      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+      <span className="ml-1">{copied ? "Copied" : label}</span>
+    </button>
+  );
+}
+
 function activeSubscriptionPlans(plans: SubscriptionPlanOption[]) {
   return plans.filter((plan) => plan.active).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export function StatCard({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
-    <div className="panel p-4">
-      <p className="text-xs uppercase tracking-[0.12em] text-[#171717]/70">{label}</p>
+    <div className="card p-5">
+      <p className="text-xs font-medium text-[#171717]/60">{label}</p>
       <p className="text-2xl sm:text-3xl font-semibold mt-2 tabular-nums">{value}</p>
-      {hint && <p className="text-xs text-neutral-500 mt-1">{hint}</p>}
+      {hint && <p className="text-[13px] text-[#171717]/70 mt-1">{hint}</p>}
     </div>
+  );
+}
+
+/** Consistent card wrapper used on the business detail page. */
+export function AdminCard({
+  title,
+  children,
+  className,
+}: {
+  title?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`bg-white border border-[#E5E5E5] rounded-xl p-5 ${className ?? ""}`}>
+      {title && (
+        <h2 className="text-[13px] font-semibold text-[#171717] mb-4">{title}</h2>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/** Compact full-width activity strip with 3 stats. */
+export function ActivityStatStrip({
+  activity,
+}: {
+  activity?: { sales: number; purchases: number; payments: number } | null;
+}) {
+  if (!activity) {
+    return (
+      <AdminCard title="Activity last 30 days">
+        <p className="text-[13px] text-[#171717]/70">No activity data yet.</p>
+      </AdminCard>
+    );
+  }
+  return (
+    <AdminCard>
+      <div className="flex items-baseline justify-between">
+        <p className="text-xs text-[#171717]/60">Last 30 days</p>
+      </div>
+      <div className="grid grid-cols-3 gap-4 mt-3">
+        {([
+          ["Sales", activity.sales],
+          ["Purchases", activity.purchases],
+          ["Payments", activity.payments],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="text-center">
+            <p className="text-xl font-semibold text-[#171717] tabular-nums">{value}</p>
+            <p className="text-xs text-[#171717]/60 mt-0.5">{label}</p>
+          </div>
+        ))}
+      </div>
+    </AdminCard>
   );
 }
 
@@ -169,18 +282,13 @@ export function ActionMenu({
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="btn-ghost !py-1 !px-2.5 text-xs inline-flex min-h-0 items-center gap-1"
+        className="btn-ghost inline-flex items-center gap-1"
       >
         More
-        <svg
-          className={`w-3 h-3 text-neutral-500 transition-transform ${open ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronRight
+          className={`w-3 h-3 text-[#171717]/40 transition-transform ${open ? "rotate-90" : ""}`}
+          aria-hidden="true"
+        />
       </button>
       {open &&
         typeof document !== "undefined" &&
@@ -189,7 +297,7 @@ export function ActionMenu({
             <div className="fixed inset-0 z-[200]" onClick={() => setOpen(false)} aria-hidden />
             <div
               role="menu"
-              className="fixed z-[201] min-w-[10.5rem] rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+              className="fixed z-[201] min-w-[10.5rem] rounded-lg border border-[#E5E5E5] bg-white py-1 shadow-lg"
               style={{ top: menuPos.top, left: menuPos.left }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -204,9 +312,9 @@ export function ActionMenu({
                     setOpen(false);
                     item.onClick();
                   }}
-                  className={`w-full px-3 py-2 text-left text-[12px] transition-colors disabled:opacity-50 ${
-                    item.danger ? "text-[#a12b1f] hover:bg-[#faf5f2]" : "text-black hover:bg-neutral-50"
-                  } ${i > 0 ? "border-t border-neutral-100" : ""}`}
+                  className={`w-full px-3 py-2 text-left text-[13px] transition-colors disabled:opacity-50 ${
+                    item.danger ? "text-[#a12b1f] hover:bg-[#faf5f2]" : "text-[#171717] hover:bg-[#F8F8F7]"
+                  } ${i > 0 ? "border-t border-[#E5E5E5]" : ""}`}
                 >
                   {item.label}
                 </button>
@@ -222,8 +330,8 @@ export function ActionMenu({
 function InfoCell({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs uppercase tracking-[0.08em] text-neutral-400 mb-1">{label}</p>
-      <div className="text-[12px] leading-snug text-neutral-800">{children}</div>
+      <p className="text-xs font-medium text-[#171717]/60 mb-1">{label}</p>
+      <div className="text-sm text-[#171717] leading-snug break-words">{children}</div>
     </div>
   );
 }
@@ -231,16 +339,16 @@ function InfoCell({ label, children }: { label: string; children: ReactNode }) {
 export function PasswordReveal({ password }: { password: string | null }) {
   const [show, setShow] = useState(false);
   if (!password) {
-    return <span className="text-neutral-400 text-[12px]">Not stored — reset to set one</span>;
+    return <span className="text-[13px] text-[#171717]/70">Not stored - reset to set one</span>;
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="font-mono text-[13px] text-neutral-800 tabular-nums">
-        {show ? password : "••••••••••"}
+      <span className="font-mono text-[13px] text-[#171717] tabular-nums">
+        {show ? password : "•".repeat(10)}
       </span>
       <button
         type="button"
-        className="btn-ghost !py-1 !px-2 text-xs min-h-0"
+        className="btn-ghost !py-0.5 !px-2 text-[12px] min-h-0"
         onClick={() => setShow((value) => !value)}
       >
         {show ? "Hide" : "Show password"}
@@ -257,99 +365,103 @@ export function BusinessListTable({
   planFor: (owner: OwnerAccount) => string;
 }) {
   const router = useRouter();
+
+  const onRowKey = (e: React.KeyboardEvent, href: string) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      router.push(href);
+    }
+  };
+
   return (
     <>
       <ul className="md:hidden space-y-3">
         {owners.map((owner) => {
           const subActive = owner.business.subscriptionStatus === "ACTIVE";
+          const href = `/admin/businesses/${owner.id}`;
           return (
             <li key={owner.id}>
               <Link
-                href={`/admin/businesses/${owner.id}`}
-                className="panel block p-4 transition-colors hover:bg-[#F8F8F7] cursor-pointer"
+                href={href}
+                className="bg-white border border-[#E5E5E5] rounded-xl flex items-center gap-3 p-4 hover:bg-[#F8F8F7] cursor-pointer"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-semibold text-[#171717] truncate">{owner.business.name}</p>
-                    <p className="text-xs text-[#171717]/70 mt-0.5 font-mono truncate">/{owner.business.slug}</p>
-                    <p className="text-[12px] text-[#171717]/70 mt-2 truncate">{owner.name}</p>
-                    <p className="font-mono text-xs text-[#171717]/70 truncate">{owner.email}</p>
-                  </div>
-                  <span className="shrink-0 text-xs font-medium text-[#171717]/70">View →</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-[#171717] truncate">{owner.business.name}</p>
+                  <p className="text-[13px] text-[#171717]/70 truncate">/{owner.business.slug}</p>
+                  <p className="text-[13px] text-[#171717]/70 mt-1 truncate">{owner.email}</p>
+                  <p className="text-[13px] font-medium text-[#171717] mt-1 truncate">{planFor(owner)}</p>
+                  <SubscriptionExpHint business={owner.business} />
                 </div>
-                <div className="mt-3 pt-3 border-t border-[#E5E5E5] flex flex-wrap items-center gap-2">
-                  <span className="text-[12px] font-medium text-[#171717]">{planFor(owner)}</span>
-                  <BusinessStatusBadge
-                    ownerActive={owner.active}
-                    subscriptionActive={subActive}
-                    subscriptionStatus={owner.business.subscriptionStatus}
-                  />
-                </div>
+                <BusinessStatusBadge
+                  ownerActive={owner.active}
+                  subscriptionActive={subActive}
+                  subscriptionStatus={owner.business.subscriptionStatus}
+                />
+                <ChevronRight className="w-4 h-4 text-[#171717]/40 shrink-0" aria-hidden="true" />
               </Link>
             </li>
           );
         })}
       </ul>
 
-      <div className="hidden md:block panel overflow-hidden">
+      <div className="hidden md:block bg-white border border-[#E5E5E5] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left">
-          <thead>
-            <tr className="border-b border-[#E5E5E5] bg-[#F8F8F7]">
-              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-[#171717]/70">
-                Business
-              </th>
-              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-[#171717]/70">
-                Email
-              </th>
-              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-[#171717]/70">
-                Subscription
-              </th>
-              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-[#171717]/70 text-right">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#E5E5E5]">
-            {owners.map((owner) => {
-              const subActive = owner.business.subscriptionStatus === "ACTIVE";
-              return (
-                <tr
-                  key={owner.id}
-                  className="hover:bg-[#F8F8F7] cursor-pointer"
-                  onClick={() => router.push(`/admin/businesses/${owner.id}`)}
-                >
-                  <td className="px-4 py-3">
-                    <p className="text-[13px] font-semibold text-[#171717] truncate">{owner.business.name}</p>
-                    <p className="text-xs text-[#171717]/70 mt-0.5 truncate">/{owner.business.slug}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-mono text-[12px] text-[#171717]/70 truncate">{owner.email}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="text-[12px] font-medium text-[#171717]">{planFor(owner)}</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      <BusinessStatusBadge
-                        ownerActive={owner.active}
-                        subscriptionActive={subActive}
-                        subscriptionStatus={owner.business.subscriptionStatus}
-                      />
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/admin/businesses/${owner.id}`}
-                      className="btn-ghost !py-1.5 !px-3 text-[12px]"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="bg-[#FAFAF9]">
+                <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-left">
+                  Business
+                </th>
+                <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-left">
+                  Email
+                </th>
+                <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-left">
+                  Subscription
+                </th>
+                <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-right">
+                  <span className="sr-only">Open</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E5E5E5]">
+              {owners.map((owner) => {
+                const subActive = owner.business.subscriptionStatus === "ACTIVE";
+                const href = `/admin/businesses/${owner.id}`;
+                return (
+                  <tr
+                    key={owner.id}
+                    className="hover:bg-[#F8F8F7] cursor-pointer"
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => router.push(href)}
+                    onKeyDown={(e) => onRowKey(e, href)}
+                  >
+                    <td className="px-4 py-3 align-middle">
+                      <p className="text-sm font-semibold text-[#171717] truncate">{owner.business.name}</p>
+                      <p className="text-[13px] text-[#171717]/70 mt-0.5 truncate">/{owner.business.slug}</p>
+                    </td>
+                    <td className="px-4 py-3 align-middle">
+                      <p className="text-sm text-[#171717]/70 truncate">{owner.email}</p>
+                    </td>
+                    <td className="px-4 py-3 align-middle">
+                      <p className="text-sm font-medium text-[#171717]">{planFor(owner)}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <BusinessStatusBadge
+                          ownerActive={owner.active}
+                          subscriptionActive={subActive}
+                          subscriptionStatus={owner.business.subscriptionStatus}
+                        />
+                        <SubscriptionExpHint business={owner.business} />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 align-middle text-right">
+                      <ChevronRight className="w-4 h-4 text-[#171717]/40 inline-block" aria-hidden="true" />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </>
@@ -358,9 +470,9 @@ export function BusinessListTable({
 
 export function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="py-3 border-b border-neutral-100 last:border-b-0">
-      <p className="text-xs uppercase tracking-[0.1em] text-neutral-400 mb-1">{label}</p>
-      <div className="text-[13px] text-neutral-800 break-words">{children}</div>
+    <div className="py-3 border-b border-[#E5E5E5] last:border-b-0">
+      <p className="text-xs font-medium text-[#171717]/60 mb-1">{label}</p>
+      <div className="text-sm text-[#171717] break-words">{children}</div>
     </div>
   );
 }
@@ -396,7 +508,7 @@ export function BusinessAccountCard({
     ? [
         { label: "Reset password", onClick: onResetPassword },
         {
-          label: revoking ? "Revoking…" : "Revoke login",
+          label: revoking ? "Revoking ..." : "Revoke login",
           onClick: onRevoke,
           danger: true,
           disabled: revoking,
@@ -405,15 +517,15 @@ export function BusinessAccountCard({
     : [
         { label: "Reset password", onClick: onResetPassword },
         {
-          label: reactivating ? "Reactivating…" : "Reactivate login",
+          label: reactivating ? "Reactivating ..." : "Reactivate login",
           onClick: onReactivate,
           disabled: reactivating,
         },
       ];
 
   return (
-    <article className={`panel p-3 sm:p-4 ${owner.active ? "" : "opacity-75"}`}>
-      <div className="mb-3 pb-3 border-b border-neutral-100">
+    <article className={`rounded-xl border border-[#E5E5E5] bg-white p-3 sm:p-4 ${owner.active ? "" : "opacity-75"}`}>
+      <div className="mb-3 pb-3 border-b border-[#E5E5E5]">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-1">
             <h3 className="text-[13px] sm:text-sm font-semibold tracking-tight truncate">
@@ -422,9 +534,9 @@ export function BusinessAccountCard({
             <StatusBadge active={owner.active} />
             <SubBadge active={subActive} status={owner.business.subscriptionStatus} />
           </div>
-          <p className="font-mono text-xs sm:text-xs text-neutral-500">
+          <p className="font-mono text-xs sm:text-xs text-[#171717]/70">
             /{owner.business.slug}
-            <span className="text-neutral-300 mx-1.5">·</span>
+            <span className="text-[#171717]/30 mx-1.5">·</span>
             Since {fmtDate(owner.createdAt)}
           </p>
         </div>
@@ -432,47 +544,45 @@ export function BusinessAccountCard({
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <InfoCell label="Owner account">
-          <p className="font-medium text-[13px]">{owner.name}</p>
-          <p className="font-mono text-xs text-neutral-600 truncate mt-0.5">{owner.email}</p>
+          <p className="font-medium text-[13px] text-[#171717]">{owner.name}</p>
+          <p className="font-mono text-xs text-[#171717]/70 truncate mt-0.5">{owner.email}</p>
         </InfoCell>
 
         <InfoCell label="Subscription">
-          <p className="font-medium">{plan}</p>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            {isLifetimeBusiness(owner.business)
-              ? "No expiry"
-              : `Until ${fmtDate(owner.business.subscriptionEndsAt)}`}
+          <p className="font-medium text-[#171717]">{plan}</p>
+          <p className="text-xs text-[#171717]/70 mt-0.5">
+            <SubscriptionExpHint business={owner.business} />
           </p>
           {templateTags.length > 0 ? (
             <div className="flex flex-wrap gap-1 mt-2">
               {templateTags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex rounded-full bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600"
+                  className="inline-flex rounded-full bg-[#F8F8F7] px-1.5 py-0.5 text-xs text-[#171717]/70"
                 >
                   {tag}
                 </span>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-neutral-400 mt-1">No templates</p>
+            <p className="text-xs text-[#171717]/70 mt-1">No templates</p>
           )}
         </InfoCell>
 
         <InfoCell label="Activity · 30 days">
           {activity ? (
             <div className="flex flex-wrap gap-x-3 gap-y-1 tabular-nums text-xs">
-              <span><span className="font-semibold text-neutral-900">{activity.sales}</span> sales</span>
-              <span><span className="font-semibold text-neutral-900">{activity.purchases}</span> purchases</span>
-              <span><span className="font-semibold text-neutral-900">{activity.payments}</span> payments</span>
+              <span><span className="font-semibold text-[#171717]">{activity.sales}</span> sales</span>
+              <span><span className="font-semibold text-[#171717]">{activity.purchases}</span> purchases</span>
+              <span><span className="font-semibold text-[#171717]">{activity.payments}</span> payments</span>
             </div>
           ) : (
-            <span className="text-neutral-400">—</span>
+            <span className="text-[#171717]/70">No data yet</span>
           )}
         </InfoCell>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-1.5 mt-3 pt-3 border-t border-neutral-100">
+      <div className="flex flex-wrap items-center justify-end gap-1.5 mt-3 pt-3 border-t border-[#E5E5E5]">
         <button
           type="button"
           className="btn-ghost !py-1 !px-2.5 text-xs min-h-0"
@@ -756,7 +866,7 @@ export function AddOwnerModal({
               spellCheck={false}
               onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
             />
-            <p className="text-xs text-neutral-500 mt-1.5">Copy this before creating — it cannot be retrieved later.</p>
+            <p className="text-xs text-neutral-500 mt-1.5">Copy this before creating - it cannot be retrieved later.</p>
           </div>
         </AdminFormSection>
 
@@ -788,7 +898,7 @@ export function AddOwnerModal({
           <div>
             <p className="text-sm font-medium mb-1">Product templates (optional)</p>
             <p className="text-xs text-neutral-500 mb-3">
-              Pre-build catalogue on first login — steel, cement, wire, paint, tiles, etc.
+              Pre-build catalogue on first login - steel, cement, wire, paint, tiles, etc.
             </p>
             {templates.length === 0 ? (
               <p className="text-[12px] text-neutral-400 rounded-md border border-dashed border-neutral-200 px-3 py-4 text-center">
@@ -864,7 +974,7 @@ export function SubscriptionModal({
   };
 
   return (
-    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Subscription — ${owner?.business.name ?? ""}`}>
+    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Subscription - ${owner?.business.name ?? ""}`}>
       {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
@@ -957,7 +1067,7 @@ export function TemplatesModal({
   const assigned = owner?.business.assignedTemplateIds ?? [];
 
   return (
-    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Product templates — ${owner?.business.name ?? ""}`} size="lg">
+    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Product templates - ${owner?.business.name ?? ""}`} size="lg">
       {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
       <p className="text-xs text-neutral-500 mb-4">
         Add catalogue templates to an existing business. Products that already exist (same name) are skipped.
@@ -1024,7 +1134,7 @@ export function ResetPasswordModal({
   };
 
   return (
-    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Reset password — ${owner?.name ?? ""}`}>
+    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Reset password - ${owner?.name ?? ""}`}>
       {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
