@@ -51,10 +51,33 @@ export class ReportsService {
       where: {
         businessId,
         date: { gte: period.from, lte: period.to },
-        // shop-wide expenses belong to the All Products view only
+        // product view: that product's own expenses (shop-wide ones are shared below)
         ...(productId ? { productId } : {}),
       },
     });
+
+    // Product view only: shop-wide expenses and the revenue of every sale in the
+    // period, so the product carries its sales share of the shop-wide expenses.
+    const shopExpensesPromise = productId
+      ? this.prisma.expense.aggregate({
+          where: { businessId, productId: null, date: { gte: period.from, lte: period.to } },
+          _sum: { amount: true },
+        })
+      : Promise.resolve(null);
+    const allSalesPromise = productId
+      ? this.prisma.sale.findMany({
+          relationLoadStrategy: "join",
+          where: { businessId, date: { gte: period.from, lte: period.to } },
+          select: {
+            discountPct: true,
+            taxPct: true,
+            loadingCharges: true,
+            transportCharges: true,
+            labourCharges: true,
+            lines: { select: { qty: true, rate: true } },
+          },
+        })
+      : Promise.resolve([]);
 
     const productFilter = productId
       ? Prisma.sql`AND "productId" = ${productId}`
@@ -196,6 +219,8 @@ export class ReportsService {
       supplierCash,
       lineWeights,
       chargeTotals,
+      shopExpenses,
+      allSales,
     ] = await Promise.all([
       salesPromise,
       expensesPromise,
@@ -207,6 +232,8 @@ export class ReportsService {
       supplierCashPromise,
       lineWeightsPromise,
       chargeTotalsPromise,
+      shopExpensesPromise,
+      allSalesPromise,
     ]);
 
     // cost lookups only need the scoped product's lines
@@ -327,7 +354,32 @@ export class ReportsService {
     const profit = computeProfit(
       salesForProfit,
       expenses.map((e) => ({ productId: e.productId ?? undefined, amount: e.amount })),
-      { productId },
+      {
+        productId,
+        shopExpenses: productId
+          ? {
+              total: shopExpenses?._sum.amount ?? 0,
+              allSalesRevenue: roundMoneyDecimal(
+                allSales.reduce(
+                  (sum, s) =>
+                    sum.plus(
+                      saleGrandTotalDecimal(
+                        s.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
+                        {
+                          discountPct: s.discountPct,
+                          taxPct: s.taxPct,
+                          loading: s.loadingCharges,
+                          transport: s.transportCharges,
+                          labour: s.labourCharges,
+                        },
+                      ).grandTotal,
+                    ),
+                  new Prisma.Decimal(0),
+                ),
+              ),
+            }
+          : undefined,
+      },
     );
 
     // ---- stock flow (per product, own unit) from the inventory ledger ----

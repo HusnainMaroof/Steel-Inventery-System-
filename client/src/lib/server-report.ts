@@ -15,6 +15,8 @@ export type ApiProfitReport = {
     stockCost: number;
     profitOnSales: number;
     totalExpenses: number;
+    /** product view: this product's share of shop-wide expenses */
+    sharedExpenses?: number;
     netProfit: number;
     profitPct: number;
   };

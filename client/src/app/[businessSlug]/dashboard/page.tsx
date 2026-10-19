@@ -162,11 +162,14 @@ function SalesProfitHero({
   profitValue,
   loading,
   activePeriod,
+  sharedExpenses = 0,
 }: {
   salesTotal: number;
   profitValue: number;
   loading: boolean;
   activePeriod: string;
+  /** product view: shop expenses shared to this product by its sales */
+  sharedExpenses?: number;
 }) {
   return (
     <Card dark className="flex min-h-[240px] flex-col justify-between gap-6 p-6 sm:p-8">
@@ -185,6 +188,11 @@ function SalesProfitHero({
             valueClassName={profitValue < 0 ? "text-[#ff8a7a]" : "text-white"}
           />
         </div>
+        {!loading && sharedExpenses > 0 && (
+          <p className="mt-2 text-xs text-white/70">
+            After {fmtMoney(sharedExpenses)} share of shop expenses
+          </p>
+        )}
       </div>
       <div className="border-t border-white/10 pt-5">
         <p className="text-xs font-medium text-white/70">Sales made</p>
@@ -363,6 +371,7 @@ export default function DashboardPage() {
           <SalesProfitHero
             salesTotal={salesTotal}
             profitValue={profitValue}
+            sharedExpenses={summary?.profit.sharedExpenses ?? 0}
             loading={statsLoading}
             activePeriod={
               rangeActive

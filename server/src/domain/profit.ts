@@ -44,6 +44,8 @@ export interface ProfitResult {
   stockCost: number;
   profitOnSales: number;
   totalExpenses: number;
+  /** part of totalExpenses that is this product's share of shop-wide expenses */
+  sharedExpenses: number;
   netProfit: number;
   profitPct: number;
 }
@@ -72,7 +74,11 @@ export function attributedLineRevenue(
 export function computeProfit(
   sales: SaleForProfit[],
   expenses: ExpenseForProfit[],
-  options: { productId?: string } = {},
+  options: {
+    productId?: string;
+    /** shop-wide expenses and the revenue of ALL products in the period */
+    shopExpenses?: { total: D; allSalesRevenue: D };
+  } = {},
 ): ProfitResult {
   let salesRevenue = Dec(0);
   let stockCost = Dec(0);
@@ -112,7 +118,20 @@ export function computeProfit(
   const totalExpensesDec = expenses
     .filter((e) => !options.productId || e.productId === options.productId)
     .reduce((sum, e) => sum.plus(Dec(e.amount)), Dec(0));
-  const totalExpenses = roundMoneyDecimal(totalExpensesDec);
+
+  // Product view: shop-wide expenses (no product) are shared by each
+  // product's share of all sales, so per-product net profits add up to the
+  // All Products net profit.
+  let sharedExpenses = Dec(0);
+  if (options.productId && options.shopExpenses) {
+    const allRevenue = Dec(options.shopExpenses.allSalesRevenue);
+    if (allRevenue.gt(0)) {
+      sharedExpenses = roundMoneyDecimal(
+        Dec(options.shopExpenses.total).times(revenueRounded).div(allRevenue),
+      );
+    }
+  }
+  const totalExpenses = roundMoneyDecimal(totalExpensesDec.plus(sharedExpenses));
 
   const netProfit = roundMoneyDecimal(profitRounded.minus(totalExpenses));
   const profitPct = revenueRounded.gt(0)
@@ -124,6 +143,7 @@ export function computeProfit(
     stockCost: costRounded.toNumber(),
     profitOnSales: profitRounded.toNumber(),
     totalExpenses: totalExpenses.toNumber(),
+    sharedExpenses: sharedExpenses.toNumber(),
     netProfit: netProfit.toNumber(),
     profitPct: profitPct.toNumber(),
   };

@@ -280,6 +280,21 @@ describe("computeProfit product scope", () => {
     expect(all.stockCost).toBe(1550);
   });
 
+  it("shares shop-wide expenses so per-product net profits add up", () => {
+    const expenses = [{ amount: 1000 }, { productId: "steel", amount: 200 }];
+    const all = computeProfit([sale], expenses);
+    const allSalesRevenue = all.salesRevenue;
+    const shop = { total: 1000, allSalesRevenue };
+    const steel = computeProfit([sale], expenses, { productId: "steel", shopExpenses: shop });
+    const cement = computeProfit([sale], expenses, { productId: "cement", shopExpenses: shop });
+
+    expect(steel.sharedExpenses).toBe(500);
+    expect(steel.totalExpenses).toBe(700);
+    expect(cement.totalExpenses).toBe(500);
+    expect(all.sharedExpenses).toBe(0);
+    expect(steel.netProfit + cement.netProfit).toBeCloseTo(all.netProfit, 2);
+  });
+
   it("does not give a product the whole invoice's flat charges (old bug)", () => {
     const steel = computeProfit([sale], [], { productId: "steel" });
     // Steel goods share of grand total = 1000/2000 * grandTotal
