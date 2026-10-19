@@ -5,21 +5,15 @@ import { useStore, saleGrandTotal } from "@/lib/store";
 import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, RowActionsMenu, CustomSelect } from "@/components/ui";
 import { Search } from "lucide-react";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
-import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
-import type { Sale } from "@/lib/types";
+import CustomerHistoryModal from "@/components/customers/CustomerHistoryModal";
+import { fmtMoney } from "@/lib/format";
 import Decimal from "decimal.js";
 import { toDecimal } from "../../../lib/decimal";
 import { userFacingError } from "@/lib/user-error";
 
-type DateGroup = {
-  date: string;
-  sales: Sale[];
-  dayTotal: number;
-  dayPaid: number;
-};
 
 export default function CustomersPage() {
-  const { customers, sales, salePaid, attributeDefs, addCustomer, deleteCustomer, isPending, payments } = useStore();
+  const { customers, sales, salePaid, addCustomer, deleteCustomer, isPending } = useStore();
   const activeCustomers = customers.filter((customer) => customer.active !== false);
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const { open, onOpen, onClose } = useToggle();
@@ -31,11 +25,6 @@ export default function CustomersPage() {
   const [appliedMode, setAppliedMode] = useState<"name" | "phone">("name");
 
   const [viewCustomerId, setViewCustomerId] = useState<string | null>(null);
-  const viewCustomer = customers.find((c) => c.id === viewCustomerId);
-  const viewCustomerName =
-    viewCustomer?.name ??
-    payments.find((p) => p.type === "customer" && p.partyId === viewCustomerId)?.partyName ??
-    "Customer";
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("view");
@@ -57,24 +46,15 @@ export default function CustomersPage() {
     }
   };
 
-  const customerDateGroups: DateGroup[] = useMemo(() => {
-    if (!viewCustomerId) return [];
-    const cs = sales.filter((s) => s.customerId === viewCustomerId).sort((a, b) => b.date.localeCompare(a.date));
-    const map = new Map<string, Sale[]>();
-    for (const s of cs) {
-      const list = map.get(s.date) ?? [];
-      list.push(s);
-      map.set(s.date, list);
+  // Closing the history also drops ?view= so a reload does not reopen it.
+  const closeHistory = () => {
+    setViewCustomerId(null);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("view")) {
+      url.searchParams.delete("view");
+      window.history.replaceState(null, "", url.pathname + url.search);
     }
-    return Array.from(map.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([date, items]) => ({
-        date,
-        sales: items,
-        dayTotal: items.reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber(),
-        dayPaid: items.reduce((a, s) => a.plus(toDecimal(salePaid(s.id))), new Decimal(0)).toNumber(),
-      }));
-  }, [sales, viewCustomerId, salePaid]);
+  };
 
   const formatPhone = (v: string) => {
     const digits = v.replace(/\D/g, "").slice(0, 11);
@@ -225,117 +205,14 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* View History Modal */}
-      <Modal open={!!viewCustomerId} onClose={() => setViewCustomerId(null)} title={`History — ${viewCustomerName}`} size="4xl">
-        {viewCustomerId && (
-          <div className="max-h-[70vh] overflow-y-auto">
-            {/* Summary cards */}
-            {(() => {
-              const custSales = sales.filter((s) => s.customerId === viewCustomerId);
-              const total = custSales.reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber();
-              const paid = custSales.reduce((a, s) => a.plus(toDecimal(salePaid(s.id))), new Decimal(0)).toNumber();
-              const due = Math.max(0, total - paid);
-              return (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-white border border-[#E5E5E5] rounded-xl p-5">
-                    <div className="text-xs uppercase tracking-wide text-[#171717]/60 mb-2">Invoices</div>
-                    <div className="text-2xl font-bold tabular-nums text-[#171717]">{custSales.length}</div>
-                  </div>
-                  <div className="bg-white border border-[#E5E5E5] rounded-xl p-5">
-                    <div className="text-xs uppercase tracking-wide text-[#171717]/60 mb-2">Total</div>
-                    <div className="text-2xl font-bold tabular-nums text-[#171717]">{fmtMoney(total)}</div>
-                  </div>
-                  <div className="bg-white border border-[#E5E5E5] rounded-xl p-5">
-                    <div className="text-xs uppercase tracking-wide text-[#171717]/60 mb-2">Due</div>
-                    <div className={`text-2xl font-bold tabular-nums ${due > 0 ? "text-success" : "text-[#171717]"}`}>{due > 0 ? fmtMoney(due) : "0"}</div>
-                  </div>
-                </div>
-              );
-            })()}
-            {/* Customer Info */}
-            <div className="bg-[#F8F8F7] border border-[#E5E5E5] rounded-xl p-5 mb-6">
-              <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-full bg-ink flex items-center justify-center text-sm font-bold text-white shrink-0">
-                  {viewCustomerName.charAt(0).toUpperCase()}
-                </span>
-                <div className="min-w-0">
-                  <span className="block font-bold text-base text-[#171717]">{viewCustomerName}</span>
-                  <span className="block text-[13px] text-[#171717]/70">{viewCustomer ? [viewCustomer.shop, viewCustomer.phone].filter(Boolean).join(" · ") : "Not in active customer list"}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Date-wise sales history */}
-            {customerDateGroups.length === 0 ? (
-              <div className="text-center py-12 text-[#171717]/70 text-sm">No sales to this customer yet.</div>
-            ) : (
-              <div className="space-y-6">
-                {customerDateGroups.map((g) => (
-                  <div key={g.date}>
-                    {/* Date header */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xs font-bold uppercase tracking-wide text-[#171717]/60">{fmtDate(g.date)}</span>
-                      <span className="text-xs text-[#171717]/30">|</span>
-                      <span className="text-xs text-[#171717]/70 tabular-nums">{g.sales.length} invoice{g.sales.length > 1 ? "s" : ""}</span>
-                    </div>
-
-                    {/* Invoices table */}
-                    <div className="bg-white border border-[#E5E5E5] rounded-xl overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-[#FAFAF9]">
-                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Invoice</th>
-                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Items</th>
-                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Total</th>
-                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Paid</th>
-                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Due</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {g.sales.map((s) => {
-                            const total = saleGrandTotal(s);
-                            const paid = salePaid(s.id);
-                            const due = Math.max(0, total - paid);
-                            return (
-                              <tr key={s.id} className="hover:bg-[#F8F8F7] transition-colors">
-                                <td className="py-3 px-4 border-t border-[#E5E5E5] font-medium text-[#171717] tabular-nums">{s.invoiceNo}</td>
-                                <td className="py-3 px-4 border-t border-[#E5E5E5]">
-                                  <div className="text-[#171717]/70 text-sm">
-                                    {s.lines.map((l, i) => {
-                                      const attrLine = l.attributeSnapshot
-                                        ? attributeDefs
-                                            .filter((d) => d.categoryId === l.categoryId && d.active)
-                                            .sort((a, b) => a.sortOrder - b.sortOrder)
-                                            .filter((d) => l.attributeSnapshot![d.key])
-                                            .map((d) => l.attributeSnapshot![d.key])
-                                            .join(" · ")
-                                        : "";
-                                      return (
-                                        <div key={i} className="mb-1 last:mb-0">
-                                          <span className="font-medium text-[#171717]">{l.item}</span>
-                                          {attrLine ? <span className="block text-[13px] text-[#171717]/50">{attrLine}</span> : null}
-                                          <span className="block text-[13px] text-[#171717]/70 tabular-nums">{fmtQtyWithUnit(l.qty, l.unit)} x {fmtMoney(l.rate)}</span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </td>
-                                <td className="py-3 px-4 border-t border-[#E5E5E5] text-right text-sm tabular-nums text-[#171717]">{fmtMoney(total)}</td>
-                                <td className="py-3 px-4 border-t border-[#E5E5E5] text-right text-sm tabular-nums text-success">{fmtMoney(paid)}</td>
-                                <td className="py-3 px-4 border-t border-[#E5E5E5] text-right text-sm tabular-nums text-destructive">{due > 0 ? fmtMoney(due) : "-"}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
+      <CustomerHistoryModal
+        customerId={viewCustomerId}
+        onClose={closeHistory}
+        onReceive={(saleId) => {
+          closeHistory();
+          setPaySaleId(saleId);
+        }}
+      />
 
       <Modal open={open} onClose={onClose} busy={savingCustomer || isPending("customer:create")} title="New Customer">
         {customerError && (

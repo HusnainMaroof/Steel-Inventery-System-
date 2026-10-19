@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { CheckCircle2, Search } from "lucide-react";
 import { RowActionsMenu } from "@/components/ui";
-import { useBusinessHref } from "@/components/BusinessLink";
+import CustomerHistoryModal from "@/components/customers/CustomerHistoryModal";
 import { Skeleton } from "@/components/skeletons";
 import { useStore, saleGrandTotal } from "@/lib/store";
 import { fmtDate, fmtMoney } from "@/lib/format";
@@ -14,9 +13,8 @@ import { toDecimal } from "@/lib/decimal";
 
 export default function CustomerDuesTab({ onReceive }: { onReceive: (saleId: string) => void }) {
   const { customers, sales, salePaid, customerBalance, transactionsReady } = useStore();
-  const businessHref = useBusinessHref();
-  const router = useRouter();
   const [search, setSearch] = useState("");
+  const [historyId, setHistoryId] = useState<string | null>(null);
 
   const dues = useMemo(() => {
     const salesByCustomer = new Map<string, Sale[]>();
@@ -59,9 +57,8 @@ export default function CustomerDuesTab({ onReceive }: { onReceive: (saleId: str
       )
     : dues;
 
-  const openHistory = (customerId: string) => {
-    router.push(businessHref(`customers?view=${encodeURIComponent(customerId)}`));
-  };
+  // history opens here, so the owner stays on the dues list
+  const openHistory = (customerId: string) => setHistoryId(customerId);
 
   const historyMenu = (customerId: string, name: string) => (
     <RowActionsMenu
@@ -219,6 +216,15 @@ export default function CustomerDuesTab({ onReceive }: { onReceive: (saleId: str
           </div>
         </>
       )}
+
+      <CustomerHistoryModal
+        customerId={historyId}
+        onClose={() => setHistoryId(null)}
+        onReceive={(saleId) => {
+          setHistoryId(null);
+          onReceive(saleId);
+        }}
+      />
     </section>
   );
 }

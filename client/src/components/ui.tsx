@@ -323,6 +323,9 @@ export function OptionalSection({
 /* Modal with spring animation.
    Pass `busy` while an action is running. While busy, the backdrop and
    the X button cannot close the modal, so the user always sees the result. */
+/** open modals, last = top-most (for Escape) */
+const openModals: object[] = [];
+
 export function Modal({
   open,
   onClose,
@@ -347,6 +350,27 @@ export function Modal({
   const guardedClose = () => {
     if (!busy) onClose();
   };
+  // Escape closes the top-most open modal only (a payment popup over a sale popup).
+  const closeRef = useRef(guardedClose);
+  useLayoutEffect(() => {
+    closeRef.current = guardedClose;
+  });
+  useEffect(() => {
+    if (!open) return;
+    const token = {};
+    openModals.push(token);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || openModals[openModals.length - 1] !== token) return;
+      event.stopPropagation();
+      closeRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const i = openModals.indexOf(token);
+      if (i >= 0) openModals.splice(i, 1);
+    };
+  }, [open]);
   const maxW =
     size === "6xl"
       ? "max-w-6xl"
@@ -374,6 +398,9 @@ export function Modal({
             onClick={guardedClose}
           />
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
             className={`relative bg-white border border-neutral-200 shadow-2xl w-full flex flex-col overflow-hidden ${
               full
                 ? "max-w-[96vw] xl:max-w-[1400px] h-[94vh] sm:h-[92vh]"
