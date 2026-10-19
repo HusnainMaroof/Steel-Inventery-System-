@@ -4,6 +4,7 @@ import { AuthProvider } from "@/lib/auth";
 import { StoreProvider } from "@/lib/store";
 import { ServerStatusMonitor } from "@/components/ServerStatusMonitor";
 import Shell from "@/components/Shell";
+import { InputGuards } from "@/components/InputGuards";
 
 export const metadata: Metadata = {
   title: "Tijaratt | Know what you have, owe, and earn",
@@ -22,6 +23,7 @@ export default function RootLayout({
         <AuthProvider>
           <StoreProvider>
             <ServerStatusMonitor />
+            <InputGuards />
             <Shell>{children}</Shell>
           </StoreProvider>
         </AuthProvider>

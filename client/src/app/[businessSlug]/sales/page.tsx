@@ -352,7 +352,7 @@ export default function SalesPage() {
           </div>
           <div>
             <label>Phone</label>
-            <input value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} />
+            <input type="tel" inputMode="tel" value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} />
           </div>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onNewCustClose} disabled={isPending("customer:create")}>Cancel</button>

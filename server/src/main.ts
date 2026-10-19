@@ -15,6 +15,7 @@ import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { JsonNormalizationInterceptor } from "./common/interceptors/json-normalization.interceptor";
+import { NoEmojiPipe } from "./common/pipes/no-emoji.pipe";
 import { redactSecrets } from "./common/database-target";
 import { ConfigService } from "./config/config.service";
 import { PrismaService } from "./prisma/prisma.service";
@@ -61,6 +62,7 @@ async function bootstrap() {
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
 
     app.useGlobalPipes(
+      new NoEmojiPipe(),
       new ValidationPipe({
         whitelist: true,
         transform: true,

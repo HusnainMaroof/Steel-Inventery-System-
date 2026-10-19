@@ -231,7 +231,7 @@ export default function CustomersPage() {
           </div>
           <div>
             <label className="text-xs uppercase tracking-wide text-[#171717]/60">Phone</label>
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" className="mt-1" />
+            <input type="tel" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" className="mt-1" />
           </div>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onClose} disabled={savingCustomer || isPending("customer:create")}>Cancel</button>
