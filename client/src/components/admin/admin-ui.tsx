@@ -16,6 +16,7 @@ import type {
   SubscriptionStatus,
 } from "@/app/actions/platform";
 import { uploadBusinessLogoAction } from "@/app/actions/media";
+import { MAX_LOGO_BYTES } from "@/lib/logo-limits";
 import { AdminTemplatePickCard } from "@/components/admin/template-pick-card";
 import { BillingCycleBadge } from "@/components/admin/subscription-plans-ui";
 import { BusyButton, Modal } from "@/components/ui";
@@ -518,6 +519,11 @@ export function AddOwnerModal({
 
   const pickLogo = async (file: File | undefined) => {
     if (!file) return;
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoError("This image is larger than 8 MB. Choose a smaller file.");
+      if (logoInput.current) logoInput.current.value = "";
+      return;
+    }
     setLogoBusy(true);
     setLogoError(null);
     try {

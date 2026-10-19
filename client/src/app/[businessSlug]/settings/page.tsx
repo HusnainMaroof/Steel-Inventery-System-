@@ -7,6 +7,7 @@ import { useAuth, type BusinessProfile } from "@/lib/auth";
 import { displayName, roleLabel } from "@/lib/auth-types";
 import { useUiPreferences } from "@/lib/preferences";
 import { uploadBusinessLogoAction } from "@/app/actions/media";
+import { MAX_LOGO_BYTES } from "@/lib/logo-limits";
 import { logoSrcFromPrefs } from "@/lib/logo-src";
 import { InvoiceBrandHeader } from "@/components/invoice/InvoiceBrandHeader";
 import { WarehousePanel } from "@/components/settings/WarehousePanel";
@@ -67,6 +68,11 @@ export default function SettingsPage() {
 
   const onPickLogo = async (file: File | undefined) => {
     if (!file) return;
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoError("This image is larger than 8 MB. Choose a smaller file.");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     setLogoBusy(true);
     setLogoError("");
     try {

@@ -43,6 +43,13 @@ function buildConfig(phase: string): NextConfig {
   return {
     output: "standalone",
     outputFileTracingRoot: __dirname,
+    experimental: {
+      serverActions: {
+        // Business logos are uploaded through a Server Action. The API accepts up
+        // to 8 MB (MAX_LOGO_BYTES); the extra room covers multipart overhead.
+        bodySizeLimit: "9mb",
+      },
+    },
     // Dev only: allow HMR and chunks requested from 127.0.0.1, and keep server
     // function arguments (for example passwords) out of the dev log.
     ...(isDev
