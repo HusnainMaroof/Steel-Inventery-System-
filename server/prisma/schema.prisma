@@ -524,7 +524,9 @@ model PaymentAllocation {
 
   business Business @relation(fields: [businessId], references: [id])
   payment  Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  sale     Sale?    @relation(fields: [saleId], references: [id])
+  // Restrict: sale delete removes its allocations first, so a stray delete cannot
+  // leave an allocation pointing at nothing.
+  sale     Sale?    @relation(fields: [saleId], references: [id], onDelete: Restrict)
   purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
 
   @@index([paymentId])
