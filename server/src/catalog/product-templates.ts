@@ -31,7 +31,7 @@ export const PRODUCT_TEMPLATES: ProductTemplate[] = [
     product: {
       name: "Steel",
       unit: "kg",
-      description: "Diameter, grade and mill on the product — no category",
+      description: "Diameter, grade and mill on the product, no category",
     },
     attributes: [
       {
@@ -61,7 +61,7 @@ export const PRODUCT_TEMPLATES: ProductTemplate[] = [
     product: {
       name: "Cement",
       unit: "bag",
-      description: "Grey and white cement — each category has its own attributes",
+      description: "Grey and white cement, each category has its own attributes",
     },
     categories: [
       {
