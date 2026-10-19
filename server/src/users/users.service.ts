@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -14,6 +15,8 @@ import { TokenVersionService } from "../auth/token-version.service";
 import { AuditService } from "../common/audit/audit.service";
 import { purgeBusiness } from "../common/purge-business";
 import { uniqueBusinessSlug } from "../common/slug";
+import { newRecordId } from "../common/record-id";
+import { buildTemplateRows, catalogueInsertCtes } from "../catalog/template-rows";
 import { sanitizeAccess } from "../common/staff-access";
 import { CreateOwnerDto } from "./dto/create-owner.dto";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -122,64 +125,76 @@ export class UsersService {
     };
   }
 
+  /**
+   * Latency: the checks run in parallel (one round trip), then the business, the
+   * owner login, the template catalogue and the audit row are written by one
+   * statement, and one read returns the owner. Three round trips in total, however
+   * many templates are applied. Foreign keys between the new rows are checked at
+   * the end of the statement, and a failure rolls the whole statement back.
+   */
   async createOwner(dto: CreateOwnerDto, actorId?: string) {
-    await this.authService.assertEmailAvailable(dto.email);
-    const passwordHash = await this.authService.hashPassword(dto.password);
+    const email = dto.email.toLowerCase();
     const businessName = dto.businessName.trim();
-    const slug = await uniqueBusinessSlug(this.prisma, businessName);
-    const plan = dto.subscriptionPlanId
-      ? await this.subscriptionPlans.getById(dto.subscriptionPlanId)
-      : await this.subscriptionPlans.getDefaultPlan();
+    const [, passwordHash, slug, plan, templates] = await Promise.all([
+      this.authService.assertEmailAvailable(email),
+      this.authService.hashPassword(dto.password),
+      uniqueBusinessSlug(this.prisma, businessName),
+      dto.subscriptionPlanId
+        ? this.subscriptionPlans.getById(dto.subscriptionPlanId)
+        : this.subscriptionPlans.getDefaultPlan(),
+      this.templateProvision.loadTemplates(dto.templateIds ?? []),
+    ]);
     const { startsAt, endsAt } = subscriptionWindowForPlan(plan);
-    const templateIds = await this.templateProvision.filterValidTemplateIds(
-      dto.templateIds ?? [],
-    );
+    const templateIds = templates.map((template) => template.id);
+    const { rows } = buildTemplateRows(templates);
+    const businessId = newRecordId();
+    const userId = newRecordId();
+    const utc = (value: Date | null | undefined) => (value ? value.toISOString() : null);
 
-    const user = await this.prisma.$transaction(async (tx) => {
-      const business = await tx.business.create({
-        data: {
-          name: businessName,
-          slug,
-          subscriptionPlanId: plan.id,
-          subscriptionStatus: SubscriptionStatus.ACTIVE,
-          subscriptionStartsAt: startsAt,
-          subscriptionEndsAt: endsAt,
-          assignedTemplateIds: templateIds,
-          settings: dto.logoUrl ? { logoUrl: dto.logoUrl } : undefined,
-        },
-      });
-      return tx.user.create({
-        data: {
-          email: dto.email.toLowerCase(),
-          passwordHash,
-          name: dto.name.trim(),
-          role: "ADMIN",
-          businessId: business.id,
-        },
-        select: ownerSelect,
-      });
-    });
-
-    if (templateIds.length) {
-      await this.templateProvision.applyTemplates(user.business.id, templateIds);
-      await this.prisma.business.update({
-        where: { id: user.business.id },
-        data: { templatesAppliedAt: new Date() },
-      });
+    try {
+      await this.prisma.$executeRaw`
+        WITH new_business AS (
+          INSERT INTO "Business" ("id", "name", "slug", "settings", "subscriptionPlanId", "subscriptionStatus",
+                                  "subscriptionStartsAt", "subscriptionEndsAt", "assignedTemplateIds",
+                                  "templatesAppliedAt")
+          VALUES (${businessId}, ${businessName}, ${slug},
+                  ${dto.logoUrl ? JSON.stringify({ logoUrl: dto.logoUrl }) : null}::jsonb,
+                  ${plan.id}, ${SubscriptionStatus.ACTIVE}::"SubscriptionStatus",
+                  (${utc(startsAt)}::timestamptz AT TIME ZONE 'UTC'),
+                  (${utc(endsAt)}::timestamptz AT TIME ZONE 'UTC'),
+                  ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(templateIds)}::jsonb)),
+                  CASE WHEN ${templateIds.length > 0}::boolean THEN (now() AT TIME ZONE 'UTC') END)
+          RETURNING "id"
+        ),
+        new_user AS (
+          INSERT INTO "User" ("id", "email", "passwordHash", "name", "role", "businessId")
+          SELECT ${userId}, ${email}, ${passwordHash}, ${dto.name.trim()}, 'ADMIN'::"Role", b."id"
+          FROM new_business b
+          RETURNING "id"
+        ),
+        ${catalogueInsertCtes(businessId, rows)},
+        new_audit AS (
+          INSERT INTO "AuditLog" ("id", "businessId", "actorId", "action", "entityType", "entityId")
+          VALUES (${newRecordId()}, ${businessId}, ${actorId ?? null}, 'owner.created', 'user', ${userId})
+          RETURNING 1
+        )
+        SELECT 1
+      `;
+    } catch (error) {
+      const text = String((error as Error)?.message ?? error);
+      if (text.includes("User_email_key")) {
+        throw new BadRequestException("Email is already registered");
+      }
+      if (text.includes("Business_slug_key")) {
+        throw new ConflictException("Another business was just created with this name. Please try again.");
+      }
+      throw error;
     }
 
-    const created = await this.prisma.user.findUniqueOrThrow({
-      where: { id: user.id },
+    return this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
       select: ownerSelect,
     });
-    await this.audit.log({
-      businessId: created.business.id,
-      actorId: actorId ?? null,
-      action: "owner.created",
-      entityType: "user",
-      entityId: created.id,
-    });
-    return created;
   }
 
   async updateOwner(
@@ -233,26 +248,29 @@ export class UsersService {
     templateIds: string[],
     actorId?: string,
   ) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: ownerId },
-      select: {
-        id: true,
-        role: true,
-        businessId: true,
-        business: { select: { assignedTemplateIds: true } },
-      },
-    });
+    const [user, templates] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: ownerId },
+        select: {
+          id: true,
+          role: true,
+          businessId: true,
+          business: { select: { assignedTemplateIds: true } },
+        },
+      }),
+      this.templateProvision.loadTemplates(templateIds),
+    ]);
     if (!user) throw new NotFoundException("Owner not found");
     if (user.role !== "ADMIN") {
       throw new ForbiddenException("Only business-owner templates can be updated");
     }
 
-    const ids = await this.templateProvision.filterValidTemplateIds(templateIds);
+    const ids = templates.map((template) => template.id);
     if (!ids.length) {
       throw new BadRequestException("Select at least one valid product template");
     }
 
-    await this.templateProvision.applyTemplates(user.businessId, ids);
+    await this.templateProvision.applyTemplates(user.businessId, templates);
 
     const merged = [...new Set([...(user.business.assignedTemplateIds ?? []), ...ids])];
     await this.prisma.business.update({
@@ -263,18 +281,20 @@ export class UsersService {
       },
     });
 
-    const updated = await this.prisma.user.findUniqueOrThrow({
-      where: { id: ownerId },
-      select: ownerSelect,
-    });
-    await this.audit.log({
-      businessId: user.businessId,
-      actorId: actorId ?? null,
-      action: "owner.templates_applied",
-      entityType: "business",
-      entityId: user.businessId,
-      metadata: { templateIds: ids },
-    });
+    const [updated] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: ownerId },
+        select: ownerSelect,
+      }),
+      this.audit.log({
+        businessId: user.businessId,
+        actorId: actorId ?? null,
+        action: "owner.templates_applied",
+        entityType: "business",
+        entityId: user.businessId,
+        metadata: { templateIds: ids },
+      }),
+    ]);
     return updated;
   }
 

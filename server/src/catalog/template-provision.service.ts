@@ -1,19 +1,20 @@
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { ProductsService } from "../products/products.service";
+import { CatalogueCache } from "../ledger/catalogue-cache";
 import type { CreateCatalogTemplateDto } from "../platform/dto/create-catalog-template.dto";
 import {
   PRODUCT_TEMPLATES,
   TEMPLATE_BY_ID,
   type ProductTemplate,
-  type TemplateAttribute,
 } from "./product-templates";
+import { buildTemplateRows, catalogueInsertCtes, hasCatalogueRows } from "./template-rows";
 
 @Injectable()
 export class TemplateProvisionService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly products: ProductsService,
+    private readonly catalogue: CatalogueCache,
   ) {}
 
   async listTemplates() {
@@ -49,22 +50,6 @@ export class TemplateProvisionService {
     return row ? (row.definition as ProductTemplate) : undefined;
   }
 
-  async filterValidTemplateIds(ids: string[]): Promise<string[]> {
-    const custom = await this.prisma.catalogTemplate.findMany({
-      where: { templateId: { in: ids }, active: true },
-      select: { templateId: true },
-    });
-    const valid = new Set([
-      ...TEMPLATE_BY_ID.keys(),
-      ...custom.map((row) => row.templateId),
-    ]);
-    const out: string[] = [];
-    for (const id of ids) {
-      if (valid.has(id) && !out.includes(id)) out.push(id);
-    }
-    return out;
-  }
-
   async createCatalogTemplate(dto: CreateCatalogTemplateDto): Promise<ProductTemplate> {
     const templateId = `custom_${crypto.randomUUID().replace(/-/g, "")}`;
     const definition: ProductTemplate = {
@@ -94,13 +79,52 @@ export class TemplateProvisionService {
     return definition;
   }
 
-  async applyTemplates(businessId: string, templateIds: string[]): Promise<string[]> {
-    const applied: string[] = [];
-    for (const templateId of templateIds) {
-      const template = await this.getTemplateById(templateId);
+  /**
+   * Valid templates for the ids, in the given order and without repeats: built-in
+   * ones from code, active custom ones in one query (none when all are built-in).
+   */
+  async loadTemplates(ids: string[]): Promise<ProductTemplate[]> {
+    const customIds = ids.filter((id) => !TEMPLATE_BY_ID.has(id));
+    const custom = customIds.length
+      ? await this.prisma.catalogTemplate.findMany({
+          where: { templateId: { in: customIds }, active: true },
+          select: { templateId: true, definition: true },
+        })
+      : [];
+    const customById = new Map(
+      custom.map((row) => [row.templateId, { ...(row.definition as ProductTemplate), id: row.templateId }]),
+    );
+    const out: ProductTemplate[] = [];
+    const seen = new Set<string>();
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      const template = TEMPLATE_BY_ID.get(id) ?? customById.get(id);
       if (!template) continue;
-      const productId = await this.applyOne(businessId, template);
-      if (productId) applied.push(templateId);
+      seen.add(id);
+      out.push(template);
+    }
+    return out;
+  }
+
+  /**
+   * Adds the template catalogues to an existing business: one read for the names
+   * it already has, then one insert statement.
+   * Products whose name already exists (case-insensitive) are skipped but
+   * still count as applied.
+   */
+  async applyTemplates(businessId: string, templates: ProductTemplate[]): Promise<string[]> {
+    if (!templates.length) return [];
+    const names = templates.map((template) => template.product.name.trim()).filter(Boolean);
+    const existing = await this.prisma.product.findMany({
+      where: { businessId, OR: names.map((name) => ({ name: { equals: name, mode: "insensitive" as const } })) },
+      select: { name: true },
+    });
+    const { rows, applied } = buildTemplateRows(templates, existing.map((p) => p.name));
+    if (hasCatalogueRows(rows)) {
+      await this.prisma.$executeRaw(
+        Prisma.sql`WITH ${catalogueInsertCtes(businessId, rows)} SELECT 1`,
+      );
+      this.catalogue.invalidate(businessId);
     }
     return applied;
   }
@@ -114,78 +138,5 @@ export class TemplateProvisionService {
       productUnit: template.product.unit,
       custom: template.id.startsWith("custom_"),
     };
-  }
-
-  private async applyOne(businessId: string, template: ProductTemplate): Promise<string | null> {
-    const name = template.product.name.trim();
-    if (!name) return null;
-
-    const existing = await this.prisma.product.findFirst({
-      where: { businessId, name: { equals: name, mode: "insensitive" } },
-      select: { id: true },
-    });
-    if (existing) return existing.id;
-
-    const product = await this.products.create(businessId, {
-      name,
-      unit: template.product.unit,
-      description: template.product.description,
-      usesCategories: template.usesCategories,
-    });
-
-    if (template.usesCategories) {
-      for (const category of template.categories ?? []) {
-        if (!category.name.trim()) continue;
-        const created = await this.products.createCategory(businessId, product.id, {
-          name: category.name.trim(),
-          description: category.description,
-        });
-        await this.addAttributes(
-          businessId,
-          product.id,
-          category.attributes,
-          created.id,
-        );
-      }
-    } else {
-      await this.addAttributes(businessId, product.id, template.attributes ?? []);
-    }
-
-    return product.id;
-  }
-
-  private async addAttributes(
-    businessId: string,
-    productId: string,
-    attrs: TemplateAttribute[],
-    categoryId?: string,
-  ) {
-    for (const [index, attribute] of attrs.entries()) {
-      const attrName = attribute.name.trim();
-      if (!attrName) continue;
-      const key =
-        attrName
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "_")
-          .replace(/^_+|_+$/g, "") || `attribute_${index}`;
-      const created = await this.products.createAttribute(businessId, productId, {
-        name: attrName,
-        key,
-        type: attribute.type,
-        required: attribute.required,
-        unit: attribute.unit,
-        categoryId,
-        sortOrder: index + 1,
-        active: true,
-      });
-      for (const [optionIndex, label] of (attribute.options ?? []).entries()) {
-        const clean = label.trim();
-        if (!clean) continue;
-        await this.products.createOption(businessId, created.id, {
-          label: clean,
-          sortOrder: optionIndex,
-        });
-      }
-    }
   }
 }
