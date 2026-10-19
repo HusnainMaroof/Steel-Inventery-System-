@@ -57,6 +57,8 @@ export default function SalesTable({
   page,
   totalPages,
   onPageChange,
+  allSales,
+  transactionsReady,
 }: {
   sales: {
     id: string;
@@ -96,6 +98,29 @@ export default function SalesTable({
   page?: number;
   totalPages?: number;
   onPageChange?: (page: number) => void;
+  /** Full sales list from the store ledger, used when a filter is active so filters apply across every sale, not just the current server page. */
+  allSales?: {
+    id: string;
+    invoiceNo: string;
+    date: string;
+    createdAt: string;
+    customerId: string;
+    lines: {
+      item: string;
+      qty: number;
+      rate: number;
+      unit: string;
+      quality?: string;
+      categoryId?: string;
+      variantId?: string;
+      attributeSnapshot?: Record<string, string>;
+      supplierId?: string;
+    }[];
+    discountPct?: number;
+    taxPct?: number;
+  }[];
+  /** Whether the store ledger (allSales) has finished loading. */
+  transactionsReady?: boolean;
 }) {
   const { isPending } = useStore();
   const businessHref = useBusinessHref();
@@ -109,16 +134,23 @@ export default function SalesTable({
 
   const hasFilters =
     search.trim() !== "" || statusFilter !== "all" || !!(dateRange.from || dateRange.to);
-
+  // When a filter is active, filter across the full ledger (allSales) instead of the current server page,
+  // and hide server pagination. When no filter is active, keep the server page and its PaginationBar.
+  const displaySales = (hasFilters ? allSales : sales) ?? sales;
+  const listReady = !hasFilters || transactionsReady;
+  const resetPage = () => {
+    if (onPageChange && page !== 1) onPageChange(1);
+  };
   const handleClear = () => {
     setSearch("");
     setStatusFilter("all");
     setDateRange({ from: null, to: null });
+    resetPage();
   };
 
   const rows: SaleRow[] = useMemo(
     () =>
-      sales.map((s) => {
+      displaySales.map((s) => {
         const total = saleGrandTotal(s);
         const paid = salePaid(s.id);
         const due = Math.max(0, total - paid);
@@ -151,7 +183,7 @@ export default function SalesTable({
           due,
         };
       }),
-    [sales, customers, customerName, productOfLine, categoryNameOf, attrRowsOf, salePaid]
+    [displaySales, customers, customerName, productOfLine, categoryNameOf, attrRowsOf, salePaid]
   );
 
   const groups = useMemo(() => {
@@ -160,7 +192,7 @@ export default function SalesTable({
       .filter((r) => {
         if (q && !r.searchHay.includes(q)) return false;
         if (dateRange.from || dateRange.to) {
-          const s = sales.find((x) => x.id === r.id);
+          const s = displaySales.find((x) => x.id === r.id);
           if (!s) return false;
           if (!dateInIsoRange(s.date, dateRange)) return false;
         }
@@ -175,7 +207,7 @@ export default function SalesTable({
 
     const map = new Map<string, SaleRow[]>();
     for (const r of filtered) {
-      const s = sales.find((x) => x.id === r.id)!;
+      const s = displaySales.find((x) => x.id === r.id)!;
       const list = map.get(s.date) ?? [];
       list.push(r);
       map.set(s.date, list);
@@ -187,7 +219,7 @@ export default function SalesTable({
         sales: list,
         dayTotal: list.reduce((a, r) => a.plus(toDecimal(r.total)), new Decimal(0)).toNumber(),
       }));
-  }, [rows, sales, search, statusFilter, dateRange]);
+  }, [rows, displaySales, search, statusFilter, dateRange]);
 
   const totalDue = groups.reduce((a, g) => a.plus(toDecimal(g.sales.reduce((b, r) => b.plus(toDecimal(r.due)), new Decimal(0)).toNumber())), new Decimal(0)).toNumber();
   const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
@@ -276,13 +308,13 @@ export default function SalesTable({
             placeholder="Search customer or product"
             aria-label="Search customer or product"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); resetPage(); }}
             className="!w-full !pl-9 !text-xs !py-2"
           />
         </div>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as Status)}
+          onChange={(e) => { setStatusFilter(e.target.value as Status); resetPage(); }}
           className="!w-auto !text-xs"
           aria-label="Filter by payment status"
         >
@@ -294,7 +326,7 @@ export default function SalesTable({
         <DateRangePicker
           from={dateRange.from}
           to={dateRange.to}
-          onChange={setDateRange}
+          onChange={(r) => { setDateRange(r); resetPage(); }}
           placeholder="All dates"
           ariaLabel="Filter by date range"
         />
@@ -323,7 +355,21 @@ export default function SalesTable({
       </div>
 
       {/* ── results ── */}
-      {groups.length === 0 ? (
+      {!listReady ? (
+        <div className="panel bg-white overflow-hidden" role="status" aria-label="Loading all sales">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-4 px-4 py-3.5 border-b border-neutral-100 last:border-0"
+            >
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 flex-1 max-w-[180px]" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          ))}
+        </div>
+      ) : groups.length === 0 ? (
         <EmptyState
           emoji="🔍"
           title="No sales match your filters"
@@ -427,7 +473,7 @@ export default function SalesTable({
         </div>
       )}
 
-      {onPageChange && page != null && totalPages != null && listTotal != null && (
+      {!hasFilters && onPageChange && page != null && totalPages != null && listTotal != null && (
         <PaginationBar
           page={page}
           pages={totalPages}
@@ -449,7 +495,7 @@ export default function SalesTable({
         loading={deleteId ? isPending(`sale:delete:${deleteId}`) : false}
       >
         {(() => {
-          const s = sales.find((x) => x.id === deleteId);
+          const s = displaySales.find((x) => x.id === deleteId);
           if (!s) return null;
           const paid = salePaid(s.id);
           return (

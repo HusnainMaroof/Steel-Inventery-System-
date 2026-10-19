@@ -19,7 +19,7 @@ import Decimal from "decimal.js";
 import { toDecimal } from "../../../lib/decimal";
 
 export default function SalesPage() {
-  const { sales, customers, inventory, products, categories, attributeDefs, addSale, addCustomer, deleteSale, salePaid, isPending } = useStore();
+  const { sales, customers, inventory, products, categories, attributeDefs, addSale, addCustomer, deleteSale, salePaid, isPending, transactionsReady } = useStore();
   const invoiceList = usePaginatedSales();
   const activeCustomers = customers.filter((customer) => customer.active !== false);
   const api = useSaleDraft();
@@ -249,6 +249,8 @@ export default function SalesPage() {
       {tab === "invoices" ? (
         <SalesTable
           sales={invoiceList.sales}
+          allSales={sales}
+          transactionsReady={transactionsReady}
           customerName={customerName}
           customers={customers}
           hasInventory={api.hasStock}
