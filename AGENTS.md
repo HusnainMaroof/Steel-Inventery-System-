@@ -10,6 +10,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Agent rules
 
+## Read first
+
+- `docs/ARCHITECTURE.md`: how the app works (data flow, environments, deploy).
+- `docs/frontend-design.md`: design system and UI rules.
+- `docs/apis.md`: API reference.
+- `docs/agent-workflow.md`: how to brief, launch, review and test coding agents.
+
 ## Work scope
 
 - Do only what the task asks. Do not add extra work.

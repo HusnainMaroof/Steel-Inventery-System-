@@ -15,6 +15,12 @@ The browser talks only to Next.js. Nest JWTs stay in an httpOnly
    `npm run start:dev`.
 3. Run `npm install --include=dev` and `npm run dev` in `client/`.
 
+`npm run start:dev` in `server/` uses the test database (`server/.env.e2e`,
+port 4100); point the client at it with
+`TIJARATT_API_URL=http://127.0.0.1:4100`. Every other server start uses
+`server/.env`. A push to `main` deploys to production through GitHub
+Actions (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#environments-and-deploy)).
+
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Repository layout
@@ -39,6 +45,9 @@ docs/             # All project documentation
   Server Actions.
 - [docs/frontend-design.md](docs/frontend-design.md) — design system:
   colour tokens, typography, layout and UX conventions.
+- [docs/agent-workflow.md](docs/agent-workflow.md) — how coding agents
+  (Cline, OpenCode, Kilo, Freebuff) are briefed, launched, reviewed and
+  tested on this repo.
 
 ## Scripts
 

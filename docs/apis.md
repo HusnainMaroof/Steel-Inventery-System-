@@ -47,6 +47,12 @@ Prisma P2002 → 409, P2025 → 404, P2003 → 400. Stack traces never leave
 the server. BFF error bodies are `{ "message": "…" }` with the Nest
 status.
 
+**No emoji**: a body or query string field that contains an emoji returns
+400 `Emoji are not allowed (<field path>). Please use plain text.`
+(`NoEmojiPipe`, runs before validation). Keys matching
+`password|token|secret|dataurl|base64` are not checked; (c), (R), TM and
+Urdu text are allowed.
+
 **Pagination** (`PaginationDto`): `?page=1&limit=50`. Default page size
 50, max 100 (`LIMITS.MAX_PAGE_SIZE`). Response:
 
@@ -257,7 +263,7 @@ Staff page: `sales`. Sale create also creates the `Invoice` (1:1).
 | Method | Path | Query / body | Purpose |
 |--------|------|--------------|---------|
 | GET | `/sales` | `customerId?`, paginated | Sales with lines, customer, invoice |
-| POST | `/sales` | `CreateSaleDto` | Availability check + advisory lock + stock out + invoice. Optional `paidNow`. |
+| POST | `/sales` | `CreateSaleDto` | Availability check + advisory lock + stock out + invoice. Optional `paidNow`. Optional `clientRequestId` (UUID per draft): a retry with the same id returns the saved sale instead of a duplicate. |
 | GET | `/sales/:id` | — | One sale |
 | DELETE | `/sales/:id` | — | Reversal ledger rows; invoice + allocations removed |
 | GET | `/invoices` | `dueOnly=true?`, paginated | Invoice list (sale + customer) |
@@ -337,6 +343,21 @@ Staff page: `reports`. Aggregated; not a paginated list.
 Query: `mode=month\|year\|range` (default `month`), `year`, `month`,
 `from`, `to`, `productId`. Figures are computed from transaction
 records so every number is traceable. Tighter throttle: 20 / min / user.
+
+Month periods run from the 1st to the last day in UTC.
+
+With `productId` (`productScope` is the id, otherwise `ALL_PRODUCTS`):
+
+- Sales that contain the product are loaded with **all** their lines. Each
+  invoice's discount, tax and loading / transport / labour charges are
+  spread by line share of the subtotal; only the product's lines count in
+  `salesRevenue` and `stockCost`. `salesGrandTotals` holds the product's
+  share of each sale.
+- `totalExpenses` = the product's own expenses + its sales share of
+  shop-wide expenses; `profit.sharedExpenses` is that shared part (0 in the
+  All products view). Per-product sales, stock cost, expenses and net
+  profit therefore add up to the All products figures.
+- `cash` (received / paid) is business-wide in every scope.
 
 ---
 

@@ -39,6 +39,9 @@ utilities (`bg-primary`, `text-success`, ...), never raw hex for these.
 - Element base styles (inputs, labels, tables, `.btn-*`, `.panel`) live in
   `@layer base`, so Tailwind utilities on an element always win.
 - Inputs, selects and buttons are 40px tall (44px on phones), 14px text.
+- Checkboxes and radios are a fixed 18px box in the brand colour. The global
+  input rule (full width, 40px, padding) excludes them; a label that wraps a
+  checkbox or radio is normal 14px text, not an uppercase caption.
 - No card inside a card inside a card. A table sits directly in one card.
 - The app fills the viewport width; the sidebar is sticky (`overflow-x: hidden`
   must never be reintroduced on html/body, it breaks `position: sticky`).
@@ -48,8 +51,10 @@ utilities (`bg-primary`, `text-success`, ...), never raw hex for these.
 - Inter throughout.
 - Page title 26 to 30px bold (`PageTitle`); section title 16px semibold.
 - Body and table cells 14px; secondary text 13px at `/70`.
-- Labels, table headers and badges 12px, uppercase where they are labels.
-  Nothing smaller than 12px.
+- Field labels, table headers and badges 12px; field labels and table
+  headers uppercase. Field labels inside cards (detail pages) are sentence
+  case 12px at /60. Nothing smaller than 12px.
+- Copy: plain English, no emojis, no em dashes.
 - Numbers: `tabular-nums`, right-aligned in tables; big figures bold.
 
 ## App shell
@@ -75,8 +80,10 @@ utilities (`bg-primary`, `text-success`, ...), never raw hex for these.
   lines stacked), supplier/customer column, money bold, actions visible.
   A row must never hide columns on mobile — it re-renders as a card with
   every field.
-- **No double-signalling**: payment state shows once (the Due figure), not
-  again as a status badge.
+- **Payment state shows once per row**: one cell with the status badge
+  (Paid / Partly paid / Unpaid) and, when unpaid, the due amount under it.
+  Lists keep item lines to one line each (product · details, qty on the
+  right) and show "+ N more items" after two.
 - **Row actions** on lists live in the ⋮ kebab menu (`RowActionsMenu`); destructive
   actions sit last inside confirmation flows, never as red buttons per row.
 - **Every delete confirms** through a styled dialog that spells out the
@@ -90,6 +97,15 @@ utilities (`bg-primary`, `text-success`, ...), never raw hex for these.
 - **Plain words**: labels use everyday shopkeeper language ("Money in
   (sales)", "Stock Cost", "Cash in Hand"), never accounting jargon. New
   fields arrive together with a UX upgrade, not as bare inputs.
+- **Inputs**: money and quantities use `NumberInput` (`ui.tsx`), which keeps
+  what is typed ("14.30", "0.05"); phone fields are `type="tel"`. App-wide
+  `InputGuards` drops emoji from text fields and letters from number and
+  phone fields (also on paste).
+- **Pick from what exists**: the New Sale size / grade / maker dropdowns list
+  only values in stock, each narrowing the next, so no combination without
+  stock can be picked.
+- **Links follow access**: never link to a page the plan or staff access
+  does not include (`BusinessLink` / `useCanOpenPage` hide it).
 - **Progressive disclosure**: configurable machinery (attributes,
   warehouses, lot details) hides behind collapsible sections, modals and
   guided flows until invoked.
@@ -105,11 +121,24 @@ reports, staff, settings, audit). Super Admin is `/admin/*`. Public:
 Chrome: `Shell` (sticky sidebar, role redirects) + `StoreGate` (skeleton
 until first ledger load). Printable `/sales/[id]` skips the sidebar.
 
+## Modals
+
+- `Modal` (`ui.tsx`): fixed header, the body scrolls under it with padding
+  above the first field, optional footer. 40px close button. Escape closes
+  the top-most modal only; `role="dialog"`, `aria-modal`.
+- Form errors show next to the submit buttons (and the field gets focus),
+  never only at the top of a scrolled form.
+- After a save, the result opens with a short confirmation (for example
+  "Sale saved" with Print, Receive payment, New sale, Done).
+
 ## Shared components
 
 - `client/src/components/ui.tsx` — `Page`, `PageTitle`, `CustomSelect`,
-  `Modal`, `EmptyState`, `OptionalSection` (collapsible blocks that explain
-  themselves in one purpose line).
+  `Modal`, `NumberInput`, `RowActionsMenu`, `EmptyState`, `OptionalSection`
+  (collapsible blocks that explain themselves in one purpose line).
+- `client/src/components/customers/CustomerHistoryModal.tsx` — customer dues
+  history (sales and payments with running balance), used by the Sales
+  "Customer dues" tab and the Customers page.
 - `client/src/components/reports/shared.tsx` — `Section` (bordered card with
   uppercase title + optional action), `StatementRow`, `StatementRule`,
   `StatementTotal` (light and dark variants).

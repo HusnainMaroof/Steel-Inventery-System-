@@ -104,6 +104,7 @@ redirects in Next config; tenant redirects live in page files and `Shell`.
 AuthProvider
   StoreProvider
     ServerStatusMonitor     # probes GET /api/health on load, focus, and tab visible (no timer)
+    InputGuards             # app-wide input rules: no emoji, digits-only number and phone fields
     Shell                   # sidebar / role redirects / print chrome skip
       {children}
 ```
@@ -146,7 +147,9 @@ Printable routes (`/sales/*` and `/invoices/*` after the slug is stripped)
 render without sidebar chrome.
 
 `BusinessLink` prefixes `user.businessSlug` so tenant hrefs can stay
-`/sales`-style.
+`/sales`-style. It also checks `canOpenPath` (`useCanOpenPage`): a page the
+plan or staff access does not include renders as plain text, or nothing
+with `hideWhenBlocked`. The staff form only offers pages the plan includes.
 
 ### Auth and gating
 
@@ -213,8 +216,14 @@ Admin. Tenant change (`user.id:user.businessId`) resets and re-bootstraps.
 **Derived on the client** (not stored): `inventory`, `inventoryByVariant`,
 `stockLots`, `stockMovements`, `salePaid`, `customerBalance`,
 `supplierBalance`, `stats`. FIFO lot consume and money helpers in
-`client/src/lib/money.ts` mirror `server/src/domain/money.ts`. Dashboard
-KPIs come from this derived `stats` object after transactions load.
+`client/src/lib/money.ts` mirror `server/src/domain/money.ts`.
+
+**Dashboard and reports** come from the server: `GET /reports/profit`
+(`fetchServerProfitReport`), cached in memory per filter and `dataVersion`
+(`query-cache.ts`), so a reload or any write fetches fresh numbers. With a
+product selected, the server spreads each invoice's discount, tax and flat
+charges by line share and gives the product its sales share of shop-wide
+expenses, so per-product figures add up to the All products figures.
 
 Timeouts (`apiFetch` / `tijarattFetch`): default 30s, bootstrap/transactions
 45s (client `apiFetch`; server `tijarattFetch` special-cases bootstrap 45s
@@ -247,7 +256,8 @@ multipart (`uploadBusinessLogoAction`), not JSON BFF.
 | `components/invoice/` | Brand header |
 | `components/reports/` | Report sections |
 | `components/settings/` | Warehouse panel |
-| `components/admin/` | Overview, templates, subscription plans |
+| `components/admin/` | Overview, templates, subscription plans, business detail |
+| `components/customers/` | `CustomerHistoryModal`: sales and payments ledger with running balance |
 | Shared | `InvoiceDocument`, `ReceivePaymentModal`, `SaleDetailModal`, `DataTable`, `ui.tsx` |
 
 ---
@@ -267,7 +277,9 @@ multipart (`uploadBusinessLogoAction`), not JSON BFF.
 `main.ts`: global prefix `api` (health excluded), URI version `1` so
 tenant routes are `/api/v1/…`. Helmet on Fastify, CORS credentials to
 `clientOrigin`, `AllExceptionsFilter`, logging + JSON-normalization
-interceptors. Listen fails if Postgres is unreachable.
+interceptors. Global pipes: `NoEmojiPipe` (400 when a body or query string
+holds an emoji; password, token, secret, dataUrl and base64 keys are
+skipped) then `ValidationPipe`. Listen fails if Postgres is unreachable.
 
 ### Modular monolith
 
@@ -319,8 +331,8 @@ each service's `listAll` (no pagination counts — the client bulk-load
 path reads only the row arrays), capped at 20 000 rows per collection.
 This replaced N paginated list calls from the client.
 
-There is **no** dashboard-summary service. Dashboard KPIs are computed
-in the client store from the transaction set.
+There is no separate dashboard-summary service. The dashboard reads
+`GET /reports/profit` (see Reports below).
 
 `filterBootstrapForStaff` strips catalogue/settings the staff page list
 does not need.
@@ -336,7 +348,9 @@ Pure functions under `server/src/domain/`:
 - `money.ts` — landed cost, sale totals, mill goods amount
 - `payment-settlement.ts` — `settleFifo` for invoices and purchases
 - `sale-availability.ts` — remaining lot qty before a sale is accepted
-- `profit.ts` — period P&L building blocks
+- `profit.ts` — period P&L. `computeProfit(sales, expenses, { productId, shopExpenses })`:
+  the subtotal is always over all lines of a sale, only the scoped
+  product's lines count, and shop-wide expenses are shared by sales share
 
 `stock-locks.ts` takes PostgreSQL advisory transaction locks
 (`pg_advisory_xact_lock`) per business/product/variant (and per lot on
@@ -445,6 +459,10 @@ authenticated endpoint lost ~215ms (one RTT); bootstrap p50 1342→108ms;
 - Global ValidationPipe; DTOs + `LIMITS` (money, qty, lines, daily
   payment total, settings size).
 - `sanitizeText` / `sanitizeUiSettings` on free-text and settings.
+- No emoji in stored text: `InputGuards` drops them in the browser and
+  `NoEmojiPipe` rejects them on the server.
+- Sale create is idempotent: the client sends one `clientRequestId` per
+  draft, a retry returns the sale already saved instead of a duplicate.
 - Logo: `POST /media/business-logo`, Sharp + Cloudinary, 8 MB multipart cap.
 - Throttle: login 15 / 15 min in production (keyed by email, else IP);
   60 / 15 min in development; API 240 reads / 90 writes per min per IP;
@@ -469,6 +487,21 @@ authenticated endpoint lost ~215ms (one RTT); bootstrap p50 1342→108ms;
 
 ---
 
+## Environments and deploy
+
+| Environment | How |
+|---|---|
+| Local dev | Client `npx next dev -p 3000` with `TIJARATT_API_URL=http://127.0.0.1:4100`; API `npm run start:dev` (port 4100). |
+| Test DB | `npm run start:dev` loads `server/.env.e2e` (Neon `tijaratt_test`); every other start loads `server/.env` (`server/src/load-env.ts`). |
+| Production | Push to `main` runs CI (`.github/workflows/ci.yml`: backend tests with DB suites, frontend lint + tsc + build, Docker images to GHCR), then `deploy.yml`: record running version, `pg_dump` backup, `prisma migrate deploy`, start, readiness check, roll back on failure. |
+
+A push to `main` is a production deploy. Migrations live in
+`server/prisma/migrations/` and are applied by the deploy job.
+
+How agents work on this repo: [agent-workflow.md](agent-workflow.md).
+
+---
+
 ## Verification
 
 - Client: `npm run build` in `client/`
@@ -484,4 +517,5 @@ Unit tests cover domain money/FIFO, purchases, ledger bootstrap,
 staff-access, invoice atomicity, and settings sanitization. The e2e
 suite in `server/test/` needs a reachable `DATABASE_URL`.
 
-See also: [apis.md](apis.md), [frontend-design.md](frontend-design.md).
+See also: [apis.md](apis.md), [frontend-design.md](frontend-design.md),
+[agent-workflow.md](agent-workflow.md).
