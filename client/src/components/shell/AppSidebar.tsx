@@ -79,7 +79,7 @@ export default function AppSidebar({ items, pathname, onSignOut, helpHref }: App
                   aria-current={active ? "page" : undefined}
                   className={`${itemBase} ${
                     active
-                      ? "bg-ink text-white"
+                      ? "bg-primary text-primary-foreground"
                       : "text-[#171717]/75 hover:bg-[#F1F1EF] hover:text-[#171717]"
                   }`}
                 >

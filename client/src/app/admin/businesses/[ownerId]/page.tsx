@@ -261,7 +261,7 @@ export default function AdminBusinessDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="panel p-4 sm:p-5">
           <h2 className="text-[13px] font-semibold mb-1">Owner login</h2>
-          <p className="text-[11px] text-neutral-500 mb-3">Credentials shared with the business owner.</p>
+          <p className="text-xs text-neutral-500 mb-3">Credentials shared with the business owner.</p>
           <DetailRow label="Owner name">{owner.name}</DetailRow>
           <DetailRow label="Email">
             <span className="font-mono text-[12px]">{owner.email}</span>
@@ -294,7 +294,7 @@ export default function AdminBusinessDetailPage() {
           <h2 className="text-[13px] font-semibold mb-1">Business</h2>
           <DetailRow label="Registered">{fmtDate(owner.createdAt)}</DetailRow>
           <DetailRow label="Business ID">
-            <span className="font-mono text-[11px] text-neutral-600">{owner.business.id}</span>
+            <span className="font-mono text-xs text-neutral-600">{owner.business.id}</span>
           </DetailRow>
           <DetailRow label="Templates applied">{fmtDate(owner.business.templatesAppliedAt)}</DetailRow>
           <DetailRow label="Assigned templates">
@@ -303,7 +303,7 @@ export default function AdminBusinessDetailPage() {
                 {templateTags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-600"
+                    className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600"
                   >
                     {tag}
                   </span>
@@ -325,7 +325,7 @@ export default function AdminBusinessDetailPage() {
                 ["Payments", activity.payments],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border border-neutral-100 bg-neutral-50/50 px-2 sm:px-3 py-2 sm:py-2.5 min-w-0">
-                  <p className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400 truncate">{label}</p>
+                  <p className="text-xs sm:text-xs uppercase tracking-widest text-neutral-400 truncate">{label}</p>
                   <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1">{value}</p>
                 </div>
               ))}

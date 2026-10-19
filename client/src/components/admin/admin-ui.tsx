@@ -34,7 +34,7 @@ export function fmtDate(value?: string | null) {
 export function StatusBadge({ active }: { active: boolean }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
         active ? "bg-success/10 text-success" : "bg-[#E5E5E5] text-[#171717]/70"
       }`}
     >
@@ -50,7 +50,7 @@ export function SubBadge({ active, status }: { active: boolean; status?: string 
       ? "bg-[#E5E5E5] text-[#171717]/70"
       : "bg-destructive/10 text-destructive";
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
       {active ? "Subscribed" : status === "EXPIRED" ? "Expired" : status ?? "Inactive"}
     </span>
   );
@@ -86,20 +86,20 @@ export function BusinessStatusBadge({
 }) {
   if (!ownerActive) {
     return (
-      <span className="inline-flex items-center rounded-full bg-[#E5E5E5] px-2 py-0.5 text-[11px] font-medium text-[#171717]/70">
+      <span className="inline-flex items-center rounded-full bg-[#E5E5E5] px-2 py-0.5 text-xs font-medium text-[#171717]/70">
         Login off
       </span>
     );
   }
   if (!subscriptionActive) {
     return (
-      <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
+      <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
         Expired
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
       Active
     </span>
   );
@@ -118,9 +118,9 @@ function activeSubscriptionPlans(plans: SubscriptionPlanOption[]) {
 export function StatCard({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
     <div className="panel p-4">
-      <p className="text-[11px] uppercase tracking-[0.12em] text-[#171717]/70">{label}</p>
+      <p className="text-xs uppercase tracking-[0.12em] text-[#171717]/70">{label}</p>
       <p className="text-2xl sm:text-3xl font-semibold mt-2 tabular-nums">{value}</p>
-      {hint && <p className="text-[11px] text-neutral-500 mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-neutral-500 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -169,7 +169,7 @@ export function ActionMenu({
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="btn-ghost !py-1 !px-2.5 text-[11px] inline-flex min-h-0 items-center gap-1"
+        className="btn-ghost !py-1 !px-2.5 text-xs inline-flex min-h-0 items-center gap-1"
       >
         More
         <svg
@@ -222,7 +222,7 @@ export function ActionMenu({
 function InfoCell({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] uppercase tracking-[0.08em] text-neutral-400 mb-1">{label}</p>
+      <p className="text-xs uppercase tracking-[0.08em] text-neutral-400 mb-1">{label}</p>
       <div className="text-[12px] leading-snug text-neutral-800">{children}</div>
     </div>
   );
@@ -240,7 +240,7 @@ export function PasswordReveal({ password }: { password: string | null }) {
       </span>
       <button
         type="button"
-        className="btn-ghost !py-1 !px-2 text-[11px] min-h-0"
+        className="btn-ghost !py-1 !px-2 text-xs min-h-0"
         onClick={() => setShow((value) => !value)}
       >
         {show ? "Hide" : "Show password"}
@@ -271,11 +271,11 @@ export function BusinessListTable({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-[15px] font-semibold text-[#171717] truncate">{owner.business.name}</p>
-                    <p className="text-[11px] text-[#171717]/70 mt-0.5 font-mono truncate">/{owner.business.slug}</p>
+                    <p className="text-xs text-[#171717]/70 mt-0.5 font-mono truncate">/{owner.business.slug}</p>
                     <p className="text-[12px] text-[#171717]/70 mt-2 truncate">{owner.name}</p>
-                    <p className="font-mono text-[11px] text-[#171717]/70 truncate">{owner.email}</p>
+                    <p className="font-mono text-xs text-[#171717]/70 truncate">{owner.email}</p>
                   </div>
-                  <span className="shrink-0 text-[11px] font-medium text-[#171717]/70">View →</span>
+                  <span className="shrink-0 text-xs font-medium text-[#171717]/70">View →</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-[#E5E5E5] flex flex-wrap items-center gap-2">
                   <span className="text-[12px] font-medium text-[#171717]">{planFor(owner)}</span>
@@ -296,16 +296,16 @@ export function BusinessListTable({
           <table className="w-full min-w-[640px] text-left">
           <thead>
             <tr className="border-b border-[#E5E5E5] bg-[#F8F8F7]">
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-[#171717]/70">
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-[#171717]/70">
                 Business
               </th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-[#171717]/70">
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-[#171717]/70">
                 Email
               </th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-[#171717]/70">
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-[#171717]/70">
                 Subscription
               </th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-[#171717]/70 text-right">
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-[#171717]/70 text-right">
                 Action
               </th>
             </tr>
@@ -321,7 +321,7 @@ export function BusinessListTable({
                 >
                   <td className="px-4 py-3">
                     <p className="text-[13px] font-semibold text-[#171717] truncate">{owner.business.name}</p>
-                    <p className="text-[11px] text-[#171717]/70 mt-0.5 truncate">/{owner.business.slug}</p>
+                    <p className="text-xs text-[#171717]/70 mt-0.5 truncate">/{owner.business.slug}</p>
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-mono text-[12px] text-[#171717]/70 truncate">{owner.email}</p>
@@ -359,7 +359,7 @@ export function BusinessListTable({
 export function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="py-3 border-b border-neutral-100 last:border-b-0">
-      <p className="text-[10px] uppercase tracking-[0.1em] text-neutral-400 mb-1">{label}</p>
+      <p className="text-xs uppercase tracking-[0.1em] text-neutral-400 mb-1">{label}</p>
       <div className="text-[13px] text-neutral-800 break-words">{children}</div>
     </div>
   );
@@ -422,7 +422,7 @@ export function BusinessAccountCard({
             <StatusBadge active={owner.active} />
             <SubBadge active={subActive} status={owner.business.subscriptionStatus} />
           </div>
-          <p className="font-mono text-[10px] sm:text-[11px] text-neutral-500">
+          <p className="font-mono text-xs sm:text-xs text-neutral-500">
             /{owner.business.slug}
             <span className="text-neutral-300 mx-1.5">·</span>
             Since {fmtDate(owner.createdAt)}
@@ -433,12 +433,12 @@ export function BusinessAccountCard({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <InfoCell label="Owner account">
           <p className="font-medium text-[13px]">{owner.name}</p>
-          <p className="font-mono text-[11px] text-neutral-600 truncate mt-0.5">{owner.email}</p>
+          <p className="font-mono text-xs text-neutral-600 truncate mt-0.5">{owner.email}</p>
         </InfoCell>
 
         <InfoCell label="Subscription">
           <p className="font-medium">{plan}</p>
-          <p className="text-[11px] text-neutral-500 mt-0.5">
+          <p className="text-xs text-neutral-500 mt-0.5">
             {isLifetimeBusiness(owner.business)
               ? "No expiry"
               : `Until ${fmtDate(owner.business.subscriptionEndsAt)}`}
@@ -448,20 +448,20 @@ export function BusinessAccountCard({
               {templateTags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600"
+                  className="inline-flex rounded-full bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600"
                 >
                   {tag}
                 </span>
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-neutral-400 mt-1">No templates</p>
+            <p className="text-xs text-neutral-400 mt-1">No templates</p>
           )}
         </InfoCell>
 
         <InfoCell label="Activity · 30 days">
           {activity ? (
-            <div className="flex flex-wrap gap-x-3 gap-y-1 tabular-nums text-[11px]">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 tabular-nums text-xs">
               <span><span className="font-semibold text-neutral-900">{activity.sales}</span> sales</span>
               <span><span className="font-semibold text-neutral-900">{activity.purchases}</span> purchases</span>
               <span><span className="font-semibold text-neutral-900">{activity.payments}</span> payments</span>
@@ -475,14 +475,14 @@ export function BusinessAccountCard({
       <div className="flex flex-wrap items-center justify-end gap-1.5 mt-3 pt-3 border-t border-neutral-100">
         <button
           type="button"
-          className="btn-ghost !py-1 !px-2.5 text-[11px] min-h-0"
+          className="btn-ghost !py-1 !px-2.5 text-xs min-h-0"
           onClick={onSubscription}
         >
           Subscription
         </button>
         <button
           type="button"
-          className="btn-ghost !py-1 !px-2.5 text-[11px] min-h-0"
+          className="btn-ghost !py-1 !px-2.5 text-xs min-h-0"
           onClick={onTemplates}
         >
           Templates
@@ -695,7 +695,7 @@ export function AddOwnerModal({
                 </button>
               ) : null}
             </div>
-            <p className="text-[11px] text-[#171717]/70 mt-1.5">
+            <p className="text-xs text-[#171717]/70 mt-1.5">
               PNG, JPEG or WebP. Shown on the owner panel and printed bills. The owner can change it later in Settings.
             </p>
             {logoError && (
@@ -739,7 +739,7 @@ export function AddOwnerModal({
               </label>
               <button
                 type="button"
-                className="text-[11px] font-medium text-neutral-600 hover:text-black underline underline-offset-2"
+                className="text-xs font-medium text-neutral-600 hover:text-black underline underline-offset-2"
                 onClick={() => setForm((f) => ({ ...f, password: randomPassword() }))}
               >
                 Generate secure password
@@ -756,7 +756,7 @@ export function AddOwnerModal({
               spellCheck={false}
               onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
             />
-            <p className="text-[11px] text-neutral-500 mt-1.5">Copy this before creating — it cannot be retrieved later.</p>
+            <p className="text-xs text-neutral-500 mt-1.5">Copy this before creating — it cannot be retrieved later.</p>
           </div>
         </AdminFormSection>
 
@@ -778,7 +778,7 @@ export function AddOwnerModal({
               const plan = subscriptionPlans.find((p) => p.id === form.subscriptionPlanId);
               if (!plan) return null;
               return (
-                <p className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-600 mt-2">
+                <p className="flex flex-wrap items-center gap-2 text-xs text-neutral-600 mt-2">
                   <span>Billing type:</span>
                   <BillingCycleBadge cycle={plan.billingCycle} durationDays={plan.durationDays} />
                 </p>
@@ -787,7 +787,7 @@ export function AddOwnerModal({
           </div>
           <div>
             <p className="text-sm font-medium mb-1">Product templates (optional)</p>
-            <p className="text-[11px] text-neutral-500 mb-3">
+            <p className="text-xs text-neutral-500 mb-3">
               Pre-build catalogue on first login — steel, cement, wire, paint, tiles, etc.
             </p>
             {templates.length === 0 ? (

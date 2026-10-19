@@ -164,7 +164,7 @@ export default function AppTopbar({
   const slide = reduceMotion ? 0 : 4;
 
   return (
-    <header className="no-print sticky top-0 z-30 flex h-[72px] items-center justify-between bg-[#F8F8F7] pr-4 sm:pr-6">
+    <header className="no-print sticky top-0 z-30 hidden md:flex h-[72px] items-center justify-between bg-[#F8F8F7] pr-4 sm:pr-6">
       <div className="flex w-[232px] shrink-0 items-center pl-4 pr-2">
         <Link
           href={homeHref}

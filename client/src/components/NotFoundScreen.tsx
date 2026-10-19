@@ -39,7 +39,7 @@ export function NotFoundScreen() {
         </div>
       </div>
 
-      <p className="relative z-10 text-center font-mono text-[10px] text-[#6b7280]">
+      <p className="relative z-10 text-center font-mono text-xs text-[#6b7280]">
         TIJARATT / BUSINESS RECORDS, MADE CLEARER
       </p>
     </main>

@@ -219,7 +219,7 @@ export default function SalesPage() {
         }
       />
 
-      <div role="tablist" className="flex gap-6 border-b border-neutral-200 mb-4">
+      <div role="tablist" className="flex gap-6 border-b border-[#E5E5E5] mb-6">
         {([
           ["invoices", "Sales"],
           ["print", "Print"],
@@ -237,8 +237,8 @@ export default function SalesPage() {
               const next = businessHref(key === "print" ? "/sales?tab=print" : "/sales");
               window.history.replaceState(null, "", next);
             }}
-            className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors max-sm:min-h-[40px] ${
-              tab === key ? "border-black text-black font-bold" : "border-transparent text-black font-normal hover:opacity-60"
+            className={`min-h-10 pb-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === key ? "border-ink text-[#171717]" : "border-transparent text-[#171717]/60 hover:text-[#171717]"
             }`}
           >
             {label}

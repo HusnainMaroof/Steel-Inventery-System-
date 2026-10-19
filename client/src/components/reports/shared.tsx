@@ -17,12 +17,12 @@ export function Section({
   return (
     <section className={`mb-6 sm:mb-8 ${className}`}>
       <div className="flex items-center justify-between gap-3 mb-3 min-h-[44px]">
-        <h2 className="text-[11px] uppercase tracking-widest font-semibold text-[#171717]">
+        <h2 className="text-xs uppercase tracking-wide font-semibold text-[#171717]/60">
           {title}
         </h2>
         {action}
       </div>
-      <div className="border border-[#E5E5E5] bg-white rounded-[8px] p-4 sm:p-5">
+      <div className="border border-[#E5E5E5] bg-white rounded-xl p-4 sm:p-5">
         {children}
       </div>
     </section>
@@ -40,7 +40,7 @@ export function StatementRow({
 }) {
   const shown = text ?? fmtSignedMoney(value ?? 0);
   return (
-    <div className="flex items-baseline justify-between gap-4 py-2.5 text-[14px]">
+    <div className="flex items-baseline justify-between gap-4 py-2.5 text-sm">
       <span className="text-[#171717]/70">{label}</span>
       <span className="tabular-nums font-medium text-[#171717] text-right">{shown}</span>
     </div>
@@ -103,7 +103,7 @@ export function ExportMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center justify-between gap-2 min-h-[44px] min-w-[8.5rem] px-3 py-2 text-xs font-medium bg-white border border-[#E5E5E5] rounded-[6px] hover:border-[#171717] text-[#171717]"
+        className="flex items-center justify-between gap-2 min-h-[40px] min-w-[8.5rem] px-3 py-2 text-sm font-medium bg-white border border-[#E5E5E5] rounded-[6px] hover:border-[#171717] text-[#171717]"
       >
         Export
         <svg
@@ -120,12 +120,12 @@ export function ExportMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-1 min-w-full bg-white border border-[#E5E5E5] rounded-[8px] overflow-hidden"
+          className="absolute right-0 z-50 mt-1 min-w-full bg-white border border-[#E5E5E5] rounded-xl overflow-hidden"
         >
           <button
             type="button"
             role="menuitem"
-            className="w-full text-left px-3 py-2.5 text-xs font-medium text-[#171717] hover:bg-[#F8F8F7] min-h-[44px]"
+            className="w-full text-left px-3 py-2.5 text-sm font-medium text-[#171717] hover:bg-[#F8F8F7] min-h-[44px]"
             onClick={() => {
               onExcel();
               setOpen(false);

@@ -72,24 +72,24 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="grid min-h-screen bg-[#fcfcfc] lg:grid-cols-[.82fr_1.18fr]">
+    <main className="grid min-h-screen bg-[#FCFCFB] lg:grid-cols-[.82fr_1.18fr]">
       <section className="flex min-h-screen flex-col px-5 py-7 sm:px-10 sm:py-9 lg:px-[clamp(40px,6vw,88px)]">
         <Link
           href="/"
-          className="w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff]"
+          className="w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary"
           aria-label="Tijaratt home"
         >
           <TijarattBrand />
         </Link>
         <div className="my-auto w-full max-w-[430px] self-center py-12">
           <div className="mb-8">
-            <p className="font-mono text-[11px] font-medium text-[#145aff]">
+            <p className="font-mono text-xs font-medium text-primary">
               SECURE SIGN IN
             </p>
-            <h1 className="mt-4 text-[40px] font-semibold leading-[1.05] tracking-[-0.037em] text-[#020520]">
+            <h1 className="mt-4 text-[40px] font-semibold leading-[1.05] tracking-[-0.037em] text-ink">
               Welcome back.
             </h1>
-            <p className="mt-3 text-[14px] leading-[1.6] text-[#6b7280]">
+            <p className="mt-3 text-[14px] leading-[1.6] text-[#171717]/70">
               Use the email and password provided for your business.
             </p>
           </div>
@@ -97,7 +97,7 @@ export default function LoginPage() {
           {error ? (
             <div
               role="alert"
-              className="mb-5 overflow-hidden rounded-xl border border-[#f26052]/25 bg-[#f26052]/[.06] px-4 py-3 text-[13px] font-medium text-[#b53c31]"
+              className="mb-5 overflow-hidden rounded-xl border border-destructive/25 bg-destructive/[.06] px-4 py-3 text-[13px] font-medium text-destructive"
             >
               {error}
             </div>
@@ -105,7 +105,7 @@ export default function LoginPage() {
 
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <div>
-              <label className="!mb-2 !text-[11px] !tracking-[.08em] !text-[#374151]" htmlFor="email">
+              <label className="!mb-2 !text-xs !tracking-[.08em] !text-[#171717]/80" htmlFor="email">
                 Email
               </label>
               <input
@@ -119,11 +119,11 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 placeholder="you@business.com"
-                className="!min-h-12 !rounded-xl !border-[#e2e8f0] !px-4 !py-3 !text-[14px] !font-normal focus:!border-[#0099ff] focus:!shadow-[0_0_0_3px_rgba(0,153,255,.12)]"
+                className="!min-h-12 !rounded-xl !border-[#E5E5E5] !px-4 !py-3 !text-[14px] !font-normal focus:!border-primary focus:!shadow-[0_0_0_3px_rgba(46,107,46,.14)]"
               />
             </div>
             <div>
-              <label className="!mb-2 !text-[11px] !tracking-[.08em] !text-[#374151]" htmlFor="password">
+              <label className="!mb-2 !text-xs !tracking-[.08em] !text-[#171717]/80" htmlFor="password">
                 Password
               </label>
               <div className="relative">
@@ -141,7 +141,7 @@ export default function LoginPage() {
                     setError(null);
                   }}
                   placeholder="Your password"
-                  className="!min-h-12 !rounded-xl !border-[#e2e8f0] !px-4 !py-3 !pr-12 !text-[14px] !font-normal focus:!border-[#0099ff] focus:!shadow-[0_0_0_3px_rgba(0,153,255,.12)]"
+                  className="!min-h-12 !rounded-xl !border-[#E5E5E5] !px-4 !py-3 !pr-12 !text-[14px] !font-normal focus:!border-primary focus:!shadow-[0_0_0_3px_rgba(46,107,46,.14)]"
                 />
                 <button
                   type="button"
@@ -149,7 +149,7 @@ export default function LoginPage() {
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   aria-pressed={showPassword}
                   onClick={() => setShowPassword((value) => !value)}
-                  className="absolute right-1.5 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#145aff]"
+                  className="absolute right-1.5 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-[#171717]/70 hover:bg-[#F1F1EF] hover:text-primary"
                 >
                   <EyeIcon open={showPassword} />
                 </button>
@@ -158,16 +158,16 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={pending}
-              className="mt-1 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-[#145aff] bg-[#fcfcfc] px-7 text-[14px] font-medium text-[#145aff] hover:bg-[#145aff] hover:text-white focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff] disabled:cursor-wait disabled:opacity-60"
+              className="mt-1 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-primary bg-primary px-7 text-[14px] font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
             >
               {pending ? "Signing in…" : "Sign in"}
             </button>
           </form>
         </div>
-        <div className="flex items-center justify-between gap-4 text-[11px] text-[#6b7280]">
+        <div className="flex items-center justify-between gap-4 text-xs text-[#171717]/70">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 font-medium hover:text-[#145aff]"
+            className="inline-flex items-center gap-1.5 font-medium hover:text-primary"
           >
             Back to home
           </Link>
@@ -175,34 +175,34 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <aside className="relative hidden overflow-hidden bg-[#f0f4fe] p-12 lg:flex lg:flex-col lg:justify-center">
+      <aside className="relative hidden overflow-hidden bg-primary/10 p-12 lg:flex lg:flex-col lg:justify-center">
         <div className="relative mx-auto w-full max-w-[580px]">
-          <p className="font-mono text-[11px] font-medium tracking-[-0.03em] text-[#145aff]">
+          <p className="font-mono text-xs font-medium tracking-[-0.03em] text-primary">
             YOUR BUSINESS / ONE CLEAR VIEW
           </p>
-          <h2 className="mt-5 max-w-[520px] text-[clamp(42px,5vw,64px)] font-semibold leading-[1.03] tracking-[-0.037em] text-[#020520]">
+          <h2 className="mt-5 max-w-[520px] text-[clamp(42px,5vw,64px)] font-semibold leading-[1.03] tracking-[-0.037em] text-ink">
             Pick up exactly where the day left off.
           </h2>
-          <div className="mt-10 rounded-[32px] border border-white/80 bg-white/55 p-5 shadow-[0_30px_80px_-45px_rgba(20,90,255,.55)] backdrop-blur-[15px]">
-            <div className="rounded-2xl border border-[#e2e8f0] bg-white p-5">
+          <div className="mt-10 rounded-[32px] border border-white/80 bg-white/55 p-5 shadow-[0_30px_80px_-45px_rgba(17,17,17,.18)] backdrop-blur-[15px]">
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-5">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-semibold text-[#14141e]">Today&apos;s records</span>
-                <span className="rounded-full bg-[#f0f4fe] px-2.5 py-1 text-[9px] font-medium text-[#145aff]">LIVE</span>
+                <span className="text-[12px] font-semibold text-ink">Today&apos;s records</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">LIVE</span>
               </div>
               {[
-                ["Stock received", "24 bags", "#16ca2e"],
-                ["Invoice recorded", "Rs 18,500", "#145aff"],
-                ["Payment collected", "Rs 12,000", "#ffa64d"],
+                ["Stock received", "24 bags", "var(--color-success)"],
+                ["Invoice recorded", "Rs 18,500", "var(--color-primary)"],
+                ["Payment collected", "Rs 12,000", "var(--color-warning)"],
               ].map(([label, value, color]) => (
-                <div className="mt-3 flex items-center gap-3 rounded-xl bg-[#fcfcfc] px-3 py-3" key={label}>
+                <div className="mt-3 flex items-center gap-3 rounded-xl bg-[#FCFCFB] px-3 py-3" key={label}>
                   <i className="size-1.5 rounded-full" style={{ background: color }} />
-                  <span className="text-[11px] text-[#374151]">{label}</span>
-                  <strong className="ml-auto font-mono text-[10px] font-medium text-[#020520]">{value}</strong>
+                  <span className="text-xs text-[#171717]/80">{label}</span>
+                  <strong className="ml-auto font-mono text-xs font-medium text-ink">{value}</strong>
                 </div>
               ))}
             </div>
           </div>
-          <p className="mt-7 text-[12px] text-[#6b7280]">
+          <p className="mt-7 text-[12px] text-[#171717]/70">
             Access is limited to your authorised business records.
           </p>
         </div>

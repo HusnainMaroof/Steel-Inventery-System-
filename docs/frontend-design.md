@@ -9,42 +9,55 @@ How the app is wired (providers, routes, BFF, store) lives in
 
 ## Colour
 
+Tokens live in `client/src/app/globals.css` (`@theme`). Use the Tailwind
+utilities (`bg-primary`, `text-success`, ...), never raw hex for these.
+
 | Token | Value | Use |
 |---|---|---|
 | Canvas | `#F8F8F7` | page background |
 | Card | `#FFFFFF` | panels, tables, modals |
 | Text | `#171717` | all primary text |
 | Border | `#E5E5E5` | all 1px borders |
-| Dark highlight | `#111111` | the one priority element per view |
+| `primary` | `#2e6b2e` | primary actions and the current location |
+| `ink` | `#111111` | the one dark priority element per view; active segmented item; tab underline |
+| `success` / `destructive` / `warning` | `#2e6b2e` / `#a12b1f` / `#8a5a00` | status only |
 
-- **No gray text anywhere.** Secondary copy is black at reduced opacity
-  (`text-[#171717]/70`), never a gray token. On dark surfaces text is white.
-- Colour is reserved for status, in muted tones only:
-  - `#a12b1f` — due / shortage / negative
-  - `#2e6b2e` — paid / positive
-  - `#1f4e8c` — paid-to-mill badge
-- The black `#111` treatment is used for exactly one priority element per
-  view: the single most important total (e.g. grand total, Net Profit,
-  Valuation of Remaining Stock), never sprinkled around.
+- **Green means "do this" or "you are here".** Primary buttons (`btn-primary`),
+  the active sidebar item and focus rings use `primary`. Nothing else turns green
+  except a positive status.
+- **No gray text anywhere.** Secondary copy is `text-[#171717]/70`, table
+  headers `/60`. On dark surfaces text is white.
+- The `ink` dark card is used for exactly one priority element per view (for
+  example Net profit on the dashboard).
 
 ## Shape & density
 
-- Card/panel radius **8px**; inputs and buttons **6px**; borders 1px solid
-  `#E5E5E5`. No gradients, no heavy shadows (only destructive buttons get a
-  subtle `shadow-md`).
-- Overall density comes from root `font-size: 90%` — never `zoom` or
-  transform scaling (zoom breaks the full-bleed layout).
-- The app fills the entire viewport width. No max-width containers in the
-  app shell; the sidebar is sticky (and `overflow-x: hidden` must never be
-  reintroduced on html/body — it kills `position: sticky`).
-- Touch targets: controls are at least **44px** tall.
+- Cards and panels `rounded-xl` (10 to 12px), controls 8px, pills and badges
+  fully rounded. Borders 1px `#E5E5E5`. No gradients, no heavy shadows.
+- Root type is 16px on desktop and tablet, 15px on phones (`html` font-size).
+  Never use `zoom` or transform scaling.
+- Element base styles (inputs, labels, tables, `.btn-*`, `.panel`) live in
+  `@layer base`, so Tailwind utilities on an element always win.
+- Inputs, selects and buttons are 40px tall (44px on phones), 14px text.
+- No card inside a card inside a card. A table sits directly in one card.
+- The app fills the viewport width; the sidebar is sticky (`overflow-x: hidden`
+  must never be reintroduced on html/body, it breaks `position: sticky`).
 
 ## Typography
 
-- Inter (sans) throughout.
-- Labels: 10–11px, uppercase, `letter-spacing: widest`, weight 500–600.
-- Numbers: `tabular-nums`; big figures bold; table text weight 500;
-  secondary text weight 400 at `/70` opacity.
+- Inter throughout.
+- Page title 26 to 30px bold (`PageTitle`); section title 16px semibold.
+- Body and table cells 14px; secondary text 13px at `/70`.
+- Labels, table headers and badges 12px, uppercase where they are labels.
+  Nothing smaller than 12px.
+- Numbers: `tabular-nums`, right-aligned in tables; big figures bold.
+
+## App shell
+
+- Full-width top bar: business logo (or "Your logo") in the left corner, the
+  account menu on the right. No borders.
+- Sidebar below the top bar: icon + label items, vertically centred, Help and
+  Sign out pinned at the bottom.
 
 ## Layout conventions
 
@@ -64,7 +77,7 @@ How the app is wired (providers, routes, BFF, store) lives in
   every field.
 - **No double-signalling**: payment state shows once (the Due figure), not
   again as a status badge.
-- **Row actions** on read-mostly lists live in a ⋮ kebab menu; destructive
+- **Row actions** on lists live in the ⋮ kebab menu (`RowActionsMenu`); destructive
   actions sit last inside confirmation flows, never as red buttons per row.
 - **Every delete confirms** through a styled dialog that spells out the
   concrete consequences (what disappears, which numbers move) and ends with

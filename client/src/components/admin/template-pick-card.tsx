@@ -44,11 +44,11 @@ export function AdminTemplatePickCard({
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-neutral-900">{label}</span>
           {meta ? (
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
               {meta.trade}
             </span>
           ) : isCustom ? (
-            <span className="text-[10px] uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+            <span className="text-xs uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
               Custom
             </span>
           ) : null}
@@ -57,9 +57,9 @@ export function AdminTemplatePickCard({
           {productName} · {productUnit}
           {usesCategories != null ? ` · ${catalogStructureLabel(usesCategories)}` : ""}
         </span>
-        {meta ? <span className="block text-[11px] text-neutral-500 mt-1 leading-snug">{meta.hint}</span> : null}
+        {meta ? <span className="block text-xs text-neutral-500 mt-1 leading-snug">{meta.hint}</span> : null}
         {assigned ? (
-          <span className="block text-[11px] text-emerald-700 font-medium mt-1.5">Already on this business</span>
+          <span className="block text-xs text-emerald-700 font-medium mt-1.5">Already on this business</span>
         ) : null}
       </span>
     </label>

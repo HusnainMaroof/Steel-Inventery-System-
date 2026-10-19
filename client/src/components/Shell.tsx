@@ -201,7 +201,6 @@ function MobileNav({
   logoSrc,
   pathname,
   logoPlaceholder,
-  children,
 }: {
   navLinks: (onNavigate?: () => void) => ReactNode;
   user: AuthUser;
@@ -211,7 +210,6 @@ function MobileNav({
   logoSrc: string | null;
   pathname: string | null;
   logoPlaceholder: boolean;
-  children: ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -232,7 +230,9 @@ function MobileNav({
   }, []);
 
   return (
-    <div className="md:hidden">
+    // display: contents keeps the sticky header and tab bar scoped to the page,
+    // not to this wrapper; the page itself is rendered once by Shell.
+    <div className="contents md:hidden">
       <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-3 bg-white/95 backdrop-blur border-b border-neutral-200 no-print">
         <button
           onClick={() => setDrawerOpen(true)}
@@ -249,7 +249,6 @@ function MobileNav({
         <span className="w-[44px]" aria-hidden />
       </header>
       {user.role === "SUPERADMIN" ? <AdminMobileTabBar pathname={pathname} /> : null}
-      <main className="p-4 min-w-0 overflow-x-auto">{children}</main>
       <AnimatePresence>
         {drawerOpen && (
           <>
@@ -410,7 +409,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             {active && (
               <motion.span
                 layoutId="nav-pill"
-                className="absolute inset-0 bg-black"
+                className="absolute inset-0 rounded-md bg-primary"
                 transition={{ type: "spring", stiffness: 420, damping: 34 }}
               />
             )}
@@ -447,29 +446,18 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <div className="hidden md:block">
-        <AppTopbar
-          brand={brand}
-          logoSrc={logoSrc}
-          logoPlaceholder={useLogoPlaceholder}
-          homeHref={roleHome}
-          userName={displayName(user)}
-          userSubtitle={userSubtitle(user)}
-          userEmail={user.email}
-          settingsHref={roleNav.find((n) => n.key === "settings")?.href}
-          staffHref={roleNav.find((n) => n.key === "staff")?.href}
-          onSignOut={onSignOut}
-        />
-        <div className="flex">
-          <AppSidebar
-            items={roleNav.map((n) => ({ key: n.key, href: n.href, label: n.label }))}
-            pathname={pathname}
-            onSignOut={onSignOut}
-            helpHref="mailto:contact@tijartt.com"
-          />
-          <main className="min-w-0 flex-1 px-4 pb-8 pt-2 sm:px-6 lg:px-8">{mainContent}</main>
-        </div>
-      </div>
+      <AppTopbar
+        brand={brand}
+        logoSrc={logoSrc}
+        logoPlaceholder={useLogoPlaceholder}
+        homeHref={roleHome}
+        userName={displayName(user)}
+        userSubtitle={userSubtitle(user)}
+        userEmail={user.email}
+        settingsHref={roleNav.find((n) => n.key === "settings")?.href}
+        staffHref={roleNav.find((n) => n.key === "staff")?.href}
+        onSignOut={onSignOut}
+      />
 
       <MobileNav
         key={pathname}
@@ -481,9 +469,17 @@ export default function Shell({ children }: { children: ReactNode }) {
         logoSrc={logoSrc}
         pathname={pathname}
         logoPlaceholder={useLogoPlaceholder}
-      >
-        {mainContent}
-      </MobileNav>
+      />
+
+      <div className="md:flex">
+        <AppSidebar
+          items={roleNav.map((n) => ({ key: n.key, href: n.href, label: n.label }))}
+          pathname={pathname}
+          onSignOut={onSignOut}
+          helpHref="mailto:contact@tijartt.com"
+        />
+        <main className="min-w-0 flex-1 p-4 max-md:overflow-x-auto md:px-6 md:pb-8 md:pt-2 lg:px-8">{mainContent}</main>
+      </div>
     </div>
   );
 }

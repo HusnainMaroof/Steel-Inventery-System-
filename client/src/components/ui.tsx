@@ -70,7 +70,7 @@ export function CustomSelect({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`flex items-center justify-between gap-2 w-full px-3 py-2 text-xs font-medium bg-white border border-neutral-200 rounded-lg hover:border-neutral-400 transition-colors text-left ${
+        className={`flex min-h-10 items-center justify-between gap-2 w-full px-3 text-sm font-medium bg-white border border-[#E5E5E5] rounded-lg hover:border-[#c9c9c9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors text-left ${
           compact ? "min-w-[8.5rem]" : "min-w-[180px]"
         }`}
       >
@@ -101,7 +101,7 @@ export function CustomSelect({
                 <button
                   key={o.value}
                   onClick={() => { onChange(o.value); setOpen(false); }}
-                  className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${
                     o.value === value
                       ? "bg-neutral-100 text-black font-medium"
                       : "text-neutral-600 hover:bg-neutral-50"
@@ -272,8 +272,8 @@ export function PageTitle({
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-6">
       <div className="min-w-0">
-        <h1 className="text-xl sm:text-2xl tracking-tight">{title}</h1>
-        {sub && <p className="text-black text-xs mt-1">{sub}</p>}
+        <h1 className="text-[26px] sm:text-[30px] font-bold leading-tight tracking-tight text-[#111]">{title}</h1>
+        {sub && <p className="mt-1.5 text-sm text-[#171717]/70">{sub}</p>}
       </div>
       {action}
     </div>

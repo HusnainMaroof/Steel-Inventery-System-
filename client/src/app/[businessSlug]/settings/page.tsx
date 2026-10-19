@@ -93,18 +93,18 @@ export default function SettingsPage() {
     <Page>
       <PageTitle title="Settings" sub="Shop setup — bills, forms, and where stock sits." />
 
-      <section className="panel p-5 mb-4">
-        <h2 className="text-sm font-semibold text-[#171717]">Bills & invoices</h2>
+      <section className="border border-[#E5E5E5] bg-white rounded-xl p-5 sm:p-6 mb-6">
+        <h2 className="text-base font-semibold text-[#171717]">Bills & invoices</h2>
         <p className="text-[13px] text-[#171717]/70 mt-1 mb-4">
           Your factory logo shows in the menu and on bills. If there is no logo, bills show the factory name instead.
         </p>
 
         <div className="mb-6 max-w-2xl">
-          <p className="text-[11px] uppercase tracking-[0.12em] font-medium text-[#171717] mb-2">
+          <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 mb-2">
             Factory logo
           </p>
           <div className="flex flex-wrap items-center gap-4">
-            <div className="h-20 w-40 border border-[#e5e5e5] bg-white flex items-center justify-center p-2">
+                <div className="h-20 w-40 border border-[#E5E5E5] bg-white flex items-center justify-center p-2">
               {logoSrcFromPrefs(prefs) ? (
                 <img
                   src={logoSrcFromPrefs(prefs)}
@@ -146,7 +146,7 @@ export default function SettingsPage() {
           </div>
           <p className="text-[12px] text-[#171717]/70 mt-2">PNG, JPG or WebP. Under 8 MB.</p>
           {logoError ? (
-            <p className="text-[13px] text-[#a12b1f] mt-2">{logoError}</p>
+            <p className="text-[13px] font-medium text-destructive mt-2">{logoError}</p>
           ) : null}
         </div>
 
@@ -233,36 +233,36 @@ export default function SettingsPage() {
           </div>
         </form>
 
-        <div className="mt-6 pt-5 border-t border-[#e5e5e5]">
-          <p className="text-[11px] uppercase tracking-[0.12em] font-medium text-[#171717] mb-3">
+        <div className="mt-6 pt-5 border-t border-[#E5E5E5]">
+          <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 mb-3">
             Bill preview
           </p>
-          <div className="border border-[#e5e5e5] bg-white px-6 py-5 max-w-2xl">
+          <div className="border border-[#E5E5E5] bg-white px-6 py-5 max-w-2xl">
             <InvoiceBrandHeader business={preview} />
-            <p className="text-[11px] text-[#171717]/70 text-center mt-6 pt-3 border-t border-[#e5e5e5]">
+            <p className="text-xs text-[#171717]/70 text-center mt-6 pt-3 border-t border-[#E5E5E5]">
               {preview.invoiceNote || "Thank you for your business."}
             </p>
           </div>
         </div>
       </section>
 
-      <section className="panel p-5 mb-4 flex flex-wrap items-center justify-between gap-4">
+      <section className="border border-[#E5E5E5] bg-white rounded-xl p-5 sm:p-6 mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-[#171717]">Purchase & sale forms</h2>
+          <h2 className="text-base font-semibold text-[#171717]">Purchase & sale forms</h2>
           <p className="text-[13px] text-[#171717]/70 mt-1">
             Extra fields on those forms — lot numbers, heat/batch, warehouse, and source lots.
           </p>
         </div>
         <label className="flex items-center gap-3 cursor-pointer !mb-0 !normal-case shrink-0">
-          <span className="text-[13px] text-[#171717]">Show extra fields</span>
+          <span className="text-sm text-[#171717]">Show extra fields</span>
           <button
             type="button"
             role="switch"
             aria-checked={prefs.showOptionalDetails}
             aria-label="Show extra fields"
             onClick={() => setPref("showOptionalDetails", !prefs.showOptionalDetails)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${
-              prefs.showOptionalDetails ? "bg-[#171717]" : "bg-[#e5e5e5]"
+            className={`relative min-h-[40px] w-11 h-6 rounded-full transition-colors ${
+              prefs.showOptionalDetails ? "bg-[#171717]" : "bg-[#E5E5E5]"
             }`}
           >
             <span
@@ -276,7 +276,7 @@ export default function SettingsPage() {
 
       <section className="mb-4">
         <div className="mb-3">
-          <h2 className="text-sm font-semibold text-[#171717]">Warehouses & locations</h2>
+          <h2 className="text-base font-semibold text-[#171717]">Warehouses & locations</h2>
           <p className="text-[13px] text-[#171717]/70 mt-1">
             Optional — for lot tracking in Inventory.
           </p>
@@ -285,22 +285,22 @@ export default function SettingsPage() {
       </section>
 
       {user ? (
-        <section className="panel p-5">
-          <h2 className="text-sm font-semibold text-[#171717]">Your login</h2>
+      <section className="border border-[#E5E5E5] bg-white rounded-xl p-5 sm:p-6">
+        <h2 className="text-base font-semibold text-[#171717]">Your login</h2>
           <p className="text-[13px] text-[#171717]/70 mt-1 mb-4">
             Sign-in details for this shop.
           </p>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[#171717] max-w-2xl">
             <div>
-              <dt className="text-[11px] uppercase tracking-[0.12em] font-medium">Name</dt>
+              <dt className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">Name</dt>
               <dd className="mt-0.5 font-medium">{displayName(user)}</dd>
             </div>
             <div>
-              <dt className="text-[11px] uppercase tracking-[0.12em] font-medium">Email</dt>
+              <dt className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">Email</dt>
               <dd className="mt-0.5 font-medium">{user.email}</dd>
             </div>
             <div>
-              <dt className="text-[11px] uppercase tracking-[0.12em] font-medium">Role</dt>
+              <dt className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">Role</dt>
               <dd className="mt-0.5 font-medium">{roleLabel(user.role)}</dd>
             </div>
           </dl>

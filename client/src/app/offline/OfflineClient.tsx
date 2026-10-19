@@ -60,23 +60,23 @@ export function OfflineClient() {
   }, [retry]);
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#f0f4fe] px-5 py-8 sm:px-6">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-primary/10 px-5 py-8 sm:px-6">
       <Link
         href="/"
-        className="relative z-10 w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff]"
+        className="relative z-10 w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary"
         aria-label="Tijaratt home"
       >
         <TijarattBrand />
       </Link>
 
       <div className="relative z-10 m-auto w-full max-w-[560px] py-12 text-center">
-        <p className="font-mono text-[12px] font-medium tracking-[-0.03em] text-[#145aff]">
+        <p className="font-mono text-[12px] font-medium tracking-[-0.03em] text-primary">
           CONNECTION STATUS / OFFLINE
         </p>
-        <h1 className="mt-4 text-[clamp(42px,7vw,64px)] font-semibold leading-[1.03] tracking-[-0.037em] text-[#020520]">
+        <h1 className="mt-4 text-[clamp(42px,7vw,64px)] font-semibold leading-[1.03] tracking-[-0.037em] text-ink">
           The server is taking a moment.
         </h1>
-        <p className="mx-auto mt-5 max-w-[480px] text-[15px] leading-[1.63] text-[#374151]">
+        <p className="mx-auto mt-5 max-w-[480px] text-[15px] leading-[1.63] text-[#171717]/80">
           Tijaratt cannot reach the business server right now. Your records
           are safe, and this page will retry automatically.
         </p>
@@ -85,28 +85,28 @@ export function OfflineClient() {
             type="button"
             disabled={checking}
             onClick={() => void retry()}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#145aff] bg-[#fcfcfc] px-7 text-[14px] font-medium text-[#145aff] hover:bg-[#145aff] hover:text-white focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff] disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-primary bg-[#FCFCFB] px-7 text-[14px] font-medium text-primary hover:bg-primary hover:text-white focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
           >
             <RefreshCw className={checking ? "animate-spin" : ""} size={15} />
             {checking ? "Checking…" : "Try again"}
           </button>
           <Link
             href="/"
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#e2e8f0] bg-white/70 px-7 text-[14px] font-medium text-[#020520] hover:border-[#145aff] hover:text-[#145aff]"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#E5E5E5] bg-white/70 px-7 text-[14px] font-medium text-ink hover:border-primary hover:text-primary"
           >
             Back to home
           </Link>
         </div>
-        <p className="mt-7 text-[11px] leading-[1.6] text-[#6b7280]">
+        <p className="mt-7 text-xs leading-[1.6] text-[#171717]/70">
           Running Tijaratt locally? Start{" "}
-          <code className="rounded-md border border-[#e2e8f0] bg-white/70 px-1.5 py-1 font-mono text-[10px] text-[#374151]">
+          <code className="rounded-md border border-[#E5E5E5] bg-white/70 px-1.5 py-1 font-mono text-xs text-[#171717]/80">
             npm run start:dev
           </code>{" "}
           in the server folder.
         </p>
       </div>
 
-      <p className="relative z-10 text-center font-mono text-[10px] text-[#6b7280]">
+      <p className="relative z-10 text-center font-mono text-xs text-[#171717]/70">
         AUTOMATIC RETRY RUNS EVERY 60 SECONDS
       </p>
     </main>

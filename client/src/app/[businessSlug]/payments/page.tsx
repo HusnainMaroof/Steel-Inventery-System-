@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { Page, PageTitle, EmptyState, Tabs, RowActionsMenu } from "@/components/ui";
+import { Page, PageTitle, EmptyState, RowActionsMenu } from "@/components/ui";
 import { DateRangePicker, formatRangeLabel } from "@/components/ui/date-range-picker";
 import { dateInIsoRange, isoDay } from "@/lib/date-range-filter";
 import { useBusinessHref } from "@/components/BusinessLink";
@@ -89,19 +89,29 @@ function purchaseReference(
 function TypeBadge({ type }: { type: "customer" | "supplier" }) {
   const incoming = type === "customer";
   return (
-    <span className={`text-[13px] font-medium ${incoming ? "text-[#2e6b2e]" : "text-[#1f4e8c]"}`}>
+    <span
+      className={`inline-flex w-fit items-center self-start rounded-full px-2 py-0.5 text-xs font-medium ${
+        incoming ? "bg-success/10 text-success" : "bg-[#F1F1EF] text-[#171717]"
+      }`}
+    >
       {incoming ? "Received" : "Paid"}
     </span>
   );
 }
 
+function displayNote(note: string | undefined): string | null {
+  if (!note?.trim()) return null;
+  if (/^payment recorded with purchase/i.test(note.trim())) return "Recorded with purchase";
+  return note.trim();
+}
+
 const PAYMENT_GRID =
-  "md:grid md:grid-cols-[minmax(0,1.2fr)_100px_minmax(0,1fr)_88px_100px_minmax(88px,1fr)_40px] md:gap-3 md:px-4";
+  "md:grid md:grid-cols-[minmax(0,1.2fr)_96px_minmax(0,1fr)_88px_100px_minmax(88px,1fr)_40px] md:gap-3 md:px-4";
 
 function PaymentDateColumnsHeader() {
   return (
     <div
-      className={`${PAYMENT_GRID} hidden md:grid py-2.5 text-[10px] font-medium uppercase tracking-widest text-neutral-500 bg-neutral-50/90 border border-neutral-200 rounded-lg mb-2 items-center`}
+      className={`${PAYMENT_GRID} hidden md:grid py-2.5 text-xs uppercase tracking-wide text-[#171717]/60 bg-[#FAFAF9] border-b border-[#E5E5E5] items-center`}
     >
       <span>Name</span>
       <span>Type</span>
@@ -260,28 +270,28 @@ export default function PaymentsPage() {
       {payments.length > 0 && (
         <div className="mb-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2.5">
-            <p className="text-[12px] text-neutral-500">
+            <p className="text-[13px] text-[#171717]/70">
               {filtered.length} payment{filtered.length === 1 ? "" : "s"} ·{" "}
-              <span className="font-medium text-neutral-700">{periodLabel}</span>
+              <span className="font-medium text-[#171717]">{periodLabel}</span>
             </p>
             {hasActiveFilters && (
-              <button onClick={clearAll} className="text-[12px] text-neutral-400 hover:text-black underline underline-offset-2">
+              <button onClick={clearAll} className="text-[13px] text-[#171717]/70 hover:text-[#171717] underline underline-offset-2">
                 Clear all filters
               </button>
             )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="border border-neutral-200 bg-white p-4">
-              <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Received</span>
-              <span className="block text-xl font-semibold tabular-nums mt-1 text-[#2e6b2e]">{fmtMoney(totalReceived)}</span>
+            <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Received</span>
+              <span className="block text-2xl font-bold tabular-nums mt-1 text-success">{fmtMoney(totalReceived)}</span>
             </div>
-            <div className="border border-neutral-200 bg-white p-4">
-              <span className="block text-[11px] uppercase tracking-widest text-neutral-500">Paid</span>
-              <span className="block text-xl font-semibold tabular-nums mt-1 text-[#1f4e8c]">{fmtMoney(totalPaid)}</span>
+            <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Paid</span>
+              <span className="block text-2xl font-bold tabular-nums mt-1 text-[#171717]">{fmtMoney(totalPaid)}</span>
             </div>
-            <div className={`p-4 ${totalReceived - totalPaid >= 0 ? "border border-black bg-black text-white" : "border border-[#f0d2cc] bg-[#fdf1ef]"}`}>
-              <span className={`block text-[11px] uppercase tracking-widest ${totalReceived - totalPaid >= 0 ? "text-neutral-400" : "text-[#a12b1f]/70"}`}>Net</span>
-              <span className={`block text-xl font-semibold tabular-nums mt-1 ${totalReceived - totalPaid >= 0 ? "" : "text-[#a12b1f]"}`}>
+            <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Net</span>
+              <span className={`block text-2xl font-bold tabular-nums mt-1 ${totalReceived - totalPaid >= 0 ? "text-success" : "text-destructive"}`}>
                 {fmtMoney(totalReceived - totalPaid)}
               </span>
             </div>
@@ -290,7 +300,32 @@ export default function PaymentsPage() {
       )}
 
       {payments.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E5E5] bg-white p-1">
+            {TYPE_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                aria-pressed={typeFilter === tab.key}
+                onClick={() => {
+                  setTypeFilter(tab.key);
+                  if (typeof window !== "undefined") {
+                    const url = new URL(window.location.href);
+                    if (tab.key === "all") url.searchParams.delete("type");
+                    else url.searchParams.set("type", tab.key);
+                    window.history.replaceState({}, "", url.pathname + url.search);
+                  }
+                }}
+                className={`min-h-9 px-3 text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+                  typeFilter === tab.key
+                    ? "bg-ink text-white"
+                    : "text-[#171717]/70 hover:text-[#171717]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           <DateRangePicker
             from={dateRange.from}
             to={dateRange.to}
@@ -298,43 +333,23 @@ export default function PaymentsPage() {
             placeholder="All dates"
             ariaLabel="Filter payments by date range"
           />
-        </div>
-      )}
-
-      {payments.length > 0 && (
-        <div className="flex flex-col gap-4 mb-6">
-          <Tabs
-            tabs={[...TYPE_TABS]}
-            value={typeFilter}
-            onChange={(key) => {
-              setTypeFilter(key as TypeFilter);
-              if (typeof window !== "undefined") {
-                const url = new URL(window.location.href);
-                if (key === "all") url.searchParams.delete("type");
-                else url.searchParams.set("type", key);
-                window.history.replaceState({}, "", url.pathname + url.search);
-              }
-            }}
-          />
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="relative flex-1 sm:max-w-md">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search by name"
-                aria-label="Search by name"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") setAppliedSearch(searchInput); }}
-                className="!w-full !pl-9"
-              />
-            </div>
-            <button onClick={() => setAppliedSearch(searchInput)} className="btn-primary !py-2 !px-4 text-xs whitespace-nowrap">
-              Search
-            </button>
+          <div className="relative min-w-[200px] flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#171717]/40 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by name"
+              aria-label="Search by name"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") setAppliedSearch(searchInput); }}
+              className="!w-full !pl-9"
+            />
           </div>
+          <button onClick={() => setAppliedSearch(searchInput)} className="btn-ghost shrink-0">
+            Search
+          </button>
         </div>
       )}
 
@@ -350,87 +365,92 @@ export default function PaymentsPage() {
           action={<button onClick={clearAll} className="btn-primary">Clear filters</button>}
         />
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6">
           {groups.map((g) => (
             <div key={g.date}>
               <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-sm font-semibold tracking-tight text-neutral-900">{fmtDate(g.date)}</span>
-                <span className="text-[11px] text-neutral-600 tabular-nums">
+                <span className="text-sm font-semibold tracking-tight text-[#171717]">{fmtDate(g.date)}</span>
+                <span className="text-[13px] text-[#171717]/70 tabular-nums">
                   {g.items.length} payment{g.items.length === 1 ? "" : "s"}
                   {g.dayIn > 0 ? ` · In ${fmtMoney(g.dayIn)}` : ""}
                   {g.dayOut > 0 ? ` · Out ${fmtMoney(g.dayOut)}` : ""}
                 </span>
-                <div className="flex-1 min-w-[2rem] border-b border-neutral-200" />
+                <div className="flex-1 min-w-[2rem] border-b border-[#E5E5E5]" />
               </div>
 
-              <PaymentDateColumnsHeader />
+              <div className="md:overflow-hidden md:rounded-xl md:border md:border-[#E5E5E5] md:bg-white">
+                <PaymentDateColumnsHeader />
 
-              <div className="flex flex-col gap-3">
-                {g.items.map((p) => (
-                  <div
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigatePaymentView(p)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") navigatePaymentView(p);
-                    }}
-                    className="rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden cursor-pointer transition-shadow hover:shadow-md"
-                  >
-                    <div className={`${PAYMENT_GRID} hidden md:py-3.5 md:items-center`}>
-                      <span className="min-w-0 truncate text-[13px] font-medium text-neutral-900">{p.partyName}</span>
-                      <TypeBadge type={p.type} />
-                      <span className="min-w-0 truncate text-[13px] text-neutral-800">{p.reference}</span>
-                      <span className="text-[13px] text-neutral-700">{p.method}</span>
-                      <span className="text-[11px] text-neutral-500 tabular-nums">
-                        {p.createdAt ? fmtDateTime(p.createdAt) : "-"}
-                      </span>
-                      <span
-                        className={`text-right text-[15px] font-semibold tabular-nums ${
-                          p.type === "customer" ? "text-[#2e6b2e]" : "text-[#1f4e8c]"
-                        }`}
-                      >
-                        {p.type === "customer" ? "+" : "-"}
-                        {fmtMoney(p.amount)}
-                      </span>
-                      <span className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-                        <RowActionsMenu items={[{ label: "View", onClick: () => navigatePaymentView(p) }]} />
-                      </span>
-                    </div>
-
-                    <div className="md:hidden p-3.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-neutral-900">{p.partyName}</p>
-                          <p className="mt-1 text-[12px] text-neutral-700">
-                            <TypeBadge type={p.type} />
-                            <span className="text-neutral-400 mx-1">·</span>
-                            {p.reference}
-                          </p>
-                          <p className="mt-1 text-[11px] text-neutral-500">
-                            {p.method}
-                            {p.createdAt ? ` · ${fmtDateTime(p.createdAt)}` : ""}
-                          </p>
-                          {p.note ? <p className="mt-1 text-xs text-neutral-500">{p.note}</p> : null}
-                        </div>
-                        <div className="flex shrink-0 flex-col items-end gap-1">
+                <div className="flex flex-col gap-3 md:block md:divide-y md:divide-[#E5E5E5]">
+                  {g.items.map((p) => (
+                    <div
+                      key={p.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigatePaymentView(p)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") navigatePaymentView(p);
+                      }}
+                      className="overflow-hidden rounded-xl border border-[#E5E5E5] bg-white cursor-pointer transition-colors hover:bg-[#F8F8F7] md:rounded-none md:border-0"
+                    >
+                      <div className={`${PAYMENT_GRID} hidden md:py-3.5 md:items-center`}>
+                        <span className="min-w-0 truncate text-sm font-medium text-[#171717]">{p.partyName}</span>
+                        <TypeBadge type={p.type} />
+                        <span className="min-w-0 truncate text-sm text-[#171717]" title={p.reference}>{p.reference}</span>
+                        <span className="text-sm text-[#171717]/70">{p.method}</span>
+                        <span className="text-[13px] text-[#171717]/70 tabular-nums">
+                          {p.createdAt ? fmtDateTime(p.createdAt) : "-"}
+                        </span>
+                        <span
+                          className={`text-right text-sm font-semibold tabular-nums ${
+                            p.type === "customer" ? "text-success" : "text-[#171717]"
+                          }`}
+                        >
+                          {p.type === "customer" ? "+" : "-"}
+                          {fmtMoney(p.amount)}
+                        </span>
+                        <span className="flex justify-end" onClick={(e) => e.stopPropagation()}>
                           <RowActionsMenu items={[{ label: "View", onClick: () => navigatePaymentView(p) }]} />
-                          <span
-                            className={`text-sm font-semibold tabular-nums ${
-                              p.type === "customer" ? "text-[#2e6b2e]" : "text-[#1f4e8c]"
-                            }`}
-                          >
-                            {p.type === "customer" ? "+" : "-"}
-                            {fmtMoney(p.amount)}
+                        </span>
+                      </div>
+
+                      <div className="md:hidden p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 flex-1 truncate text-sm font-medium text-[#171717]">{p.partyName}</p>
+                          <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <RowActionsMenu items={[{ label: "View", onClick: () => navigatePaymentView(p) }]} />
                           </span>
                         </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <TypeBadge type={p.type} />
+                          <span className="min-w-0 max-w-full truncate text-[13px] text-[#171717]/70" title={p.reference}>
+                            {p.reference}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[13px] text-[#171717]/70">
+                          {p.method}
+                          {p.createdAt ? ` · ${fmtDateTime(p.createdAt)}` : ""}
+                        </p>
+                        {p.note ? (
+                          <p className="mt-1 text-[13px] text-[#171717]/70">{displayNote(p.note)}</p>
+                        ) : null}
+                        <p
+                          className={`mt-2 text-right text-sm font-semibold tabular-nums ${
+                            p.type === "customer" ? "text-success" : "text-[#171717]"
+                          }`}
+                        >
+                          {p.type === "customer" ? "+" : "-"}
+                          {fmtMoney(p.amount)}
+                        </p>
                       </div>
+                      {p.note ? (
+                        <p className="hidden md:block px-4 pb-3 -mt-1 text-[13px] text-[#171717]/70 truncate" title={displayNote(p.note) ?? undefined}>
+                          {displayNote(p.note)}
+                        </p>
+                      ) : null}
                     </div>
-                    {p.note ? (
-                      <p className="hidden md:block px-4 pb-3 -mt-1 text-[11px] text-neutral-500 truncate">{p.note}</p>
-                    ) : null}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           ))}

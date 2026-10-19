@@ -55,10 +55,10 @@ function Identity({
   if (!top && !categoryName && attrRows.length === 0) return null;
   return (
     <span className="block min-w-0">
-      {top ? <span className="block font-medium text-xs text-black truncate">{top}</span> : null}
-      {categoryName ? <span className="block text-[11px] text-black truncate">{categoryName}</span> : null}
+      {top ? <span className="block text-sm font-medium text-[#171717] truncate">{top}</span> : null}
+      {categoryName ? <span className="block text-[13px] text-[#171717]/70 truncate">{categoryName}</span> : null}
       {attrRows.map((r) => (
-        <span key={r.label} className="block text-[11px] text-black truncate">
+        <span key={r.label} className="block text-[13px] text-[#171717]/70 truncate">
           {r.label}: {r.value}
         </span>
       ))}
@@ -325,7 +325,7 @@ export default function PurchasesPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search supplier, product, brand…"
-          className="w-full min-w-0 sm:flex-1 sm:min-w-[200px] !py-2.5"
+          className="w-full min-w-0 sm:flex-1 sm:min-w-[200px]"
           aria-label="Search purchases"
         />
         <DateRangePicker
@@ -336,15 +336,15 @@ export default function PurchasesPage() {
           ariaLabel="Filter purchases by date range"
           className="w-full sm:w-auto"
         />
-        <button type="button" className="btn-primary w-full sm:w-auto shrink-0 !py-2.5" onClick={openAdd}>
+        <button type="button" className="btn-primary w-full sm:w-auto shrink-0" onClick={openAdd}>
           + Add purchase
         </button>
       </div>
 
-      <div role="tablist" className="flex gap-4 sm:gap-6 border-b border-neutral-200 mb-5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div role="tablist" className="flex gap-6 border-b border-[#E5E5E5] mb-6 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {([
-          ["all", "All Purchases"],
-          ["dues", `Payment Dues${totalDue > 0 ? ` (${dueParentIds.length})` : ""}`],
+          ["all", "All purchases"],
+          ["dues", `Payment dues${totalDue > 0 ? ` (${dueParentIds.length})` : ""}`],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -352,8 +352,8 @@ export default function PurchasesPage() {
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`shrink-0 pb-2.5 px-0.5 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors whitespace-nowrap max-sm:min-h-[40px] ${
-              tab === key ? "border-neutral-900 text-neutral-900 font-semibold" : "border-transparent text-neutral-500 hover:text-neutral-800"
+            className={`shrink-0 min-h-10 pb-2.5 px-0.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              tab === key ? "border-ink text-[#171717]" : "border-transparent text-[#171717]/60 hover:text-[#171717]"
             }`}
           >
             {label}
@@ -374,7 +374,7 @@ export default function PurchasesPage() {
             }
             title="No purchases yet"
             hint={activeSuppliers.length === 0 ? "Add a mill / supplier first, then record your first purchase." : "Record your first purchase — date, supplier, and rate is all you need."}
-            action={<button type="button" className="btn-primary !py-2.5" onClick={openAdd}>Add purchase</button>}
+            action={<button type="button" className="btn-primary" onClick={openAdd}>Add purchase</button>}
           />
         ) : filteredPurchases.length === 0 ? (
           <EmptyState
@@ -393,15 +393,15 @@ export default function PurchasesPage() {
             {purchaseDateGroups.map((g) => (
               <div key={g.date}>
                 <div className="mb-3 flex items-center gap-3">
-                  <span className="text-sm font-semibold text-neutral-900">{fmtDate(g.date)}</span>
-                  <span className="text-[11px] text-black tabular-nums">
+                  <span className="text-sm font-semibold text-[#171717]">{fmtDate(g.date)}</span>
+                  <span className="text-[13px] text-[#171717]/70 tabular-nums">
                     {g.rows.length} purchase{g.rows.length === 1 ? "" : "s"} · {fmtMoney(g.dayTotal)}
                   </span>
-                  <div className="flex-1 border-b border-neutral-200" />
+                  <div className="flex-1 border-b border-[#E5E5E5]" />
                 </div>
 
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
-                <div className="mb-3 hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_100px_108px_108px_44px] gap-3 px-4 py-1 text-[10px] uppercase tracking-widest text-neutral-500 font-medium items-center">
+                <div className="md:overflow-hidden md:rounded-xl md:border md:border-[#E5E5E5] md:bg-white">
+                <div className="hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_100px_108px_108px_44px] gap-3 px-4 py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs uppercase tracking-wide text-[#171717]/60 font-medium items-center">
                   <span>Supplier</span>
                   <span>Product</span>
                   <span className="text-right">Qty</span>
@@ -410,7 +410,7 @@ export default function PurchasesPage() {
                   <span className="sr-only">Actions</span>
                 </div>
 
-                <div className="hidden md:flex md:flex-col md:gap-3">
+                <div className="hidden md:flex md:flex-col md:divide-y md:divide-[#E5E5E5]">
                   {g.rows.map((r) => (
                     <div
                       key={r.id}
@@ -420,14 +420,14 @@ export default function PurchasesPage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") setSelectedId(r.id);
                       }}
-                      className="rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden cursor-pointer transition-shadow hover:shadow-md"
+                      className="cursor-pointer transition-colors hover:bg-[#F8F8F7] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
                     >
                       <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_100px_108px_108px_44px] gap-3 px-4 py-3.5 items-start">
                         <span className="block min-w-0">
-                          <span className="block text-[13px] font-medium text-black truncate">
+                          <span className="block text-sm font-medium text-[#171717] truncate">
                             {supplierName(r.supplierId)}
                           </span>
-                          <span className="block text-[11px] text-black tabular-nums mt-0.5">
+                          <span className="block text-[13px] text-[#171717]/70 tabular-nums mt-0.5">
                             Total {fmtMoney(steelAmount(r))}
                           </span>
                         </span>
@@ -442,13 +442,13 @@ export default function PurchasesPage() {
                             quality={r.quality}
                           />
                         </span>
-                        <span className="text-right text-[13px] tabular-nums text-black">
+                        <span className="text-right text-sm tabular-nums text-[#171717]">
                           {fmtQtyWithUnit(r.qty, r.unit)}
                         </span>
-                        <span className="text-right text-[13px] tabular-nums text-black">
+                        <span className="text-right text-sm tabular-nums text-[#171717]">
                           {fmtRateWithUnit(r.rate, r.unit)}
                         </span>
-                        <span className="text-right text-[13px] tabular-nums text-black">
+                        <span className="text-right text-sm tabular-nums text-[#171717]">
                           {r.sellRate ? fmtRateWithUnit(r.sellRate, r.unit) : "—"}
                         </span>
                         <span className="flex justify-end pt-0.5" onClick={(e) => e.stopPropagation()}>
@@ -466,14 +466,14 @@ export default function PurchasesPage() {
                       role="button"
                       tabIndex={0}
                       onClick={() => setSelectedId(r.id)}
-                      className="rounded-xl border border-neutral-200 bg-white p-3.5 shadow-sm active:bg-neutral-50"
+                      className="rounded-xl border border-[#E5E5E5] bg-white p-4 active:bg-[#F8F8F7]"
                     >
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="min-w-0">
-                          <p className="text-[13px] font-semibold text-neutral-900 truncate">
+                          <p className="text-sm font-semibold text-[#171717] truncate">
                             {supplierName(r.supplierId)}
                           </p>
-                          <p className="text-[11px] text-black tabular-nums mt-0.5">
+                          <p className="text-[13px] text-[#171717]/70 tabular-nums mt-0.5">
                             Total {fmtMoney(steelAmount(r))}
                           </p>
                         </div>
@@ -488,18 +488,18 @@ export default function PurchasesPage() {
                         spec={r.spec}
                         quality={r.quality}
                       />
-                      <dl className="mt-3 grid grid-cols-3 gap-2 text-[11px] border-t border-neutral-100 pt-3">
+                      <dl className="mt-3 grid grid-cols-3 gap-2 text-sm border-t border-[#E5E5E5] pt-3">
                         <div>
-                          <dt className="text-black uppercase tracking-wide text-[9px]">Qty</dt>
-                          <dd className="font-medium tabular-nums text-neutral-900 mt-0.5">{fmtQtyWithUnit(r.qty, r.unit)}</dd>
+                          <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Qty</dt>
+                          <dd className="font-medium tabular-nums text-[#171717] mt-0.5">{fmtQtyWithUnit(r.qty, r.unit)}</dd>
                         </div>
                         <div>
-                          <dt className="text-black uppercase tracking-wide text-[9px]">Buy</dt>
-                          <dd className="font-medium tabular-nums text-neutral-900 mt-0.5">{fmtRateWithUnit(r.rate, r.unit)}</dd>
+                          <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Buy</dt>
+                          <dd className="font-medium tabular-nums text-[#171717] mt-0.5">{fmtRateWithUnit(r.rate, r.unit)}</dd>
                         </div>
                         <div>
-                          <dt className="text-black uppercase tracking-wide text-[9px]">Sell</dt>
-                          <dd className="font-medium tabular-nums text-neutral-900 mt-0.5">
+                          <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Sell</dt>
+                          <dd className="font-medium tabular-nums text-[#171717] mt-0.5">
                             {r.sellRate ? fmtRateWithUnit(r.sellRate, r.unit) : "—"}
                           </dd>
                         </div>
@@ -517,9 +517,9 @@ export default function PurchasesPage() {
       {tab === "dues" && (
         <div>
           {totalDue > 0 && (
-            <div className="border border-neutral-200 p-4 mb-5 flex justify-between items-center">
-              <span className="text-xs uppercase tracking-widest text-black font-medium">Total Outstanding to Suppliers</span>
-              <span className="font-bold tabular-nums text-lg text-[#a12b1f]">{fmtMoney(totalDue)}</span>
+            <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 mb-6 flex flex-wrap justify-between items-center gap-3">
+              <span className="text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Total outstanding to suppliers</span>
+              <span className="font-bold tabular-nums text-2xl text-destructive">{fmtMoney(totalDue)}</span>
             </div>
           )}
           {duePurchases.length === 0 ? (
@@ -553,12 +553,12 @@ export default function PurchasesPage() {
               {dueDateGroups.map((g) => (
                 <div key={g.date}>
                   <div className="mb-3 flex items-center gap-3">
-                    <span className="text-sm font-semibold text-neutral-900">{fmtDate(g.date)}</span>
-                    <div className="flex-1 border-b border-neutral-200" />
+                    <span className="text-sm font-semibold text-[#171717]">{fmtDate(g.date)}</span>
+                    <div className="flex-1 border-b border-[#E5E5E5]" />
                   </div>
 
-                  <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
-                  <div className="mb-3 hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_100px_120px_44px] gap-3 px-4 py-1 text-[10px] uppercase tracking-widest text-neutral-500 font-medium items-center">
+                  <div className="md:overflow-hidden md:rounded-xl md:border md:border-[#E5E5E5] md:bg-white">
+                  <div className="hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_100px_120px_44px] gap-3 px-4 py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs uppercase tracking-wide text-[#171717]/60 font-medium items-center">
                     <span>Supplier</span>
                     <span>Product</span>
                     <span className="text-right">Qty</span>
@@ -566,7 +566,7 @@ export default function PurchasesPage() {
                     <span className="sr-only">Actions</span>
                   </div>
 
-                  <div className="hidden md:flex md:flex-col md:gap-3">
+                  <div className="hidden md:flex md:flex-col md:divide-y md:divide-[#E5E5E5]">
                     {g.rows.map((r) => (
                       <div
                         key={r.id}
@@ -576,7 +576,7 @@ export default function PurchasesPage() {
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") openPay(r.id);
                         }}
-                        className="rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden cursor-pointer transition-shadow hover:shadow-md"
+                        className="cursor-pointer transition-colors hover:bg-[#F8F8F7] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
                       >
                         <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_100px_120px_44px] gap-3 px-4 py-3.5 items-start">
                           <span className="block min-w-0 text-[13px] font-medium text-black truncate">
@@ -593,7 +593,7 @@ export default function PurchasesPage() {
                               quality={r.quality}
                             />
                           </span>
-                          <span className="text-right text-[13px] tabular-nums text-black">
+                          <span className="text-right text-sm tabular-nums text-[#171717]">
                             {fmtQtyWithUnit(r.qty, r.unit)}
                           </span>
                           <span className="text-right text-[15px] font-bold tabular-nums text-[#a12b1f]">
@@ -616,7 +616,7 @@ export default function PurchasesPage() {
                       <div key={r.id} className="rounded-xl border border-neutral-200 bg-white p-3.5 shadow-sm">
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="min-w-0">
-                            <p className="text-[13px] font-semibold text-neutral-900 truncate">
+                            <p className="text-sm font-semibold text-[#171717] truncate">
                               {supplierName(r.supplierId)}
                             </p>
                             <p className="text-[15px] font-bold text-[#a12b1f] tabular-nums mt-1">
@@ -638,7 +638,7 @@ export default function PurchasesPage() {
                           spec={r.spec}
                           quality={r.quality}
                         />
-                        <p className="mt-3 pt-3 border-t border-neutral-100 text-[11px] text-black tabular-nums">
+                        <p className="mt-3 pt-3 border-t border-[#E5E5E5] text-[13px] text-[#171717]/70 tabular-nums">
                           Paid {fmtMoney(r.paid ?? 0)} of {fmtMoney(steelAmount(r))}
                           {r.lastPaidAt ? ` · Last ${fmtDate(r.lastPaidAt)}` : ""}
                         </p>
@@ -788,13 +788,13 @@ export default function PurchasesPage() {
           return (
             <div className="space-y-5">
               <div className="rounded-xl border border-neutral-200 overflow-hidden">
-                <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-200 text-[11px] font-semibold uppercase tracking-wider text-black">
+                <div className="px-4 py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs font-semibold uppercase tracking-wide text-[#171717]/70">
                   Identity
                 </div>
                 {detailRows.slice(0, detailRows.findIndex((r) => r.label === "Quantity")).map(renderDetailRow)}
               </div>
               <div className="rounded-xl border border-neutral-200 overflow-hidden">
-                <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-200 text-[11px] font-semibold uppercase tracking-wider text-black">
+                <div className="px-4 py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs font-semibold uppercase tracking-wide text-[#171717]/70">
                   Costs & pricing
                 </div>
                 {detailRows
@@ -805,7 +805,7 @@ export default function PurchasesPage() {
                   .map(renderDetailRow)}
               </div>
               <div className="rounded-xl border border-neutral-200 overflow-hidden">
-                <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-200 text-[11px] font-semibold uppercase tracking-wider text-black">
+                <div className="px-4 py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs font-semibold uppercase tracking-wide text-[#171717]/70">
                   Payment & profit
                 </div>
                 {detailRows.slice(detailRows.findIndex((r) => r.label === "Total Payable to Mill")).map(renderDetailRow)}
@@ -859,7 +859,7 @@ export default function PurchasesPage() {
                 )}
               </div>
               <div className="border border-red-200 bg-red-50 p-4">
-                <p className="text-[11px] uppercase tracking-widest text-red-700 font-medium mb-2">Deleting changes your numbers</p>
+                <p className="text-xs uppercase tracking-wide text-destructive font-medium mb-2">Deleting changes your numbers</p>
                 <ul className="text-xs text-neutral-700 space-y-1.5 list-disc pl-4">
                   <li>
                     <span className="font-medium text-neutral-900">Mill dues:</span>{" "}
@@ -882,7 +882,7 @@ export default function PurchasesPage() {
                     <span className="font-medium text-neutral-900">Records:</span> this purchase and its payment history are permanently removed.
                   </li>
                 </ul>
-                <p className="text-[11px] font-semibold text-red-700 mt-2.5">
+                <p className="text-[13px] font-semibold text-destructive mt-2.5">
                   Stock, mill dues, profit and reports all update across the app. This cannot be undone.
                 </p>
               </div>

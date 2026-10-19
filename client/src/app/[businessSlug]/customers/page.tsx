@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
-import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState } from "@/components/ui";
+import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, RowActionsMenu, CustomSelect } from "@/components/ui";
+import { Search } from "lucide-react";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import { fmtMoney, fmtDate, fmtQtyWithUnit } from "@/lib/format";
 import type { Sale } from "@/lib/types";
@@ -137,37 +138,35 @@ export default function CustomersPage() {
       />
 
       {activeCustomers.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-          <div className="flex flex-1 sm:max-w-96">
-            <select
-              value={searchMode}
-              onChange={(e) => setSearchMode(e.target.value as "name" | "phone")}
-              aria-label="Search by"
-              className="!w-auto !rounded-r-none !border-r-0"
-            >
-              <option value="name">Name</option>
-              <option value="phone">Phone</option>
-            </select>
-            <div className="relative flex-1">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder={searchMode === "name" ? "Search by name..." : "Search by phone..."}
-                aria-label={searchMode === "name" ? "Search by name" : "Search by phone"}
-                value={searchInput}
-                onChange={(e) => onSearchChange(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { setAppliedSearch(searchInput); setAppliedMode(searchMode); } }}
-                className="!w-full !rounded-l-none !pl-9"
-              />
-            </div>
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <CustomSelect
+            value={searchMode}
+            onChange={(v) => setSearchMode(v as "name" | "phone")}
+            options={[
+              { value: "name", label: "Name" },
+              { value: "phone", label: "Phone" },
+            ]}
+            ariaLabel="Search by"
+            compact
+            className="w-40 shrink-0"
+          />
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#171717]/70 pointer-events-none" />
+            <input
+              type="text"
+              placeholder={searchMode === "name" ? "Search by name..." : "Search by phone..."}
+              aria-label={searchMode === "name" ? "Search by name" : "Search by phone"}
+              value={searchInput}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { setAppliedSearch(searchInput); setAppliedMode(searchMode); } }}
+              className="!pl-9"
+            />
           </div>
-          <button onClick={() => { setAppliedSearch(searchInput); setAppliedMode(searchMode); }} className="btn-primary !py-2 !px-4 text-xs whitespace-nowrap">
+          <button onClick={() => { setAppliedSearch(searchInput); setAppliedMode(searchMode); }} className="btn-ghost whitespace-nowrap">
             Search
           </button>
           {appliedSearch.trim() !== "" && (
-            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setSearchMode("name"); setAppliedMode("name"); }} className="btn-ghost !py-2 !px-4 text-xs whitespace-nowrap">
+            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setSearchMode("name"); setAppliedMode("name"); }} className="btn-ghost whitespace-nowrap">
               Clear
             </button>
           )}
@@ -176,165 +175,159 @@ export default function CustomersPage() {
 
       {activeCustomers.length === 0 ? (
         <EmptyState
-          emoji="🤝"
+          icon={<Search className="w-6 h-6 text-[#171717]/70" />}
           title="No customers yet"
           hint="Add the shops you sell to — their balances and ledgers will live here."
           action={<button className="btn-primary" onClick={onOpen}>+ New Customer</button>}
         />
       ) : (
-        <>
-          {/* desktop / tablet */}
-          <div className="hidden sm:block border border-neutral-200 bg-white overflow-x-auto">
-            {/* header */}
-            <div className="grid grid-cols-[1.5fr_1fr_1fr_190px] gap-4 px-5 py-2.5 text-[11px] uppercase tracking-widest text-neutral-500 font-medium border-b border-neutral-200">
-              <span>Customer</span>
-              <span>Shop / Area</span>
-              <span>Phone</span>
-              <span />
-            </div>
-            {/* rows */}
-            {rows.map((c) => (
-              <div
-                key={c.id}
-                className="grid grid-cols-[1.5fr_1fr_1fr_190px] gap-4 px-5 py-3.5 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 transition-colors items-center"
-              >
-                <span className="font-semibold text-xs text-neutral-900 truncate">{c.name}</span>
-                <span className="text-xs text-neutral-500 truncate">{c.shop || "—"}</span>
-                <span className="text-xs text-neutral-600 tabular-nums">{c.phone || "—"}</span>
-                <span className="text-right whitespace-nowrap">
-                  <button
-                    onClick={() => setViewCustomerId(c.id)}
-                    className="btn-primary !py-1.5 !px-4 text-xs"
-                  >
-                    View History
-                  </button>
-                  <button
-                    onClick={() => setDeleteTarget(c)}
-                    className="btn-ghost !py-1.5 !px-3 text-xs text-red-600 hover:!bg-red-50 ml-2"
-                  >
-                    Delete
-                  </button>
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* mobile cards */}
-          <div className="sm:hidden border border-neutral-200 bg-white divide-y divide-neutral-100">
-            {rows.map((c) => (
-              <div key={c.id} className="p-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="min-w-0">
-                    <span className="block font-semibold text-[15px] text-neutral-900 truncate">{c.name}</span>
-                    <span className="block text-xs text-neutral-500 mt-0.5 truncate">{c.shop || "—"}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-neutral-600 tabular-nums">{c.phone || "—"}</span>
-                </div>
-                <div className="flex justify-end mt-2.5">
-                  <button
-                    onClick={() => setViewCustomerId(c.id)}
-                    className="btn-primary !py-1.5 !px-4 text-xs"
-                  >
-                    View History
-                  </button>
-                  <button
-                    onClick={() => setDeleteTarget(c)}
-                    className="btn-ghost !py-1.5 !px-3 text-xs text-red-600 hover:!bg-red-50 ml-2"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
+        <div className="bg-white border border-[#E5E5E5] rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#FAFAF9]">
+                <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Customer</th>
+                <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Shop / Area</th>
+                <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Phone</th>
+                <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((c) => (
+                <tr
+                  key={c.id}
+                  className="cursor-pointer hover:bg-[#F8F8F7] transition-colors"
+                  onClick={() => setViewCustomerId(c.id)}
+                >
+                  <td className="py-3 px-4 border-t border-[#E5E5E5]">
+                    <span className="font-medium text-[#171717] truncate block text-sm">{c.name}</span>
+                  </td>
+                  <td className="py-3 px-4 border-t border-[#E5E5E5]">
+                    <span className="text-[#171717]/70 truncate block text-sm">{c.shop || "—"}</span>
+                  </td>
+                  <td className="py-3 px-4 border-t border-[#E5E5E5]">
+                    <span className="text-[#171717]/70 tabular-nums text-sm">{c.phone || "—"}</span>
+                  </td>
+                  <td className="py-3 px-4 border-t border-[#E5E5E5] text-right">
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <RowActionsMenu
+                        items={[
+                          { label: "View history", onClick: () => setViewCustomerId(c.id) },
+                          { label: "Delete", onClick: () => setDeleteTarget(c), danger: true },
+                        ]}
+                        ariaLabel={`Actions for ${c.name}`}
+                      />
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* View History Modal */}
       <Modal open={!!viewCustomerId} onClose={() => setViewCustomerId(null)} title={`History — ${viewCustomerName}`} size="4xl">
         {viewCustomerId && (
-          <div className="max-h-[70vh] overflow-y-auto -mx-5 sm:-mx-7 px-5 sm:px-7">
+          <div className="max-h-[70vh] overflow-y-auto">
+            {/* Summary cards */}
+            {(() => {
+              const custSales = sales.filter((s) => s.customerId === viewCustomerId);
+              const total = custSales.reduce((a, s) => a.plus(toDecimal(saleGrandTotal(s))), new Decimal(0)).toNumber();
+              const paid = custSales.reduce((a, s) => a.plus(toDecimal(salePaid(s.id))), new Decimal(0)).toNumber();
+              const due = Math.max(0, total - paid);
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white border border-[#E5E5E5] rounded-xl p-5">
+                    <div className="text-xs uppercase tracking-wide text-[#171717]/60 mb-2">Invoices</div>
+                    <div className="text-2xl font-bold tabular-nums text-[#171717]">{custSales.length}</div>
+                  </div>
+                  <div className="bg-white border border-[#E5E5E5] rounded-xl p-5">
+                    <div className="text-xs uppercase tracking-wide text-[#171717]/60 mb-2">Total</div>
+                    <div className="text-2xl font-bold tabular-nums text-[#171717]">{fmtMoney(total)}</div>
+                  </div>
+                  <div className="bg-white border border-[#E5E5E5] rounded-xl p-5">
+                    <div className="text-xs uppercase tracking-wide text-[#171717]/60 mb-2">Due</div>
+                    <div className={`text-2xl font-bold tabular-nums ${due > 0 ? "text-success" : "text-[#171717]"}`}>{due > 0 ? fmtMoney(due) : "0"}</div>
+                  </div>
+                </div>
+              );
+            })()}
             {/* Customer Info */}
-            <div className="bg-neutral-50 border border-neutral-200 p-4 mb-5">
+            <div className="bg-[#F8F8F7] border border-[#E5E5E5] rounded-xl p-5 mb-6">
               <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                <span className="w-10 h-10 rounded-full bg-ink flex items-center justify-center text-sm font-bold text-white shrink-0">
                   {viewCustomerName.charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0">
-                  <span className="block font-bold text-base text-neutral-900">{viewCustomerName}</span>
-                  <span className="block text-[11px] text-neutral-400">{viewCustomer ? [viewCustomer.shop, viewCustomer.phone].filter(Boolean).join(" · ") : "Not in active customer list"}</span>
+                  <span className="block font-bold text-base text-[#171717]">{viewCustomerName}</span>
+                  <span className="block text-[13px] text-[#171717]/70">{viewCustomer ? [viewCustomer.shop, viewCustomer.phone].filter(Boolean).join(" · ") : "Not in active customer list"}</span>
                 </div>
               </div>
             </div>
 
             {/* Date-wise sales history */}
             {customerDateGroups.length === 0 ? (
-              <div className="text-center py-12 text-neutral-400 text-sm">No sales to this customer yet.</div>
+              <div className="text-center py-12 text-[#171717]/70 text-sm">No sales to this customer yet.</div>
             ) : (
-              <div className="space-y-5">
+              <div className="space-y-6">
                 {customerDateGroups.map((g) => (
                   <div key={g.date}>
                     {/* Date header */}
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">{fmtDate(g.date)}</span>
-                      <span className="text-[10px] text-neutral-300">|</span>
-                      <span className="text-[10px] text-neutral-400">{g.sales.length} invoice{g.sales.length > 1 ? "s" : ""}</span>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xs font-bold uppercase tracking-wide text-[#171717]/60">{fmtDate(g.date)}</span>
+                      <span className="text-xs text-[#171717]/30">|</span>
+                      <span className="text-xs text-[#171717]/70 tabular-nums">{g.sales.length} invoice{g.sales.length > 1 ? "s" : ""}</span>
                     </div>
 
-                    {/* Invoices — receipt style */}
-                    <div className="space-y-3">
-                      {g.sales.map((s) => {
-                        const total = saleGrandTotal(s);
-                        const paid = salePaid(s.id);
-                        const due = Math.max(0, total - paid);
-                        return (
-                          <div key={s.id} className="border border-neutral-200 bg-white px-4 py-3 space-y-1.5">
-                            {/* Row: Invoice */}
-                            <div className="flex items-baseline justify-between gap-4">
-                              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Invoice</span>
-                              <span className="text-[13px] font-bold text-neutral-800 text-right">{s.invoiceNo}</span>
-                            </div>
-                            {/* Row: Items */}
-                            {s.lines.map((l, i) => {
-                              const attrLine = l.attributeSnapshot
-                                ? attributeDefs
-                                    .filter((d) => d.categoryId === l.categoryId && d.active)
-                                    .sort((a, b) => a.sortOrder - b.sortOrder)
-                                    .filter((d) => l.attributeSnapshot![d.key])
-                                    .map((d) => l.attributeSnapshot![d.key])
-                                    .join(" · ")
-                                : "";
-                              return (
-                                <div key={i} className="flex items-baseline justify-between gap-4">
-                                  <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">{i === 0 ? "Items" : ""}</span>
-                                  <span className="text-[12px] text-neutral-700 text-right">
-                                    {l.item}
-                                    {attrLine ? <span className="block text-[11px] text-neutral-400">{attrLine}</span> : null}
-                                    <span className="block tabular-nums">{fmtQtyWithUnit(l.qty, l.unit)} × {fmtMoney(l.rate)}</span>
-                                  </span>
-                                </div>
-                              );
-                            })}
-                            {/* Row: Total */}
-                            <div className="flex items-baseline justify-between gap-4 pt-2 border-t border-neutral-100">
-                              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Total</span>
-                              <span className="text-[14px] font-bold text-neutral-800 tabular-nums">{fmtMoney(total)}</span>
-                            </div>
-                            {/* Row: Paid */}
-                            <div className="flex items-baseline justify-between gap-4">
-                              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Paid</span>
-                              <span className="text-[13px] font-medium text-emerald-600 tabular-nums">{fmtMoney(paid)}</span>
-                            </div>
-                            {/* Row: Due — only show if > 0 */}
-                            {due > 0 && (
-                              <div className="flex items-baseline justify-between gap-4">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">Due</span>
-                                <span className="text-[13px] font-bold text-[#a12b1f] tabular-nums">{fmtMoney(due)}</span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                    {/* Invoices table */}
+                    <div className="bg-white border border-[#E5E5E5] rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-[#FAFAF9]">
+                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Invoice</th>
+                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Items</th>
+                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Total</th>
+                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Paid</th>
+                            <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Due</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.sales.map((s) => {
+                            const total = saleGrandTotal(s);
+                            const paid = salePaid(s.id);
+                            const due = Math.max(0, total - paid);
+                            return (
+                              <tr key={s.id} className="hover:bg-[#F8F8F7] transition-colors">
+                                <td className="py-3 px-4 border-t border-[#E5E5E5] font-medium text-[#171717] tabular-nums">{s.invoiceNo}</td>
+                                <td className="py-3 px-4 border-t border-[#E5E5E5]">
+                                  <div className="text-[#171717]/70 text-sm">
+                                    {s.lines.map((l, i) => {
+                                      const attrLine = l.attributeSnapshot
+                                        ? attributeDefs
+                                            .filter((d) => d.categoryId === l.categoryId && d.active)
+                                            .sort((a, b) => a.sortOrder - b.sortOrder)
+                                            .filter((d) => l.attributeSnapshot![d.key])
+                                            .map((d) => l.attributeSnapshot![d.key])
+                                            .join(" · ")
+                                        : "";
+                                      return (
+                                        <div key={i} className="mb-1 last:mb-0">
+                                          <span className="font-medium text-[#171717]">{l.item}</span>
+                                          {attrLine ? <span className="block text-[13px] text-[#171717]/50">{attrLine}</span> : null}
+                                          <span className="block text-[13px] text-[#171717]/70 tabular-nums">{fmtQtyWithUnit(l.qty, l.unit)} x {fmtMoney(l.rate)}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 border-t border-[#E5E5E5] text-right text-sm tabular-nums text-[#171717]">{fmtMoney(total)}</td>
+                                <td className="py-3 px-4 border-t border-[#E5E5E5] text-right text-sm tabular-nums text-success">{fmtMoney(paid)}</td>
+                                <td className="py-3 px-4 border-t border-[#E5E5E5] text-right text-sm tabular-nums text-destructive">{due > 0 ? fmtMoney(due) : "-"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 ))}
@@ -346,14 +339,23 @@ export default function CustomersPage() {
 
       <Modal open={open} onClose={onClose} busy={savingCustomer || isPending("customer:create")} title="New Customer">
         {customerError && (
-          <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+          <div role="alert" className="text-[13px] font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3.5 py-2.5 mb-5">
             {customerError}
           </div>
         )}
         <form onSubmit={save} className="grid gap-4">
-          <div><label>Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ahmed Steel Mart" required autoFocus /></div>
-          <div><label>Shop / Area</label><input value={form.shop} onChange={(e) => setForm({ ...form, shop: e.target.value })} placeholder="e.g. Bilal Gunj, Lahore" /></div>
-          <div><label>Phone</label><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" /></div>
+          <div>
+            <label className="text-xs uppercase tracking-wide text-[#171717]/60">Name *</label>
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ahmed Steel Mart" required autoFocus className="mt-1" />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wide text-[#171717]/60">Shop / Area</label>
+            <input value={form.shop} onChange={(e) => setForm({ ...form, shop: e.target.value })} placeholder="e.g. Bilal Gunj, Lahore" className="mt-1" />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wide text-[#171717]/60">Phone</label>
+            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 0300 1234567" className="mt-1" />
+          </div>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-ghost" onClick={onClose} disabled={savingCustomer || isPending("customer:create")}>Cancel</button>
             <BusyButton type="submit" loading={savingCustomer || isPending("customer:create")} disabled={!form.name.trim()}>
@@ -381,47 +383,47 @@ export default function CustomersPage() {
           const due = Math.max(0, total - paid);
           return (
             <>
-              <div className="border border-neutral-200 mb-5">
-                <div className="flex justify-between items-center gap-3 py-2.5 px-4 border-b border-neutral-200">
+              <div className="border border-[#E5E5E5] mb-6">
+                <div className="flex justify-between items-center gap-3 py-2.5 px-4 border-b border-[#E5E5E5]">
                   <span className="text-sm font-medium truncate">{t.name}</span>
-                  <span className="text-xs text-neutral-400 shrink-0 tabular-nums">{t.phone || "—"}</span>
+                  <span className="text-xs text-[#171717]/70 shrink-0 tabular-nums">{t.phone || "—"}</span>
                 </div>
-                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
-                  <span className="text-neutral-500">Shop / Area</span>
+                <div className="flex justify-between py-2 px-4 border-b border-[#E5E5E5] text-xs">
+                  <span className="text-[#171717]/70">Shop / Area</span>
                   <span className="tabular-nums">{t.shop || "—"}</span>
                 </div>
-                <div className="flex justify-between py-2 px-4 border-b border-neutral-200 text-xs">
-                  <span className="text-neutral-500">Invoices on record</span>
+                <div className="flex justify-between py-2 px-4 border-b border-[#E5E5E5] text-xs">
+                  <span className="text-[#171717]/70">Invoices on record</span>
                   <span className="tabular-nums">{inv.length}</span>
                 </div>
                 {due > 0 && (
                   <div className="flex justify-between py-2 px-4 text-xs">
-                    <span className="text-neutral-500">They owe you</span>
-                    <span className="tabular-nums font-medium text-[#a12b1f]">{fmtMoney(due)}</span>
+                    <span className="text-[#171717]/70">They owe you</span>
+                    <span className="tabular-nums font-medium text-destructive">{fmtMoney(due)}</span>
                   </div>
                 )}
               </div>
-              <div className="border border-red-200 bg-red-50 p-4">
-                <p className="text-[11px] uppercase tracking-widest text-red-700 font-medium mb-2">Deleting changes your numbers</p>
-                <ul className="text-xs text-neutral-700 space-y-1.5 list-disc pl-4">
+              <div className="border border-destructive/20 bg-destructive/10 p-4 rounded-lg">
+                <p className="text-xs uppercase tracking-widest text-destructive font-medium mb-2">Deleting changes your numbers</p>
+                <ul className="text-xs text-[#171717]/70 space-y-1.5 list-disc pl-4">
                   <li>
-                    <span className="font-medium text-neutral-900">Customer dues:</span>{" "}
+                    <span className="font-medium text-[#171717]">Customer dues:</span>{" "}
                     {due > 0
                       ? `their unpaid ${fmtMoney(due)} is cleared, so Customer Payment Dues on the dashboard falls.`
                       : "they have paid everything, so no due changes."}
                   </li>
                   <li>
-                    <span className="font-medium text-neutral-900">Sales & records:</span>{" "}
+                    <span className="font-medium text-[#171717]">Sales & records:</span>{" "}
                     {inv.length} invoice{inv.length === 1 ? "" : "s"} and their payments are removed.
                   </li>
                   <li>
-                    <span className="font-medium text-neutral-900">Stock:</span> sold goods return to Inventory, so those stock rows grow again.
+                    <span className="font-medium text-[#171717]">Stock:</span> sold goods return to Inventory, so those stock rows grow again.
                   </li>
                   <li>
-                    <span className="font-medium text-neutral-900">Profit:</span> that revenue and its profit leave Sales, Dashboard and Reports.
+                    <span className="font-medium text-[#171717]">Profit:</span> that revenue and its profit leave Sales, Dashboard and Reports.
                   </li>
                 </ul>
-                <p className="text-[11px] font-semibold text-red-700 mt-2.5">
+                <p className="text-xs font-semibold text-destructive mt-2.5">
                   Dues, stock, profit and reports all update across the app. This cannot be undone.
                 </p>
               </div>

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useStore, type VariantStockRow } from "@/lib/store";
 import { Page, PageTitle, EmptyState, Modal, RowActionsMenu } from "@/components/ui";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { Package, Search, Tag } from "lucide-react";
 import { dateInIsoRange } from "@/lib/date-range-filter";
 import { fmtQtyWithUnit, fmtRateWithUnit, fmtMoney, fmtDate } from "@/lib/format";
 import { productUsesCategories, resolveDefs, attrsValuesLine } from "@/lib/catalogue";
@@ -214,12 +215,12 @@ export default function InventoryPage() {
       />
 
       {/* tab switcher */}
-      <div role="tablist" className="flex gap-6 border-b border-neutral-200 mb-4">
+      <div role="tablist" className="flex gap-6 border-b border-[#E5E5E5] mb-6">
         {([
           ["stock", "Stock"],
           ["movements", "Movements"],
         ] as const).map(([key, label]) => (
-          <button key={key} role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setMovementVariant(null); }} className={`pb-2 text-xs uppercase tracking-widest border-b-2 -mb-px transition-colors max-sm:min-h-[40px] ${tab === key ? "border-black text-black font-bold" : "border-transparent text-black font-normal hover:opacity-60"}`}>
+          <button key={key} role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setMovementVariant(null); }} className={`pb-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === key ? "border-ink text-ink" : "border-transparent text-[#171717]/70 hover:text-[#171717]"}`}>
             {label}
           </button>
         ))}
@@ -228,7 +229,7 @@ export default function InventoryPage() {
       {/* one row: search + filters */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#171717] pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
@@ -237,13 +238,13 @@ export default function InventoryPage() {
             aria-label="Search products"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="!w-full !pl-9 !text-xs !py-2"
+            className="w-full pl-9"
           />
         </div>
         <select
           value={productFilter}
           onChange={(e) => { setProductFilter(e.target.value); setCategoryFilter("all"); }}
-          className="!w-auto !text-xs"
+          className="w-auto"
           aria-label="Filter by product"
         >
           <option value="all">All Products</option>
@@ -257,7 +258,7 @@ export default function InventoryPage() {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="!w-auto !text-xs"
+              className="w-auto"
               aria-label="Filter by category"
             >
               <option value="all">All Categories</option>
@@ -269,7 +270,7 @@ export default function InventoryPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as "all" | StockStatus)}
-              className="!w-auto !text-xs"
+              className="w-auto"
               aria-label="Filter by stock status"
             >
               <option value="all">All Status</option>
@@ -283,7 +284,7 @@ export default function InventoryPage() {
             <select
               value={moveType}
               onChange={(e) => setMoveType(e.target.value)}
-              className="!w-auto !text-xs"
+              className="w-auto"
               aria-label="Filter by movement type"
             >
               <option value="all">All Movement Types</option>
@@ -300,7 +301,7 @@ export default function InventoryPage() {
           </>
         )}
         {hasFilters && (
-          <button onClick={clearFilters} className="btn-ghost !py-2 !px-3 !text-xs whitespace-nowrap">
+          <button onClick={clearFilters} className="btn-ghost whitespace-nowrap">
             Clear
           </button>
         )}
@@ -310,7 +311,7 @@ export default function InventoryPage() {
         /* ---------------- movement journal — grouped by date, one table per movement ---------------- */
         filteredMoves.length === 0 ? (
           <EmptyState
-            emoji="📦"
+            icon={<Package />}
             title={movementVariant ? "No movements for this variant" : "No movements yet"}
             hint={movementVariant ? undefined : "Every purchase receipt and sale appears here automatically — it is a view of the ledger, not a second set of records."}
             action={movementVariant ? <button className="btn-primary" onClick={() => setMovementVariant(null)}>Show all movements</button> : undefined}
@@ -318,11 +319,11 @@ export default function InventoryPage() {
         ) : (
           <div className="space-y-6">
             {movementVariant && (
-              <div className="border border-neutral-200 px-4 py-2.5 flex items-center justify-between gap-3 bg-neutral-50/50">
-                <span className="text-xs font-medium text-black">
+              <div className="border border-[#E5E5E5] px-4 py-2.5 flex items-center justify-between gap-3 bg-[#F8F8F7]/50">
+                <span className="text-xs font-medium text-[#171717]">
                   Showing movements of one variant
                 </span>
-                <button onClick={() => setMovementVariant(null)} className="text-xs font-medium text-black hover:opacity-60">
+                <button onClick={() => setMovementVariant(null)} className="text-xs font-medium text-[#171717] hover:opacity-60">
                   Clear
                 </button>
               </div>
@@ -331,8 +332,8 @@ export default function InventoryPage() {
               <div key={date}>
                 {/* date group header */}
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="text-sm font-bold text-black">{fmtDate(date)}</span>
-                  <div className="flex-1 border-b border-neutral-200" />
+                  <span className="text-sm font-bold text-[#171717]">{fmtDate(date)}</span>
+                  <div className="flex-1 border-b border-[#E5E5E5]" />
                 </div>
 
                 {/* one table per movement */}
@@ -348,8 +349,8 @@ export default function InventoryPage() {
                     const refLabel = isIn ? (m.refLabel || "Purchase") : (m.refLabel || "Sale");
                     const refLink = m.purchaseId ? `/purchases/${m.purchaseId}` : m.saleId ? `/sales/${m.saleId}` : null;
                     return (
-                      <div key={m.id} className="hidden md:block border border-neutral-200 bg-white">
-                        <div className="grid grid-cols-[84px_minmax(0,2fr)_98px_minmax(0,1fr)_94px] gap-2 px-3 lg:grid-cols-[100px_minmax(0,2fr)_110px_minmax(0,1fr)_110px] lg:gap-3 lg:px-4 py-2 text-[11px] uppercase tracking-widest text-black font-medium border-b border-neutral-200">
+                      <div key={m.id} className="hidden md:block border border-[#E5E5E5] bg-white">
+                        <div className="grid grid-cols-[84px_minmax(0,2fr)_98px_minmax(0,1fr)_94px] gap-2 px-3 lg:grid-cols-[100px_minmax(0,2fr)_110px_minmax(0,1fr)_110px] lg:gap-3 lg:px-4 py-2 text-xs uppercase tracking-wide text-[#171717] font-medium border-b border-[#E5E5E5]">
                           <span>Type</span>
                           <span>Product</span>
                           <span className="text-right">Quantity</span>
@@ -358,30 +359,30 @@ export default function InventoryPage() {
                         </div>
                         <div className="grid grid-cols-[84px_minmax(0,2fr)_98px_minmax(0,1fr)_94px] gap-2 px-3 lg:grid-cols-[100px_minmax(0,2fr)_110px_minmax(0,1fr)_110px] lg:gap-3 lg:px-4 py-3">
                           <span className="self-center">
-                            <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded border ${isIn ? "text-black bg-neutral-100 border-neutral-200" : "text-[#a12b1f] bg-[#fdf1ef] border-[#f0d2cc]"}`}>
+                            <span className={`text-xs uppercase tracking-wide font-semibold px-2 py-0.5 rounded border ${isIn ? "text-[#171717] bg-[#E5E5E5] border-[#E5E5E5]" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
                               {isIn ? "Purchase" : "Sale"}
                             </span>
                           </span>
                           <div className="min-w-0 self-center">
-                            <span className="block font-medium text-xs text-black truncate">{prodName ?? "—"}</span>
-                            {cat && <span className="block text-[11px] text-black truncate">{cat.name}</span>}
+                            <span className="block font-medium text-xs text-[#171717] truncate">{prodName ?? "—"}</span>
+                            {cat && <span className="block text-xs text-[#171717] truncate">{cat.name}</span>}
                             {attrs.map((a, i) => (
-                              <span key={i} className="block text-[11px] text-black truncate">
+                              <span key={i} className="block text-xs text-[#171717] truncate">
                                 {a.label}: {a.value}
                               </span>
                             ))}
                           </div>
-                          <span className={`text-right text-xs font-semibold tabular-nums self-center ${m.qty > 0 ? "text-black" : "text-[#a12b1f]"}`}>
+                          <span className={`text-right text-xs font-semibold tabular-nums self-center ${m.qty > 0 ? "text-[#171717]" : "text-destructive"}`}>
                             {m.qty > 0 ? "+" : "−"}{fmtQtyWithUnit(Math.abs(m.qty), m.unit)}
                           </span>
                           <span className="text-xs self-center">
                             {refLink ? (
-                              <BusinessLink href={refLink} className="font-medium text-black underline underline-offset-2 hover:opacity-60">{refLabel}</BusinessLink>
+                              <BusinessLink href={refLink} className="font-medium text-[#171717] underline underline-offset-2 hover:opacity-60">{refLabel}</BusinessLink>
                             ) : (
-                              <span className="text-black">{refLabel}</span>
+                              <span className="text-[#171717]">{refLabel}</span>
                             )}
                           </span>
-                          <span className="text-right text-xs font-medium tabular-nums text-black self-center">
+                          <span className="text-right text-xs font-medium tabular-nums text-[#171717] self-center">
                             {fmtQtyWithUnit(m.after, m.unit)}
                           </span>
                         </div>
@@ -403,31 +404,31 @@ export default function InventoryPage() {
                     const refLabel = isIn ? (m.refLabel || "Purchase") : (m.refLabel || "Sale");
                     const refLink = m.purchaseId ? `/purchases/${m.purchaseId}` : m.saleId ? `/sales/${m.saleId}` : null;
                     return (
-                      <div key={m.id} className="border border-neutral-200 bg-white px-3 py-3">
+                      <div key={m.id} className="border border-[#E5E5E5] bg-white px-3 py-3">
                         <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded border ${isIn ? "text-black bg-neutral-100 border-neutral-200" : "text-[#a12b1f] bg-[#fdf1ef] border-[#f0d2cc]"}`}>
+                          <span className={`text-xs uppercase tracking-wide font-semibold px-2 py-0.5 rounded border ${isIn ? "text-[#171717] bg-[#E5E5E5] border-[#E5E5E5]" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
                             {isIn ? "Purchase" : "Sale"}
                           </span>
-                          <span className="text-[11px] tabular-nums text-black">Stock after: {fmtQtyWithUnit(m.after, m.unit)}</span>
+                          <span className="text-xs tabular-nums text-[#171717]">Stock after: {fmtQtyWithUnit(m.after, m.unit)}</span>
                         </div>
                         <div className="min-w-0 mt-1.5">
-                          <span className="block font-medium text-xs text-black truncate">{prodName ?? "—"}</span>
-                          {cat && <span className="block text-[11px] text-black truncate">{cat.name}</span>}
+                          <span className="block font-medium text-xs text-[#171717] truncate">{prodName ?? "—"}</span>
+                          {cat && <span className="block text-xs text-[#171717] truncate">{cat.name}</span>}
                           {attrs.map((a, i) => (
-                            <span key={i} className="block text-[11px] text-black truncate">
+                            <span key={i} className="block text-xs text-[#171717] truncate">
                               {a.label}: {a.value}
                             </span>
                           ))}
                         </div>
                         <div className="flex items-center justify-between gap-3 mt-2">
-                          <span className={`text-sm font-semibold tabular-nums ${m.qty > 0 ? "text-black" : "text-[#a12b1f]"}`}>
+                          <span className={`text-sm font-semibold tabular-nums ${m.qty > 0 ? "text-[#171717]" : "text-destructive"}`}>
                             {m.qty > 0 ? "+" : "−"}{fmtQtyWithUnit(Math.abs(m.qty), m.unit)}
                           </span>
                           <div className="text-xs">
                             {refLink ? (
-                              <BusinessLink href={refLink} className="font-medium text-black underline underline-offset-2">{refLabel}</BusinessLink>
+                              <BusinessLink href={refLink} className="font-medium text-[#171717] underline underline-offset-2">{refLabel}</BusinessLink>
                             ) : (
-                              <span className="text-black">{refLabel}</span>
+                              <span className="text-[#171717]">{refLabel}</span>
                             )}
                           </div>
                         </div>
@@ -444,17 +445,17 @@ export default function InventoryPage() {
         <>
           {/* top summary — variants count + per-product totals (never one mixed-unit total) */}
           {filtered.length > 0 && (
-            <div className="border border-neutral-200 bg-white p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="border border-[#E5E5E5] bg-white rounded-xl p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <span className="block text-[11px] uppercase tracking-widest text-black font-medium">In-stock variants</span>
-                <span className="block text-2xl font-bold tabular-nums text-black mt-1">{inStockCount}</span>
+                <span className="block text-xs uppercase tracking-wide text-[#171717]/60">In-stock variants</span>
+                <span className="block text-xl font-semibold tabular-nums text-[#171717] mt-1">{inStockCount}</span>
               </div>
               <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
                 {groups.map((g) => (
                   <div key={g.product}>
-                    <span className="block text-[11px] uppercase tracking-widest text-black font-medium">{g.product}</span>
-                    <span className="block text-sm font-bold tabular-nums text-black mt-0.5">{fmtQtyWithUnit(g.qty, g.unit)}</span>
-                    <span className="block text-[11px] text-black tabular-nums">{fmtMoney(g.value)}</span>
+                    <span className="block text-xs uppercase tracking-wide text-[#171717]/60">{g.product}</span>
+                    <span className="block text-sm font-semibold tabular-nums text-[#171717] mt-0.5">{fmtQtyWithUnit(g.qty, g.unit)}</span>
+                    <span className="block text-[13px] text-[#171717]/70 tabular-nums">{fmtMoney(g.value)}</span>
                   </div>
                 ))}
               </div>
@@ -462,18 +463,18 @@ export default function InventoryPage() {
           )}
 
           {inventoryByVariant.length === 0 ? (
-            <EmptyState
-              emoji="🏷️"
-              title="No stock yet"
-              hint="Inventory builds itself as you record purchases and sales."
-              action={<BusinessLink href="/purchases" className="btn-primary">+ Add Purchase</BusinessLink>}
+          <EmptyState
+            icon={<Tag />}
+            title="No stock yet"
+            hint="Inventory builds itself as you record purchases and sales."
+            action={<BusinessLink href="/purchases" className="btn-primary">+ Add Purchase</BusinessLink>}
             />
           ) : filtered.length === 0 ? (
-            <EmptyState
-              emoji="🔍"
-              title="No variants match"
-              hint="Try a different search term or clear the filters."
-              action={<button className="btn-primary" onClick={clearFilters}>Clear filters</button>}
+          <EmptyState
+            icon={<Search />}
+            title="No variants match"
+            hint="Try a different search term or clear the filters."
+            action={<button className="btn-primary" onClick={clearFilters}>Clear filters</button>}
             />
           ) : (
             <div className="space-y-6">
@@ -481,16 +482,16 @@ export default function InventoryPage() {
                 <div key={g.product}>
                   {/* product group header */}
                   <div className="flex items-center gap-3 mb-2">
-                    <span className="text-sm font-bold text-black">{g.product}</span>
-                    <span className="text-xs font-medium text-black">{g.rows.length} variant{g.rows.length > 1 ? "s" : ""}</span>
-                    <div className="flex-1 border-b border-neutral-200" />
-                    <span className="text-sm font-bold text-black tabular-nums">{fmtQtyWithUnit(g.qty, g.unit)}</span>
-                    <span className="text-xs font-bold text-black tabular-nums">{fmtMoney(g.value)}</span>
+                    <span className="text-sm font-semibold text-[#171717]">{g.product}</span>
+                    <span className="text-[13px] text-[#171717]/70">{g.rows.length} variant{g.rows.length > 1 ? "s" : ""}</span>
+                    <div className="flex-1 border-b border-[#E5E5E5]" />
+                    <span className="text-sm font-semibold tabular-nums text-[#171717]">{fmtQtyWithUnit(g.qty, g.unit)}</span>
+                    <span className="text-[13px] text-[#171717]/70 tabular-nums">{fmtMoney(g.value)}</span>
                   </div>
 
-                  <div className="border border-neutral-200 bg-white">
+                  <div className="border border-[#E5E5E5] bg-white rounded-xl">
                     {/* desktop header */}
-                    <div className="hidden sm:grid grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 px-3 md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4 py-2 text-[11px] uppercase tracking-widest text-black font-medium border-b border-neutral-200">
+                    <div className="hidden sm:grid grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 px-3 md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4 py-2 text-xs uppercase tracking-wide font-medium text-[#171717]/60 border-b border-[#E5E5E5] bg-[#FAFAF9]">
                       <span>Product</span>
                       <span className="text-right">Available Stock</span>
                       <span className="text-right">Stock Value</span>
@@ -508,6 +509,7 @@ export default function InventoryPage() {
                             { label: "View lots", onClick: () => setDetail(r) },
                             { label: "View movements", onClick: () => { setTab("movements"); setMovementVariant(r.variantId); } },
                           ]}
+                          buttonClassName="h-10 w-10"
                         />
                       );
                       return (
@@ -515,50 +517,51 @@ export default function InventoryPage() {
                           {/* desktop row */}
                           <div
                             onClick={() => setDetail(r)}
-                            className="hidden sm:grid grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 px-3 md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors"
+                            className="hidden sm:grid grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 px-3 md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4 py-3 border-b border-[#E5E5E5] last:border-b-0 cursor-pointer hover:bg-[#F8F8F7] transition-colors"
                           >
                             {/* variant identity: category header + every attribute, dynamic */}
                             <div className="min-w-0">
                               {r.category ? (
-                                <span className="block font-medium text-xs text-black truncate">{r.category}</span>
+                                <span className="block text-sm font-medium text-[#171717] truncate">{r.category}</span>
                               ) : attrs.length === 0 ? (
-                                <span className="block font-medium text-xs text-black truncate">{r.shortName}</span>
+                                <span className="block text-sm font-medium text-[#171717] truncate">{r.shortName}</span>
                               ) : null}
                               {attrs.map((a, i) => (
-                                <span key={i} className="block text-[11px] text-black truncate">
+                                <span key={i} className="block text-[13px] text-[#171717]/70 truncate">
                                   {a.label ? `${a.label}: ${a.value}` : a.value}
                                 </span>
                               ))}
                             </div>
                             <div className="self-center text-right">
-                              <span className={`block font-semibold text-[13px] tabular-nums ${st === "out" ? "text-[#a12b1f]" : "text-black"}`}>
+                              <span className={`block font-semibold text-sm tabular-nums ${st === "out" ? "text-destructive" : "text-[#171717]"}`}>
                                 {fmtQtyWithUnit(r.stockQty, r.unit)}
                               </span>
-                              <span className={`block text-[11px] ${st === "in" ? "text-black" : "text-[#a12b1f]"}`}>
-                                ● {STATUS_LABEL[st]}
+                              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${st === "in" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+                                <span className={`inline-block w-1 h-1 rounded-full ${st === "in" ? "bg-success" : "bg-destructive"}`} />
+                                {STATUS_LABEL[st]}
                               </span>
                             </div>
-                            <span className="self-center text-right text-xs font-medium tabular-nums text-black">
+                            <span className="self-center text-right text-xs font-medium tabular-nums text-[#171717]">
                               {st === "out" ? "—" : fmtMoney(r.stockValue)}
                             </span>
-                            <span className="self-center text-right text-xs tabular-nums text-black">{lots.length}</span>
+                            <span className="self-center text-right text-xs tabular-nums text-[#171717]">{lots.length}</span>
                             <span className="self-center flex justify-end">{menu}</span>
                           </div>
 
                           {/* mobile card */}
                           <div
                             onClick={() => setDetail(r)}
-                            className="sm:hidden px-3 py-3 border-b border-neutral-100 last:border-b-0 cursor-pointer active:bg-neutral-50"
+                            className="sm:hidden px-4 py-4 border-b border-[#E5E5E5] last:border-b-0 cursor-pointer active:bg-[#F8F8F7]"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 {r.category ? (
-                                  <span className="block font-medium text-xs text-black truncate">{r.category}</span>
+                                  <span className="block text-sm font-medium text-[#171717] truncate">{r.category}</span>
                                 ) : attrs.length === 0 ? (
-                                  <span className="block font-medium text-xs text-black truncate">{r.shortName}</span>
+                                  <span className="block text-sm font-medium text-[#171717] truncate">{r.shortName}</span>
                                 ) : null}
                                 {attrs.map((a, i) => (
-                                  <span key={i} className="block text-[11px] text-black truncate">
+                                  <span key={i} className="block text-[13px] text-[#171717]/70 truncate">
                                     {a.label ? `${a.label}: ${a.value}` : a.value}
                                   </span>
                                 ))}
@@ -567,19 +570,20 @@ export default function InventoryPage() {
                             </div>
                             <div className="flex items-end justify-between gap-3 mt-2.5">
                               <div>
-                                <span className={`block font-semibold text-sm tabular-nums ${st === "out" ? "text-[#a12b1f]" : "text-black"}`}>
+                                <span className={`block font-semibold text-sm tabular-nums ${st === "out" ? "text-destructive" : "text-[#171717]"}`}>
                                   {fmtQtyWithUnit(r.stockQty, r.unit)}
                                 </span>
-                                <span className={`block text-[11px] ${st === "in" ? "text-black" : "text-[#a12b1f]"}`}>
-                                  ● {STATUS_LABEL[st]}
+                                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${st === "in" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+                                  <span className={`inline-block w-1 h-1 rounded-full ${st === "in" ? "bg-success" : "bg-destructive"}`} />
+                                  {STATUS_LABEL[st]}
                                 </span>
                               </div>
                               <div className="text-right">
-                                <span className="block text-[11px] uppercase tracking-widest font-medium text-black">Stock Value</span>
-                                <span className="block text-xs font-medium tabular-nums text-black">
+                                <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Stock Value</span>
+                                <span className="block text-xs font-medium tabular-nums text-[#171717]">
                                   {st === "out" ? "—" : fmtMoney(r.stockValue)}
                                 </span>
-                                <span className="block text-[11px] tabular-nums text-black mt-0.5">{lots.length} lot{lots.length === 1 ? "" : "s"}</span>
+                                <span className="block text-xs tabular-nums text-[#171717] mt-0.5">{lots.length} lot{lots.length === 1 ? "" : "s"}</span>
                               </div>
                             </div>
                           </div>
@@ -610,59 +614,59 @@ export default function InventoryPage() {
           return (
             <div>
               {/* identity */}
-              <div className="border border-neutral-200 mb-4">
-                <div className="px-4 py-3 border-b border-neutral-200">
+              <div className="border border-[#E5E5E5] mb-4">
+                <div className="px-4 py-3 border-b border-[#E5E5E5]">
                   {attrs.length > 0 ? (
                     attrs.map((a, i) => (
-                      <span key={i} className="block text-xs text-black">
+                      <span key={i} className="block text-xs text-[#171717]">
                         {a.label ? `${a.label}: ${a.value}` : a.value}
                       </span>
                     ))
                   ) : (
-                    <span className="block text-xs text-black">{r.shortName}</span>
+                    <span className="block text-xs text-[#171717]">{r.shortName}</span>
                   )}
                 </div>
                 <div className="flex justify-between items-center px-4 py-3">
-                  <span className="text-xs uppercase tracking-widest font-medium text-black">Available Stock</span>
+                  <span className="text-xs uppercase tracking-wide font-medium text-[#171717]">Available Stock</span>
                   <span className="flex items-baseline gap-3">
-                    <span className="text-xl font-bold tabular-nums text-black">{fmtQtyWithUnit(r.stockQty, r.unit)}</span>
-                    <span className={`text-[11px] ${st === "in" ? "text-black" : "text-[#a12b1f]"}`}>● {STATUS_LABEL[st]}</span>
+                    <span className="text-xl font-bold tabular-nums text-[#171717]">{fmtQtyWithUnit(r.stockQty, r.unit)}</span>
+                    <span className={`text-xs ${st === "in" ? "text-[#171717]" : "text-destructive"}`}>● {STATUS_LABEL[st]}</span>
                   </span>
                 </div>
-                <div className="flex justify-between items-center px-4 py-3 border-t border-neutral-200">
-                  <span className="text-xs uppercase tracking-widest font-medium text-black">Lots</span>
-                  <span className="text-xs font-bold tabular-nums text-black">{lots.length} active lot{lots.length === 1 ? "" : "s"}</span>
+                <div className="flex justify-between items-center px-4 py-3 border-t border-[#E5E5E5]">
+                  <span className="text-xs uppercase tracking-wide font-medium text-[#171717]">Lots</span>
+                  <span className="text-xs font-bold tabular-nums text-[#171717]">{lots.length} active lot{lots.length === 1 ? "" : "s"}</span>
                 </div>
               </div>
 
               {/* lots */}
-              <p className="text-[11px] uppercase tracking-widest font-medium text-black mb-2">Lots</p>
-              <div className="border border-neutral-200 mb-4">
+              <p className="text-xs uppercase tracking-wide font-medium text-[#171717] mb-2">Lots</p>
+              <div className="border border-[#E5E5E5] mb-4">
                 {lots.length === 0 ? (
-                  <p className="px-4 py-3 text-xs text-black">No stock left — all lots of this variant are sold.</p>
+                  <p className="px-4 py-3 text-xs text-[#171717]">No stock left — all lots of this variant are sold.</p>
                 ) : (
                   lots.map((l) => {
                     const purchased = purchases
                       .filter((p) => purchaseParentId(p) === l.purchaseId)
                       .reduce((sum, p) => sum + p.qty, 0);
                     return (
-                      <div key={l.purchaseId} className="px-4 py-3 border-b border-neutral-100 last:border-b-0">
+                      <div key={l.purchaseId} className="px-4 py-3 border-b border-[#E5E5E5] last:border-b-0">
                         <div className="flex justify-between items-center gap-3">
-                          <span className="text-xs font-bold text-black font-mono">
+                          <span className="text-xs font-bold text-[#171717] font-mono">
                             {l.lotNumber || l.heatNumber || l.batchNumber || "Lot"}
                           </span>
-                          <span className="text-xs font-medium tabular-nums text-black">{fmtQtyWithUnit(l.remainingQty, l.unit)} left</span>
+                          <span className="text-xs font-medium tabular-nums text-[#171717]">{fmtQtyWithUnit(l.remainingQty, l.unit)} left</span>
                         </div>
-                        <div className="flex justify-between items-center gap-3 mt-1 text-[11px] text-black">
+                        <div className="flex justify-between items-center gap-3 mt-1 text-xs text-[#171717]">
                           <span>Supplier: {l.supplierName}</span>
                           <span>{fmtDate(l.purchasedAt)}</span>
                         </div>
-                        <div className="flex justify-between items-center gap-3 mt-0.5 text-[11px] text-black">
+                        <div className="flex justify-between items-center gap-3 mt-0.5 text-xs text-[#171717]">
                           <span>{purchased !== undefined ? `Purchased: ${fmtQtyWithUnit(purchased, l.unit)}` : "—"}</span>
                           <span>Landed: {fmtRateWithUnit(l.landedPerUnit)}</span>
                         </div>
                         {(l.warehouseId || l.locationId) && (
-                          <p className="text-[11px] text-black mt-0.5">
+                          <p className="text-xs text-[#171717] mt-0.5">
                             {[whName(l.warehouseId), locName(l.locationId)].filter(Boolean).join(" / ")}
                           </p>
                         )}
@@ -673,18 +677,18 @@ export default function InventoryPage() {
               </div>
 
               {/* recent movements */}
-              <p className="text-[11px] uppercase tracking-widest font-medium text-black mb-2">Recent Movements</p>
-              <div className="border border-neutral-200">
+              <p className="text-xs uppercase tracking-wide font-medium text-[#171717] mb-2">Recent Movements</p>
+              <div className="border border-[#E5E5E5]">
                 {moves.length === 0 ? (
-                  <p className="px-4 py-3 text-xs text-black">No movements recorded yet.</p>
+                  <p className="px-4 py-3 text-xs text-[#171717]">No movements recorded yet.</p>
                 ) : (
                   moves.map((m) => (
-                    <div key={m.id} className="flex justify-between items-center gap-3 px-4 py-2.5 border-b border-neutral-100 last:border-b-0">
-                      <span className={`text-sm font-semibold tabular-nums ${m.qty > 0 ? "text-black" : "text-[#a12b1f]"}`}>
+                    <div key={m.id} className="flex justify-between items-center gap-3 px-4 py-2.5 border-b border-[#E5E5E5] last:border-b-0">
+                      <span className={`text-sm font-semibold tabular-nums ${m.qty > 0 ? "text-[#171717]" : "text-destructive"}`}>
                         {m.qty > 0 ? "+" : "−"}{fmtQtyWithUnit(Math.abs(m.qty), m.unit)}
                       </span>
-                      <span className="text-xs text-black">{m.type === "PURCHASE_RECEIPT" ? "Purchase" : m.type === "SALE" ? "Sale" : m.type}</span>
-                      <span className="text-xs text-black tabular-nums">{fmtDate(m.date)}</span>
+                      <span className="text-xs text-[#171717]">{m.type === "PURCHASE_RECEIPT" ? "Purchase" : m.type === "SALE" ? "Sale" : m.type}</span>
+                      <span className="text-xs text-[#171717] tabular-nums">{fmtDate(m.date)}</span>
                     </div>
                   ))
                 )}

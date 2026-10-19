@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useDeferredValue, useState, useMemo } from "react";
 import { saleGrandTotal, useStore } from "@/lib/store";
 import { useBusinessHref } from "@/components/BusinessLink";
 import { Skeleton } from "@/components/skeletons";
@@ -15,6 +15,8 @@ type AttrRow = { label: string; value: string };
 
 type SaleRow = {
   id: string;
+  /** Sale date (ISO yyyy-mm-dd), used for grouping and the date filter. */
+  date: string;
   invoiceNo: string;
   customerName: string;
   customerPhone: string;
@@ -132,8 +134,10 @@ export default function SalesTable({
   });
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Typing stays responsive: the list filters on a deferred copy of the search text.
+  const deferredSearch = useDeferredValue(search);
   const hasFilters =
-    search.trim() !== "" || statusFilter !== "all" || !!(dateRange.from || dateRange.to);
+    deferredSearch.trim() !== "" || statusFilter !== "all" || !!(dateRange.from || dateRange.to);
   // When a filter is active, filter across the full ledger (allSales) instead of the current server page,
   // and hide server pagination. When no filter is active, keep the server page and its PaginationBar.
   const displaySales = (hasFilters ? allSales : sales) ?? sales;
@@ -148,13 +152,15 @@ export default function SalesTable({
     resetPage();
   };
 
+  const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
+
   const rows: SaleRow[] = useMemo(
     () =>
       displaySales.map((s) => {
         const total = saleGrandTotal(s);
         const paid = salePaid(s.id);
         const due = Math.max(0, total - paid);
-        const cust = customers.find((c) => c.id === s.customerId);
+        const cust = customerById.get(s.customerId);
         const items = s.lines.map((l) => ({
           product: productOfLine(l) || l.item,
           category: categoryNameOf(l),
@@ -171,6 +177,7 @@ export default function SalesTable({
           .toLowerCase();
         return {
           id: s.id,
+          date: s.date,
           invoiceNo: s.invoiceNo,
           customerName: customerName(s.customerId),
           customerPhone: cust?.phone ?? "",
@@ -183,19 +190,15 @@ export default function SalesTable({
           due,
         };
       }),
-    [displaySales, customers, customerName, productOfLine, categoryNameOf, attrRowsOf, salePaid]
+    [displaySales, customerById, customerName, productOfLine, categoryNameOf, attrRowsOf, salePaid]
   );
 
   const groups = useMemo(() => {
-    const q = search.toLowerCase().trim();
+    const q = deferredSearch.toLowerCase().trim();
     const filtered = rows
       .filter((r) => {
         if (q && !r.searchHay.includes(q)) return false;
-        if (dateRange.from || dateRange.to) {
-          const s = displaySales.find((x) => x.id === r.id);
-          if (!s) return false;
-          if (!dateInIsoRange(s.date, dateRange)) return false;
-        }
+        if ((dateRange.from || dateRange.to) && !dateInIsoRange(r.date, dateRange)) return false;
         if (statusFilter !== "all") {
           if (statusFilter === "due" && r.due <= 0.001) return false;
           if (statusFilter === "paid" && (r.paid <= 0.001 || r.due > 0.001)) return false;
@@ -207,10 +210,9 @@ export default function SalesTable({
 
     const map = new Map<string, SaleRow[]>();
     for (const r of filtered) {
-      const s = displaySales.find((x) => x.id === r.id)!;
-      const list = map.get(s.date) ?? [];
+      const list = map.get(r.date) ?? [];
       list.push(r);
-      map.set(s.date, list);
+      map.set(r.date, list);
     }
     return Array.from(map.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
@@ -219,7 +221,7 @@ export default function SalesTable({
         sales: list,
         dayTotal: list.reduce((a, r) => a.plus(toDecimal(r.total)), new Decimal(0)).toNumber(),
       }));
-  }, [rows, displaySales, search, statusFilter, dateRange]);
+  }, [rows, deferredSearch, statusFilter, dateRange]);
 
   const totalDue = groups.reduce((a, g) => a.plus(toDecimal(g.sales.reduce((b, r) => b.plus(toDecimal(r.due)), new Decimal(0)).toNumber())), new Decimal(0)).toNumber();
   const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
@@ -235,17 +237,144 @@ export default function SalesTable({
     <div className="space-y-2">
       {s.items.map((it, i) => (
         <div key={i}>
-          <span className="block font-semibold text-[11px] text-black truncate">{it.product}</span>
-          {it.category && <span className="block text-[11px] text-black/60 truncate">{it.category}</span>}
+          <span className="block text-sm font-medium text-[#171717] truncate">{it.product}</span>
+          {it.category && <span className="block text-[13px] text-[#171717]/70 truncate">{it.category}</span>}
           {it.attrs.map((a, j) => (
-            <span key={j} className="block text-[11px] text-black/60 truncate">
+            <span key={j} className="block text-[13px] text-[#171717]/70 truncate">
               {a.label}: {a.value}
             </span>
           ))}
-          <span className="block text-[11px] font-medium text-black tabular-nums">{it.qtyText}</span>
+          <span className="block text-[13px] font-medium text-[#171717] tabular-nums">{it.qtyText}</span>
         </div>
       ))}
     </div>
+  );
+
+  // Same element while the list is unchanged, so keystrokes do not re-render every row.
+  const resultsNode = useMemo(
+    () => (
+      <>
+          {!listReady ? (
+            <div className="panel bg-white overflow-hidden" role="status" aria-label="Loading all sales">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-4 px-4 py-3.5 border-b border-[#E5E5E5] last:border-0"
+                >
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 flex-1 max-w-[180px]" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              ))}
+            </div>
+          ) : groups.length === 0 ? (
+            <EmptyState
+              emoji="🔍"
+              title="No sales match your filters"
+              hint="Try adjusting the search, status or date to find what you're looking for."
+              action={<button onClick={handleClear} className="btn-primary">Clear filters</button>}
+            />
+          ) : (
+            <div className="space-y-8">
+              {groups.map((g) => (
+                <div key={g.date}>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
+                    <span className="text-sm font-bold text-black">{fmtDate(g.date)}</span>
+                    <span className="text-[13px] text-[#171717]/70 tabular-nums">
+                      {g.sales.length} sale{g.sales.length === 1 ? "" : "s"} · {fmtMoney(g.dayTotal)}
+                    </span>
+                    <div className="flex-1 min-w-[2rem] border-b border-[#E5E5E5]" />
+                  </div>
+
+                  <div className="md:overflow-hidden md:rounded-xl md:border md:border-[#E5E5E5] md:bg-white">
+                    <div
+                      className={`${SALE_GRID} hidden py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs font-medium uppercase tracking-wide text-[#171717]/60 md:grid md:items-center`}
+                    >
+                      <span>Customer</span>
+                      <span>Items</span>
+                      <span className="text-right">Time</span>
+                      <span className="text-right">Total</span>
+                      <span className="text-right">Paid</span>
+                      <span className="text-right">Due</span>
+                      <span className="sr-only">Actions</span>
+                    </div>
+
+                    <div className="hidden flex-col divide-y divide-[#E5E5E5] md:flex">
+                      {g.sales.map((s) => (
+                        <div
+                          key={s.id}
+                          onClick={() => onView(s.id)}
+                          className="cursor-pointer transition-colors hover:bg-[#F8F8F7]"
+                        >
+                          <div className={`${SALE_GRID} items-start py-3.5`}>
+                            <span className="min-w-0 self-start text-sm font-medium text-[#171717] truncate">
+                              {s.customerName}
+                            </span>
+                            <div className="min-w-0 self-start">{itemsBlock(s)}</div>
+                            <span className="self-start text-right text-sm text-[#171717]/70 tabular-nums whitespace-nowrap">
+                              {s.time}
+                            </span>
+                            <span className="self-start text-right text-sm font-medium text-[#171717] tabular-nums">
+                              {fmtMoney(s.total)}
+                            </span>
+                            <span className="self-start text-right text-sm text-[#171717] tabular-nums">{fmtMoney(s.paid)}</span>
+                            <span
+                              className={`self-start text-right text-sm font-semibold tabular-nums ${s.due > 0 ? "text-destructive" : "text-[#171717]"}`}
+                            >
+                              {s.due > 0 ? fmtMoney(s.due) : "-"}
+                            </span>
+                            <span className="self-start flex justify-end" onClick={(e) => e.stopPropagation()}>
+                              <RowActionsMenu items={menuItems(s)} />
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col gap-3 md:hidden">
+                      {g.sales.map((s) => (
+                        <div
+                          key={s.id}
+                          onClick={() => onView(s.id)}
+                          className="cursor-pointer rounded-xl border border-[#E5E5E5] bg-white p-4 active:bg-[#F8F8F7]"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="min-w-0 font-semibold text-sm text-black truncate">{s.customerName}</span>
+                            <span className="flex items-center gap-1 shrink-0">
+                              <span className="text-xs text-black tabular-nums">{s.time}</span>
+                              <RowActionsMenu items={menuItems(s)} />
+                            </span>
+                          </div>
+                          <div className="mt-2 mb-2">{itemsBlock(s)}</div>
+                          <div className="grid grid-cols-3 gap-2 border-t border-[#E5E5E5] pt-3">
+                            <div>
+                              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Total</span>
+                              <span className="block font-medium tabular-nums text-sm text-black">{fmtMoney(s.total)}</span>
+                            </div>
+                            <div>
+                              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Paid</span>
+                              <span className="block tabular-nums text-sm text-black">{fmtMoney(s.paid)}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Due</span>
+                              <span className={`block tabular-nums text-sm font-semibold ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}>
+                                {s.due > 0 ? fmtMoney(s.due) : "-"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+      </>
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuilt when the shown rows or handlers change
+    [groups, listReady, onView, onReceive, onNewSale, businessHref],
   );
 
   if (error) {
@@ -269,7 +398,7 @@ export default function SalesTable({
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="flex items-center gap-4 px-4 py-3.5 border-b border-neutral-100 last:border-0"
+            className="flex items-center gap-4 px-4 py-3.5 border-b border-[#E5E5E5] last:border-0"
           >
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-4 flex-1 max-w-[180px]" />
@@ -309,13 +438,13 @@ export default function SalesTable({
             aria-label="Search customer or product"
             value={search}
             onChange={(e) => { setSearch(e.target.value); resetPage(); }}
-            className="!w-full !pl-9 !text-xs !py-2"
+            className="!w-full !pl-9"
           />
         </div>
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value as Status); resetPage(); }}
-          className="!w-auto !text-xs"
+          className="!w-auto"
           aria-label="Filter by payment status"
         >
           <option value="all">All sales</option>
@@ -331,23 +460,23 @@ export default function SalesTable({
           ariaLabel="Filter by date range"
         />
         {hasFilters && (
-          <button onClick={handleClear} className="btn-ghost !py-2 !px-3 !text-xs whitespace-nowrap">
+          <button onClick={handleClear} className="btn-ghost whitespace-nowrap">
             Clear
           </button>
         )}
       </div>
 
       {/* ── summary: invoice count + outstanding ── */}
-      <div className="border border-neutral-200 bg-white p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Sales</span>
+          <span className="block text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Sales</span>
           <span className="block text-2xl font-bold tabular-nums text-black mt-1">
             {filteredCount}
             {hasFilters && <span className="text-sm font-normal text-black/60"> / {catalogTotal}</span>}
           </span>
         </div>
         <div className="text-right">
-          <span className="block text-[11px] uppercase tracking-widest text-black font-medium">Outstanding</span>
+          <span className="block text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Outstanding</span>
           <span className={`block text-2xl font-bold tabular-nums mt-1 ${totalDue > 0 ? "text-[#a12b1f]" : "text-black"}`}>
             {fmtMoney(totalDue)}
           </span>
@@ -355,123 +484,7 @@ export default function SalesTable({
       </div>
 
       {/* ── results ── */}
-      {!listReady ? (
-        <div className="panel bg-white overflow-hidden" role="status" aria-label="Loading all sales">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-4 px-4 py-3.5 border-b border-neutral-100 last:border-0"
-            >
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 flex-1 max-w-[180px]" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-24" />
-            </div>
-          ))}
-        </div>
-      ) : groups.length === 0 ? (
-        <EmptyState
-          emoji="🔍"
-          title="No sales match your filters"
-          hint="Try adjusting the search, status or date to find what you're looking for."
-          action={<button onClick={handleClear} className="btn-primary">Clear filters</button>}
-        />
-      ) : (
-        <div className="space-y-8">
-          {groups.map((g) => (
-            <div key={g.date}>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
-                <span className="text-sm font-bold text-black">{fmtDate(g.date)}</span>
-                <span className="text-[11px] font-medium text-neutral-600 tabular-nums">
-                  {g.sales.length} sale{g.sales.length === 1 ? "" : "s"} · {fmtMoney(g.dayTotal)}
-                </span>
-                <div className="flex-1 min-w-[2rem] border-b border-neutral-200" />
-              </div>
-
-              <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
-                <div
-                  className={`${SALE_GRID} mb-3 hidden py-1 text-[10px] font-medium uppercase tracking-widest text-neutral-500 md:grid md:items-center`}
-                >
-                  <span>Customer</span>
-                  <span>Items</span>
-                  <span className="text-right">Time</span>
-                  <span className="text-right">Total</span>
-                  <span className="text-right">Paid</span>
-                  <span className="text-right">Due</span>
-                  <span className="sr-only">Actions</span>
-                </div>
-
-                <div className="hidden flex-col gap-3 md:flex">
-                  {g.sales.map((s) => (
-                    <div
-                      key={s.id}
-                      onClick={() => onView(s.id)}
-                      className="cursor-pointer overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow-md"
-                    >
-                      <div className={`${SALE_GRID} items-start py-3.5`}>
-                        <span className="min-w-0 self-start font-semibold text-xs text-black truncate">
-                          {s.customerName}
-                        </span>
-                        <div className="min-w-0 self-start">{itemsBlock(s)}</div>
-                        <span className="self-start text-right text-xs text-black tabular-nums whitespace-nowrap">
-                          {s.time}
-                        </span>
-                        <span className="self-start text-right font-medium text-xs text-black tabular-nums">
-                          {fmtMoney(s.total)}
-                        </span>
-                        <span className="self-start text-right text-xs text-black tabular-nums">{fmtMoney(s.paid)}</span>
-                        <span
-                          className={`self-start text-right font-semibold text-xs tabular-nums ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}
-                        >
-                          {s.due > 0 ? fmtMoney(s.due) : "-"}
-                        </span>
-                        <span className="self-start flex justify-end" onClick={(e) => e.stopPropagation()}>
-                          <RowActionsMenu items={menuItems(s)} />
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex flex-col gap-3 md:hidden">
-                  {g.sales.map((s) => (
-                    <div
-                      key={s.id}
-                      onClick={() => onView(s.id)}
-                      className="cursor-pointer rounded-xl border border-neutral-200 bg-white p-3.5 shadow-sm active:bg-neutral-50"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="min-w-0 font-semibold text-sm text-black truncate">{s.customerName}</span>
-                        <span className="flex items-center gap-1 shrink-0">
-                          <span className="text-xs text-black tabular-nums">{s.time}</span>
-                          <RowActionsMenu items={menuItems(s)} />
-                        </span>
-                      </div>
-                      <div className="mt-2 mb-2">{itemsBlock(s)}</div>
-                      <div className="grid grid-cols-3 gap-2 border-t border-neutral-100 pt-2">
-                        <div>
-                          <span className="block text-[10px] uppercase tracking-wide text-neutral-500">Total</span>
-                          <span className="block font-medium tabular-nums text-sm text-black">{fmtMoney(s.total)}</span>
-                        </div>
-                        <div>
-                          <span className="block text-[10px] uppercase tracking-wide text-neutral-500">Paid</span>
-                          <span className="block tabular-nums text-sm text-black">{fmtMoney(s.paid)}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="block text-[10px] uppercase tracking-wide text-neutral-500">Due</span>
-                          <span className={`block tabular-nums text-sm font-semibold ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}>
-                            {s.due > 0 ? fmtMoney(s.due) : "-"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {resultsNode}
 
       {!hasFilters && onPageChange && page != null && totalPages != null && listTotal != null && (
         <PaginationBar

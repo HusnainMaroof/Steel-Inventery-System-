@@ -36,7 +36,7 @@ export function BillingCycleBadge({
   const meta = billingCycleMeta(cycle);
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-0.5 text-[11px] font-medium text-[#171717]"
+      className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-0.5 text-xs font-medium text-[#171717]"
     >
       {meta.short}
       {cycle === "CUSTOM_DAYS" && durationDays ? ` · ${durationDays}d` : ""}
@@ -71,7 +71,7 @@ function BillingCyclePicker({
               <span className="text-[13px] font-semibold text-neutral-900">{meta.label}</span>
               <BillingCycleBadge cycle={cycle} />
             </span>
-            <span className="block text-[11px] text-neutral-500 mt-1.5 leading-snug">{meta.hint}</span>
+            <span className="block text-xs text-neutral-500 mt-1.5 leading-snug">{meta.hint}</span>
           </button>
         );
       })}
@@ -99,7 +99,7 @@ export function SubscriptionPlanTable({
                 ) : null}
               </div>
               <span
-                className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                   plan.active ? "bg-success/10 text-success" : "bg-[#E5E5E5] text-[#171717]/70"
                 }`}
               >
@@ -108,19 +108,19 @@ export function SubscriptionPlanTable({
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px]">
               <div>
-                <dt className="text-[10px] uppercase tracking-wider text-neutral-400">Billing</dt>
+                <dt className="text-xs uppercase tracking-wider text-neutral-400">Billing</dt>
                 <dd className="mt-1">
                   <BillingCycleBadge cycle={plan.billingCycle} durationDays={plan.durationDays} />
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-wider text-neutral-400">Price</dt>
+                <dt className="text-xs uppercase tracking-wider text-neutral-400">Price</dt>
                 <dd className="text-neutral-800 mt-0.5 tabular-nums">
                   {plan.price != null && plan.price !== "" ? plan.price : "—"}
                 </dd>
               </div>
               <div className="col-span-2">
-                <dt className="text-[10px] uppercase tracking-wider text-neutral-400">Modules</dt>
+                <dt className="text-xs uppercase tracking-wider text-neutral-400">Modules</dt>
                 <dd className="text-neutral-700 mt-0.5 leading-snug">{planPagesSummary(plan.allowedPages)}</dd>
               </div>
             </dl>
@@ -140,12 +140,12 @@ export function SubscriptionPlanTable({
           <table className="w-full min-w-[860px] text-left">
           <thead>
             <tr className="border-b border-neutral-100 bg-neutral-50/80">
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">Plan</th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">Billing</th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">Modules</th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">Price</th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500">Status</th>
-              <th className="px-4 py-2.5 text-[10px] uppercase tracking-[0.1em] font-medium text-neutral-500 text-right">Action</th>
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-neutral-500">Plan</th>
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-neutral-500">Billing</th>
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-neutral-500">Modules</th>
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-neutral-500">Price</th>
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-neutral-500">Status</th>
+              <th className="px-4 py-2.5 text-xs uppercase tracking-[0.1em] font-medium text-neutral-500 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100">
@@ -154,13 +154,13 @@ export function SubscriptionPlanTable({
                 <td className="px-4 py-3">
                   <p className="text-[13px] font-semibold text-neutral-900">{plan.label}</p>
                   {plan.description ? (
-                    <p className="text-[11px] text-neutral-500 mt-0.5">{plan.description}</p>
+                    <p className="text-xs text-neutral-500 mt-0.5">{plan.description}</p>
                   ) : null}
                 </td>
                 <td className="px-4 py-3">
                   <BillingCycleBadge cycle={plan.billingCycle} durationDays={plan.durationDays} />
                 </td>
-                <td className="px-4 py-3 text-[11px] text-neutral-600 max-w-xs">
+                <td className="px-4 py-3 text-xs text-neutral-600 max-w-xs">
                   {planPagesSummary(plan.allowedPages)}
                 </td>
                 <td className="px-4 py-3 text-[12px] tabular-nums text-neutral-700">
@@ -168,7 +168,7 @@ export function SubscriptionPlanTable({
                 </td>
                 <td className="px-4 py-3">
                   <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                       plan.active ? "bg-success/10 text-success" : "bg-[#E5E5E5] text-[#171717]/70"
                     }`}
                   >
@@ -278,7 +278,7 @@ export function SubscriptionPlanModal({
         </div>
         <div>
           <p className="text-sm font-medium mb-1">Billing type</p>
-          <p className="text-[11px] text-neutral-500 mb-3">
+          <p className="text-xs text-neutral-500 mb-3">
             One of four cycles — monthly, yearly, lifetime, or custom days.
           </p>
           <BillingCyclePicker value={billingCycle} onChange={setBillingCycle} />

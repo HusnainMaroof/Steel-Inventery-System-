@@ -71,7 +71,7 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
                   aria-hidden="true"
                 />
               </div>
-              <p className="text-[11px] text-[#171717]/70 mt-1.5 leading-snug">{item.desc}</p>
+              <p className="text-xs text-[#171717]/70 mt-1.5 leading-snug">{item.desc}</p>
             </Link>
           ))}
         </div>
@@ -123,7 +123,7 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
                 >
                   <div>
                     <p className="text-[13px] font-medium text-neutral-900">{plan.label}</p>
-                    <p className="text-[11px] text-neutral-500 mt-0.5">
+                    <p className="text-xs text-neutral-500 mt-0.5">
                       {plan.count} business{plan.count === 1 ? "" : "es"}
                     </p>
                   </div>
@@ -139,11 +139,11 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
             <h2 className="text-sm font-semibold mb-3">Catalog & plans</h2>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <dt className="text-neutral-500 text-[11px] uppercase tracking-wider">Templates</dt>
+                <dt className="text-neutral-500 text-xs uppercase tracking-wider">Templates</dt>
                 <dd className="font-semibold tabular-nums mt-0.5">{catalog.templates}</dd>
               </div>
               <div>
-                <dt className="text-neutral-500 text-[11px] uppercase tracking-wider">Active plans</dt>
+                <dt className="text-neutral-500 text-xs uppercase tracking-wider">Active plans</dt>
                 <dd className="font-semibold tabular-nums mt-0.5">
                   {catalog.activePlans}
                   <span className="text-neutral-400 font-normal text-xs"> / {catalog.totalPlans}</span>
@@ -199,7 +199,7 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-100">
           <div>
             <h2 className="text-sm font-semibold">Businesses on the platform</h2>
-            <p className="text-[11px] text-neutral-500 mt-0.5">
+            <p className="text-xs text-neutral-500 mt-0.5">
               Sorted by attention, then 30-day activity
             </p>
           </div>
@@ -226,13 +226,13 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
                       subscriptionStatus={row.subscriptionStatus}
                     />
                   </div>
-                  <p className="text-[11px] text-[#171717]/70 mt-2 tabular-nums">
+                  <p className="text-xs text-[#171717]/70 mt-2 tabular-nums">
                     30d · {row.activity30d.sales} sales · {row.activity30d.purchases} purchases
                   </p>
                   {row.subscriptionEndsAt && !row.subscriptionActive ? (
-                    <p className="text-[11px] text-destructive mt-1">Ended {fmtDate(row.subscriptionEndsAt)}</p>
+                    <p className="text-xs text-destructive mt-1">Ended {fmtDate(row.subscriptionEndsAt)}</p>
                   ) : row.subscriptionEndsAt ? (
-                    <p className="text-[11px] text-[#171717]/70 mt-1">Renews {fmtDate(row.subscriptionEndsAt)}</p>
+                    <p className="text-xs text-[#171717]/70 mt-1">Renews {fmtDate(row.subscriptionEndsAt)}</p>
                   ) : null}
                   <Link
                     href={`/admin/businesses/${row.ownerId}`}
@@ -248,19 +248,19 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-[#E5E5E5] bg-[#F8F8F7]">
-                    <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-medium text-[#171717]/70">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70">
                       Business
                     </th>
-                    <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-medium text-[#171717]/70">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70">
                       Plan
                     </th>
-                    <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-medium text-[#171717]/70">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70">
                       Status
                     </th>
-                    <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-medium text-[#171717]/70">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70">
                       30-day activity
                     </th>
-                    <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-medium text-[#171717]/70 text-right">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70 text-right">
                       Action
                     </th>
                   </tr>

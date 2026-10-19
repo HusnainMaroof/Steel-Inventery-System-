@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useRef, useState, type FormEvent } from "react";
+import { Receipt, X } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
+import { BusyButton, ConfirmModal, EmptyState, Modal, Page, PageTitle, RowActionsMenu } from "@/components/ui";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { dateInIsoRange } from "@/lib/date-range-filter";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -128,17 +129,19 @@ export default function ExpensesPage() {
     <Page>
       <PageTitle
         title="Expenses"
-        sub="Shop costs you type yourself — electricity, salaries, labour, rent, anything."
+        sub="Shop costs you type yourself: electricity, salaries, labour, rent, anything."
       />
 
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search expense name…"
-          className="flex-1 min-w-[200px]"
-          aria-label="Search expenses"
-        />
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="relative min-w-[200px] flex-1">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search expense name"
+            className="w-full"
+            aria-label="Search expenses"
+          />
+        </div>
         <DateRangePicker
           from={dateRange.from}
           to={dateRange.to}
@@ -154,7 +157,7 @@ export default function ExpensesPage() {
       {hasFilters ? (
         <button
           type="button"
-          className="text-xs font-medium text-[#171717] underline-offset-2 hover:underline mb-4"
+          className="text-[13px] font-medium text-[#171717]/70 underline-offset-2 hover:text-[#171717] hover:underline mb-4"
           onClick={() => {
             setQuery("");
             setDateRange({ from: null, to: null });
@@ -166,31 +169,27 @@ export default function ExpensesPage() {
 
       {expenses.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-          <div className="panel p-5">
-            <p className="text-[11px] uppercase tracking-[0.12em] font-medium text-[#171717]/70">
-              Records
-            </p>
-            <p className="text-[28px] sm:text-[32px] font-semibold tabular-nums text-[#171717] mt-1">
+          <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+            <p className="text-xs uppercase tracking-wide text-[#171717]/60">Records</p>
+            <p className="text-2xl font-bold tabular-nums text-[#171717] mt-1">
               {filtered.length}
             </p>
           </div>
-          <div className="panel p-5 !bg-[#111] text-white">
-            <p className="text-[11px] uppercase tracking-[0.12em] font-medium text-white/70">
-              Total spent
-            </p>
-            <p className="text-[28px] sm:text-[32px] font-semibold tabular-nums mt-1">
-              <span className="text-white">{fmtMoney(total)}</span>
+          <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+            <p className="text-xs uppercase tracking-wide text-[#171717]/60">Total spent</p>
+            <p className="text-2xl font-bold tabular-nums text-[#171717] mt-1">
+              {fmtMoney(total)}
             </p>
           </div>
         </div>
       ) : null}
 
       {expenses.length === 0 ? (
-        <div className="panel">
+        <div className="rounded-xl border border-[#E5E5E5] bg-white">
           <EmptyState
-            emoji="💡"
+            icon={<Receipt className="size-6" aria-hidden="true" />}
             title="No expenses yet"
-            hint="Add a name and amount — electricity, salary, rent, or any cost you pay."
+            hint="Add a name and amount: electricity, salary, rent, or any cost you pay."
             action={
               <button type="button" className="btn-primary" onClick={openAdd}>
                 + Add expense
@@ -199,71 +198,71 @@ export default function ExpensesPage() {
           />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="panel">
+        <div className="rounded-xl border border-[#E5E5E5] bg-white">
           <EmptyState
-            emoji=""
             title="No expenses match"
             hint="Clear the filters to see every cost."
           />
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6">
           {groups.map(([day, items]) => (
             <section key={day}>
-              <h2 className="text-sm font-semibold text-[#171717] pb-2 mb-3 border-b border-[#e5e5e5]">
-                {fmtDate(day)}
-              </h2>
-              <div className="space-y-3">
-                {items.map((item) => (
-                  <article key={item.id} className="panel overflow-hidden">
-                    <div className="hidden sm:grid grid-cols-[1fr_10rem_auto] gap-3 items-center px-4 py-3">
-                      <p className="font-semibold text-[#171717] truncate">{expenseName(item)}</p>
-                      <p className="text-right font-bold tabular-nums text-[#171717]">
-                        {fmtMoney(item.amount)}
-                      </p>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          className="btn-ghost !py-1.5 !px-3 text-xs"
-                          onClick={() => setView(item)}
-                        >
-                          View
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ghost !py-1.5 !px-3 text-xs text-[#a12b1f] shadow-md hover:shadow-lg"
-                          onClick={() => setDeleteTarget(item)}
-                        >
-                          Delete
-                        </button>
+              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-sm font-semibold tracking-tight text-[#171717]">
+                  {fmtDate(day)}
+                </span>
+                <span className="text-[13px] text-[#171717]/70 tabular-nums">
+                  {items.length} expense{items.length === 1 ? "" : "s"}
+                </span>
+                <div className="flex-1 min-w-[2rem] border-b border-[#E5E5E5]" />
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-[#E5E5E5] bg-white">
+                <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_10rem_56px] gap-3 items-center px-4 py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs uppercase tracking-wide text-[#171717]/60">
+                  <span>Name</span>
+                  <span className="text-right">Amount</span>
+                  <span className="sr-only">Actions</span>
+                </div>
+                <div className="divide-y divide-[#E5E5E5]">
+                  {items.map((item) => (
+                    <div key={item.id} className="px-4 py-3 transition-colors hover:bg-[#F8F8F7]">
+                      <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_10rem_56px] gap-3 items-center">
+                        <p className="min-w-0 truncate text-sm font-medium text-[#171717]" title={expenseName(item)}>
+                          {expenseName(item)}
+                        </p>
+                        <p className="text-right text-sm font-semibold tabular-nums text-[#171717]">
+                          {fmtMoney(item.amount)}
+                        </p>
+                        <div className="flex justify-end">
+                          <RowActionsMenu
+                            items={[
+                              { label: "View", onClick: () => setView(item) },
+                              { label: "Delete", danger: true, onClick: () => setDeleteTarget(item) },
+                            ]}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <div className="sm:hidden p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="font-semibold text-[#171717]">{expenseName(item)}</p>
-                        <p className="font-bold tabular-nums text-[#171717] shrink-0">
+
+                      <div className="sm:hidden">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="min-w-0 flex-1 truncate text-sm font-medium text-[#171717]">
+                            {expenseName(item)}
+                          </p>
+                          <RowActionsMenu
+                            items={[
+                              { label: "View", onClick: () => setView(item) },
+                              { label: "Delete", danger: true, onClick: () => setDeleteTarget(item) },
+                            ]}
+                          />
+                        </div>
+                        <p className="mt-1 text-right text-sm font-semibold tabular-nums text-[#171717]">
                           {fmtMoney(item.amount)}
                         </p>
                       </div>
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          type="button"
-                          className="btn-ghost !py-1.5 !px-3 text-xs"
-                          onClick={() => setView(item)}
-                        >
-                          View
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ghost !py-1.5 !px-3 text-xs text-[#a12b1f] shadow-md hover:shadow-lg"
-                          onClick={() => setDeleteTarget(item)}
-                        >
-                          Delete
-                        </button>
-                      </div>
                     </div>
-                  </article>
-                ))}
+                  ))}
+                </div>
               </div>
             </section>
           ))}
@@ -296,11 +295,11 @@ export default function ExpensesPage() {
             />
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] font-medium text-[#171717] mb-1">
+            <p className="text-xs uppercase tracking-wide font-medium text-[#171717] mb-1">
               Name and amount
             </p>
             <p className="text-[13px] text-[#171717]/70 mb-2">
-              Type any cost — electricity, salary, labour, transport, rent, or a new name.
+              Type any cost: electricity, salary, labour, transport, rent, or a new name.
             </p>
             <div className="flex flex-col gap-2">
               {lines.map((line, index) => (
@@ -338,21 +337,21 @@ export default function ExpensesPage() {
                   </div>
                   <button
                     type="button"
-                    className="btn-ghost !py-2 !px-2 mb-0.5"
+                    className="btn-ghost h-10 w-10 shrink-0 !px-0 mb-0.5"
                     aria-label="Remove line"
                     disabled={lines.length === 1}
                     onClick={() =>
                       setLines((current) => current.filter((_, i) => i !== index))
                     }
                   >
-                    ✕
+                    <X className="size-4" aria-hidden="true" />
                   </button>
                 </div>
               ))}
             </div>
             <button
               type="button"
-              className="btn-ghost !py-2 !px-3 text-xs mt-3"
+              className="btn-ghost mt-3"
               onClick={() => setLines((current) => [...current, emptyLine()])}
             >
               + Add another

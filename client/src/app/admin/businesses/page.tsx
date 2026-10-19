@@ -79,8 +79,8 @@ export default function AdminBusinessesPage() {
           />
         </div>
       ) : (
-        <div className="panel overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[#E5E5E5]">
+        <div>
+          <div className="flex flex-wrap items-center gap-3 mb-4">
             <div className="relative flex-1 min-w-[200px] max-w-md">
               <Search
                 size={16}

@@ -292,7 +292,7 @@ export default function DashboardPage() {
     <Page>
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-[28px] sm:text-[34px] font-bold leading-tight tracking-tight text-[#111]">Dashboard</h1>
+          <h1 className="text-[26px] sm:text-[30px] font-bold leading-tight tracking-tight text-[#111]">Dashboard</h1>
           <p className="text-[13px] text-[#171717] mt-1.5">{day}</p>
         </div>
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BusinessLink } from "@/components/BusinessLink";
 import { useStore } from "@/lib/store";
-import { BusyButton, CustomSelect, EmptyState, ErrorState, Modal, Page } from "@/components/ui";
+import { BusyButton, CustomSelect, EmptyState, ErrorState, Modal, Page, PageTitle } from "@/components/ui";
 import { DateRangePicker, formatRangeLabel } from "@/components/ui/date-range-picker";
 import { ReportsSkeleton } from "@/components/skeletons";
 import { fmtDate, qtyUnitLabel } from "@/lib/format";
@@ -230,22 +230,15 @@ export default function ReportsPage() {
     mode === "range"
       ? formatRangeLabel(fromDate || null, toDate || null, "All time")
       : "All time";
+  const subLabel = productId ? `${headerLabel} · ${report.productLabel}` : headerLabel;
 
   return (
     <Page>
-      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-6">
-        {headerLabel}
-        {productId ? (
-          <span className="font-medium text-base sm:text-lg text-[#171717]/70">
-            {" "}· {report.productLabel}
-          </span>
-        ) : null}
-      </h1>
+      <PageTitle title="Profit & Reports" sub={subLabel} />
 
-      <div className="flex flex-wrap items-center gap-2 mb-8">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <CustomSelect
-          compact
-          className="min-w-[12rem] [&_button]:min-h-[44px]"
+          className="min-w-[12rem] [&_button]:text-sm [&_button]:min-h-[40px]"
           ariaLabel="Product"
           value={productId}
           onChange={setProductId}
@@ -315,7 +308,7 @@ export default function ReportsPage() {
           <div
             role="tablist"
             aria-label="Report sections"
-            className="flex w-full sm:w-auto sm:inline-flex gap-1 p-1 mb-2.5 border border-[#E5E5E5] bg-white rounded-[8px]"
+            className="flex w-full sm:inline-flex sm:w-auto gap-1 p-1 mb-4 border border-[#E5E5E5] bg-white rounded-lg"
           >
             {REPORT_TABS.map((t) => (
               <button
@@ -324,17 +317,15 @@ export default function ReportsPage() {
                 role="tab"
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
-                className={`flex-1 sm:flex-none min-h-[44px] px-3 sm:px-6 text-[13px] font-medium rounded-[6px] transition-colors ${
-                  tab === t.id
-                    ? "bg-[#111] text-white"
-                    : "text-[#171717] hover:bg-[#F8F8F7]"
+                className={`min-h-9 px-4 text-sm font-medium rounded-md transition-colors ${
+                  tab === t.id ? "bg-ink text-white" : "text-[#171717] hover:bg-[#F8F8F7]"
                 }`}
               >
                 {t.label}
               </button>
             ))}
           </div>
-          <p className="text-[13px] text-[#171717]/70 mb-5">
+          <p className="text-sm text-[#171717]/70 mb-6">
             {REPORT_TABS.find((t) => t.id === tab)?.meaning}
           </p>
 
@@ -408,7 +399,7 @@ export default function ReportsPage() {
           />
         </label>
         {checkError ? (
-          <p className="mt-2 text-[13px] font-medium text-[#a12b1f]" role="alert">
+          <p className="mt-2 text-[13px] font-medium text-destructive" role="alert">
             {checkError}
           </p>
         ) : (

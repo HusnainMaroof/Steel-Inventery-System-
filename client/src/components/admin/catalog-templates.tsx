@@ -24,7 +24,7 @@ function AttributeBlock({ attribute }: { attribute: CatalogTemplateAttribute }) 
         {attribute.name}
         {attribute.required ? <span className="text-neutral-400 font-normal"> · required</span> : null}
       </p>
-      <p className="text-[11px] text-neutral-500 mt-0.5 capitalize">
+      <p className="text-xs text-neutral-500 mt-0.5 capitalize">
         {attribute.type}
         {attribute.unit ? ` · ${attribute.unit}` : ""}
       </p>
@@ -33,7 +33,7 @@ function AttributeBlock({ attribute }: { attribute: CatalogTemplateAttribute }) 
           {attribute.options.map((option) => (
             <span
               key={option}
-              className="inline-flex rounded-full bg-white border border-neutral-200 px-2 py-0.5 text-[10px] text-neutral-600"
+              className="inline-flex rounded-full bg-white border border-neutral-200 px-2 py-0.5 text-xs text-neutral-600"
             >
               {option}
             </span>
@@ -73,19 +73,19 @@ export function TemplateCatalogCard({
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[14px] font-semibold text-neutral-900">{template.label}</span>
             {meta ? (
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+              <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
                 {meta.trade}
               </span>
             ) : isCustom ? (
-              <span className="text-[10px] uppercase tracking-widest text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+              <span className="text-xs uppercase tracking-widest text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
                 Custom
               </span>
             ) : null}
-            <span className="text-[10px] text-neutral-400">
+            <span className="text-xs text-neutral-400">
               {catalogStructureLabel(template.usesCategories)}
             </span>
           </span>
-          <span className="block text-[11px] text-neutral-600 mt-1">
+          <span className="block text-xs text-neutral-600 mt-1">
             {template.product.name} · {template.product.unit}
             {template.usesCategories && categoryCount
               ? ` · ${categoryCount} categor${categoryCount === 1 ? "y" : "ies"}`
@@ -93,7 +93,7 @@ export function TemplateCatalogCard({
             {attrCount ? ` · ${attrCount} attribute${attrCount === 1 ? "" : "s"}` : ""}
           </span>
           {meta ? (
-            <span className="block text-[11px] text-neutral-500 mt-1 leading-snug">{meta.hint}</span>
+            <span className="block text-xs text-neutral-500 mt-1 leading-snug">{meta.hint}</span>
           ) : null}
         </span>
         <span className="text-neutral-400 text-xs shrink-0 pt-0.5">{expanded ? "▲" : "▼"}</span>
@@ -111,7 +111,7 @@ export function TemplateCatalogCard({
                 <div key={category.name}>
                   <p className="text-[12px] font-semibold text-neutral-800">{category.name}</p>
                   {category.description ? (
-                    <p className="text-[11px] text-neutral-500 mt-0.5">{category.description}</p>
+                    <p className="text-xs text-neutral-500 mt-0.5">{category.description}</p>
                   ) : null}
                   <div className="grid gap-2 mt-2">
                     {category.attributes.map((attribute) => (
@@ -298,7 +298,7 @@ export function AddCatalogTemplateModal({
                 {attributes.length > 1 ? (
                   <button
                     type="button"
-                    className="text-[11px] text-[#a12b1f]"
+                    className="text-xs text-[#a12b1f]"
                     onClick={() => setAttributes((prev) => prev.filter((_, i) => i !== index))}
                   >
                     Remove attribute

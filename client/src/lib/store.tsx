@@ -1095,6 +1095,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   /* per-invoice allocation: explicit payments settle their invoice first,
      then a customer's unallocated payments settle their oldest unpaid invoices (FIFO) */
+  // Lists call salePaid once per row; a Map keeps that O(1) instead of a scan per call.
+  const saleById = useMemo(() => new Map(sales.map((s) => [s.id, s])), [sales]);
+
   const salePaidMap = useMemo(() => {
     const map: Record<string, number> = {};
     for (const s of sales) map[s.id] = 0;
@@ -1222,7 +1225,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     stockLots,
     lineUnitCost,
     salePaid: (saleId: string) => {
-      const sale = sales.find((s) => s.id === saleId);
+      const sale = saleById.get(saleId);
       if (sale?.invoicePaid != null) return sale.invoicePaid;
       return salePaidMap[saleId] ?? 0;
     },

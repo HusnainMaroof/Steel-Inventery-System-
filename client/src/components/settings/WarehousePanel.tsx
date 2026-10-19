@@ -34,7 +34,7 @@ function IconBtn({
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md border border-transparent text-[#171717]/70 hover:text-[#a12b1f] hover:bg-[#faf5f2] hover:border-[#f0e2de] transition-colors"
+      className="shrink-0 w-10 h-10 flex items-center justify-center rounded-md border border-transparent text-[#171717]/70 hover:text-destructive hover:bg-[#F8F8F7] hover:border-[#E5E5E5] transition-colors"
     >
       {children}
     </button>
@@ -57,9 +57,9 @@ export function WarehousePanel() {
   const [openWhAdd, setOpenWhAdd] = useState(false);
 
   return (
-    <div className="panel overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#e5e5e5] flex flex-wrap items-start justify-between gap-3">
-        <p className="text-[13px] text-[#171717] leading-relaxed max-w-2xl">
+    <div className="border border-[#E5E5E5] bg-white rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-[#E5E5E5] flex flex-wrap items-start justify-between gap-3">
+        <p className="text-sm text-[#171717] leading-relaxed max-w-2xl">
           A <span className="font-medium">warehouse</span> is where you store goods.
           A <span className="font-medium">location</span> is a spot inside it.
           Pick one when recording a purchase — it shows on that lot in Inventory.
@@ -69,7 +69,7 @@ export function WarehousePanel() {
           <button
             type="button"
             onClick={() => setOpenWhAdd(true)}
-            className="shrink-0 text-[12px] font-medium text-[#171717] px-2.5 py-1.5 rounded-md border border-[#e5e5e5] bg-white min-h-[44px]"
+            className="shrink-0 text-sm font-medium text-[#171717] px-2.5 py-1.5 rounded-md border border-[#E5E5E5] bg-white min-h-[40px]"
           >
             + Warehouse
           </button>
@@ -77,7 +77,7 @@ export function WarehousePanel() {
       </div>
       {warehouses.length === 0 ? (
         <div className="p-6 flex flex-col items-center gap-4 text-center">
-          <p className="text-[13px] text-[#171717]">No warehouses yet</p>
+          <p className="text-sm text-[#171717]">No warehouses yet</p>
           <form
             className="w-full max-w-sm flex gap-2"
             onSubmit={async (e) => {
@@ -89,7 +89,7 @@ export function WarehousePanel() {
             }}
           >
             <input name="wh" placeholder="e.g. Main Yard" className="flex-1" aria-label="Warehouse name" />
-            <BusyButton type="submit" className="!py-2 !px-3 text-xs min-h-[44px]" loading={isPending("warehouse:create")}>
+            <BusyButton type="submit" className="min-h-[44px]" loading={isPending("warehouse:create")}>
               Add warehouse
             </BusyButton>
           </form>
@@ -98,7 +98,7 @@ export function WarehousePanel() {
         <>
           {openWhAdd ? (
             <form
-              className="px-4 py-3 border-b border-[#e5e5e5] flex gap-2"
+              className="px-4 py-3 border-b border-[#E5E5E5] flex gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
                 const v = (e.currentTarget.elements.namedItem("wh") as HTMLInputElement).value.trim();
@@ -107,15 +107,15 @@ export function WarehousePanel() {
               }}
             >
               <input name="wh" placeholder="New warehouse name" className="flex-1" autoFocus aria-label="New warehouse name" />
-              <BusyButton type="submit" className="!py-2 !px-3 text-xs min-h-[44px]" loading={isPending("warehouse:create")}>
+              <BusyButton type="submit" className="min-h-[44px]" loading={isPending("warehouse:create")}>
                 Add
               </BusyButton>
-              <button type="button" className="btn-ghost !py-2 !px-3 text-xs min-h-[44px]" onClick={() => setOpenWhAdd(false)}>
+              <button type="button" className="btn-ghost min-h-[44px]" onClick={() => setOpenWhAdd(false)}>
                 Cancel
               </button>
             </form>
           ) : null}
-          <div className="divide-y divide-[#e5e5e5]">
+          <div className="divide-y divide-[#E5E5E5]">
             {warehouses.map((w) => {
               const wLocs = locations.filter((l) => l.warehouseId === w.id);
               return (
@@ -141,13 +141,13 @@ export function WarehousePanel() {
                       {w.active ? offIcon : onIcon}
                     </IconBtn>
                     {openLoc !== w.id ? (
-                      <button
-                        type="button"
-                        onClick={() => setOpenLoc(w.id)}
-                        className="shrink-0 text-[12px] font-medium text-[#171717] px-2.5 py-1.5 rounded-md border border-[#e5e5e5] bg-white min-h-[44px]"
-                      >
-                        + Location
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setOpenLoc(w.id)}
+                      className="shrink-0 text-sm font-medium text-[#171717] px-2.5 py-1.5 rounded-md border border-[#E5E5E5] bg-white min-h-[40px]"
+                    >
+                      + Location
+                    </button>
                     ) : null}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -156,7 +156,7 @@ export function WarehousePanel() {
                       .map((l) => (
                         <span
                           key={l.id}
-                          className="inline-flex items-center gap-1 border border-[#e5e5e5] rounded-md px-2.5 py-1 text-[12px] bg-white"
+                          className="inline-flex items-center gap-1 border border-[#E5E5E5] rounded-md px-2.5 py-1 text-[12px] bg-white"
                         >
                           <input
                             defaultValue={l.name}
@@ -171,7 +171,7 @@ export function WarehousePanel() {
                           <button
                             type="button"
                             onClick={() => setLocationActive(l.id, false)}
-                            className="text-[#171717]/70 hover:text-[#a12b1f] w-5 h-5"
+                            className="text-[#171717]/70 hover:text-destructive w-5 h-5"
                             aria-label={`Remove ${l.name}`}
                           >
                             ×
@@ -185,7 +185,7 @@ export function WarehousePanel() {
                           key={l.id}
                           type="button"
                           onClick={() => setLocationActive(l.id, true)}
-                          className="text-[12px] text-[#171717]/70 line-through hover:text-[#171717] border border-dashed border-[#e5e5e5] rounded-md px-2.5 py-1"
+                          className="text-[12px] text-[#171717]/70 line-through hover:text-[#171717] border border-dashed border-[#E5E5E5] rounded-md px-2.5 py-1"
                         >
                           {l.name}
                         </button>
@@ -200,10 +200,10 @@ export function WarehousePanel() {
                           setOpenLoc(null);
                         }}
                       >
-                        <input name="loc" placeholder="e.g. Yard A" className="flex-1 !py-1 text-[12px]" autoFocus aria-label="Location name" />
-                        <BusyButton type="submit" className="!py-1 !px-2 text-xs" loading={isPending("location:create")}>
-                          Add
-                        </BusyButton>
+                          <input name="loc" placeholder="e.g. Yard A" className="flex-1" autoFocus aria-label="Location name" />
+                          <BusyButton type="submit" className="px-3" loading={isPending("location:create")}>
+                            Add
+                          </BusyButton>
                       </form>
                     ) : null}
                   </div>

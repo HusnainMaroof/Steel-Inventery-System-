@@ -108,8 +108,8 @@ function IconBtn({
       aria-label={title}
       className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-md border border-transparent transition-colors ${
         danger
-          ? "text-neutral-400 hover:text-[#a12b1f] hover:bg-[#faf5f2] hover:border-[#f0e2de]"
-          : "text-neutral-400 hover:text-black hover:bg-neutral-50 hover:border-neutral-200"
+          ? "text-[#171717]/70 hover:text-destructive hover:bg-[#F8F8F7] hover:border-[#E5E5E5]"
+          : "text-[#171717]/70 hover:text-[#171717] hover:bg-[#F8F8F7] hover:border-[#E5E5E5]"
       }`}
     >
       {children}
@@ -119,8 +119,8 @@ function IconBtn({
 
 function StatusPill({ active }: { active: boolean }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${active ? "text-neutral-600" : "text-neutral-400"}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-600" : "bg-neutral-300"}`} />
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${active ? "text-[#171717]/70" : "text-[#171717]/70"}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-success" : "bg-[#E5E5E5]"}`} />
       {active ? "Active" : "Inactive"}
     </span>
   );
@@ -246,15 +246,15 @@ export default function ProductsPage() {
         sub="Configure the catalogue — purchases, sales and inventory follow it"
         action={
           view.level === "products" ? (
-            <button type="button" className="btn-primary !py-2 !px-3.5 text-[13px]" onClick={() => setProductModal(true)}>
+            <button type="button" className="btn-primary" onClick={() => setProductModal(true)}>
               Add Product
             </button>
           ) : view.level === "product" && usesCats ? (
-            <button type="button" className="btn-primary !py-2 !px-3.5 text-[13px]" onClick={() => setItemModal(true)}>
+            <button type="button" className="btn-primary" onClick={() => setItemModal(true)}>
               Add Category
             </button>
           ) : configuringAttrs ? (
-            <button type="button" className="btn-primary !py-2 !px-3.5 text-[13px]" onClick={() => setAttrModal(true)}>
+            <button type="button" className="btn-primary" onClick={() => setAttrModal(true)}>
               Add Attribute
             </button>
           ) : null
@@ -262,21 +262,21 @@ export default function ProductsPage() {
       />
 
       {view.level !== "products" && (
-        <nav className="flex flex-wrap items-center gap-1.5 text-[13px] text-neutral-400 mb-5">
-          <button type="button" onClick={() => setView({ level: "products" })} className="hover:text-black">
+        <nav className="flex flex-wrap items-center gap-1.5 text-[13px] text-[#171717]/70 mb-5">
+          <button type="button" onClick={() => setView({ level: "products" })} className="hover:text-[#171717]">
             Products
           </button>
           <span>/</span>
           {product && view.level === "product" && (
-            <span className="text-neutral-800 font-medium">{product.name}</span>
+            <span className="text-[#171717] font-medium">{product.name}</span>
           )}
           {product && view.level === "category" && (
             <>
-              <button type="button" onClick={() => setView({ level: "product", productId: product.id })} className="hover:text-black">
+              <button type="button" onClick={() => setView({ level: "product", productId: product.id })} className="hover:text-[#171717]">
                 {product.name}
               </button>
               <span>/</span>
-              <span className="text-neutral-800 font-medium">{category?.name}</span>
+              <span className="text-[#171717] font-medium">{category?.name}</span>
             </>
           )}
         </nav>
@@ -291,10 +291,10 @@ export default function ProductsPage() {
             />
           ) : (
             <div className="panel overflow-hidden mb-5">
-              <div className="px-4 py-3 border-b border-neutral-100">
-                <p className="text-[10px] uppercase tracking-widest text-neutral-400">Products</p>
-              </div>
-              <div className="divide-y divide-neutral-100">
+<div className="px-4 py-3 border-b border-[#E5E5E5]">
+  <p className="text-xs uppercase tracking-wide text-[#171717]/60">Products</p>
+</div>
+              <div className="divide-y divide-[#E5E5E5]">
                 {activeProducts.map((p) => {
                   const nCats = catsOf(p.id).length;
                   const nAttrs = defsOf(p.id).filter((d) => d.active).length;
@@ -306,26 +306,26 @@ export default function ProductsPage() {
                       key={p.id}
                       type="button"
                       onClick={() => setView({ level: "product", productId: p.id })}
-                      className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-neutral-50 transition-colors"
+                      className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-[#F8F8F7] transition-colors"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[15px] font-semibold text-neutral-900">{p.name}</span>
-                        <span className="block text-[12px] text-neutral-400 mt-0.5">
+                        <span className="block text-base font-semibold text-[#171717]">{p.name}</span>
+                        <span className="block text-[13px] text-[#171717]/70 mt-0.5">
                           {structure}
                           {p.description ? ` · ${p.description}` : ""}
                           {` · ${unitLabel(p.unit)}`}
                         </span>
                       </span>
-                      <span className="text-neutral-300">{I.chev}</span>
+                      <span className="min-w-[40px] min-h-[40px] flex items-center justify-center text-[#171717]/70">{I.chev}</span>
                     </button>
                   );
                 })}
               </div>
-              <div className="px-4 py-3 border-t border-neutral-100 bg-neutral-50/50">
+              <div className="px-5 py-3 border-t border-[#E5E5E5]">
                 <button
                   type="button"
                   onClick={() => setProductModal(true)}
-                  className="text-[13px] font-medium text-neutral-700 hover:text-black"
+                  className="text-sm font-medium text-[#171717] hover:bg-[#F8F8F7]"
                 >
                   + Add Product
                 </button>
@@ -338,19 +338,19 @@ export default function ProductsPage() {
               <button
                 type="button"
                 onClick={() => setShowInactive((s) => !s)}
-                className="text-[12px] text-neutral-400 hover:text-neutral-700 flex items-center gap-1.5"
+                className="text-[12px] text-[#171717]/70 hover:text-[#171717] flex items-center gap-1.5"
               >
                 <span className={`transition-transform ${showInactive ? "rotate-90" : ""}`}>▸</span>
                 {inactiveProducts.length} inactive product{inactiveProducts.length === 1 ? "" : "s"}
               </button>
               {showInactive && (
-                <div className="panel overflow-hidden mt-2 divide-y divide-neutral-100">
+                <div className="panel overflow-hidden mt-2 divide-y divide-[#E5E5E5]">
                   {inactiveProducts.map((p) => (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => setView({ level: "product", productId: p.id })}
-                      className="w-full flex items-center justify-between px-4 py-3 text-left text-[13px] text-neutral-400 hover:bg-neutral-50"
+                      className="w-full flex items-center justify-between px-5 py-3 text-left text-[13px] text-[#171717]/70 hover:bg-[#F8F8F7]"
                     >
                       <span>{p.name}</span>
                       <StatusPill active={false} />
@@ -535,24 +535,24 @@ export default function ProductsPage() {
         loading={deletePendingKey ? isPending(deletePendingKey) : false}
       >
         {deleteTarget?.kind === "product" && (
-          <p className="text-sm text-neutral-700 leading-relaxed">
+          <p className="text-sm text-[#171717]/70 leading-relaxed">
             <span className="font-semibold">{deleteTarget.p.name}</span> and everything under it — categories, attributes, options and variants —
             are removed. Only offered when nothing in the ledger references it.
           </p>
         )}
         {deleteTarget?.kind === "category" && (
-          <p className="text-sm text-neutral-700 leading-relaxed">
+          <p className="text-sm text-[#171717]/70 leading-relaxed">
             Category <span className="font-semibold">{deleteTarget.c.name}</span> and its attributes, options and unused variants are removed.
             Historical purchases and sales are left untouched — so this is only offered when none reference it.
           </p>
         )}
         {deleteTarget?.kind === "variant" && (
-          <p className="text-sm text-neutral-700 leading-relaxed">
+          <p className="text-sm text-[#171717]/70 leading-relaxed">
             Variant <span className="font-semibold">{deleteTarget.v.shortName}</span> is unused, so it leaves the catalogue.
           </p>
         )}
         {deleteTarget?.kind === "attribute" && (
-          <p className="text-sm text-neutral-700 leading-relaxed">
+          <p className="text-sm text-[#171717]/70 leading-relaxed">
             Attribute <span className="font-semibold">{deleteTarget.d.name}</span> has never been used in stock, so it can be removed.
           </p>
         )}
@@ -579,22 +579,22 @@ function ProductHeader({
   return (
     <div className="panel px-4 py-3 mb-5 flex flex-wrap items-center gap-3">
       <div className="min-w-0 flex-1">
-        <p className="text-[17px] font-semibold">{product.name}</p>
-        <p className="text-[12px] text-neutral-400 mt-0.5">
+        <p className="text-base font-semibold">{product.name}</p>
+        <p className="text-[13px] text-[#171717]/70 mt-0.5">
           Base unit {unitLabel(product.unit)}
           {product.description ? ` · ${product.description}` : ""}
           {product.active === false && (
-            <span className="ml-2 text-[10px] uppercase tracking-wider text-[#a12b1f]">Inactive</span>
+            <span className="ml-2 text-xs uppercase tracking-wider text-destructive">Inactive</span>
           )}
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <label className="!mb-0 flex items-center gap-2 !normal-case !text-[13px] text-neutral-600">
-          <span className="text-neutral-400">Unit</span>
+        <label className="mb-0 flex items-center gap-2 normal-case text-xs text-[#171717]/60">
+          <span className="text-[#171717]/70">Unit</span>
           <select
             value={product.unit}
             onChange={(e) => onChangeUnit(e.target.value)}
-            className="!w-auto !py-1.5 !px-2 !text-[13px] min-w-[5rem]"
+            className="w-auto min-w-[5rem]"
           >
             {UNIT_OPTIONS.map((u) => (
               <option key={u.value} value={u.value}>{u.label}</option>
@@ -603,11 +603,11 @@ function ProductHeader({
         </label>
         <IconBtn onClick={onRenameProduct} title="Rename product">{I.edit}</IconBtn>
         {product.active === false ? (
-          <button type="button" onClick={onToggleProduct} className="btn-ghost !py-1.5 !px-3 text-xs">Reactivate</button>
+          <button type="button" onClick={onToggleProduct} className="btn-ghost">Reactivate</button>
         ) : usedProduct ? (
-          <button type="button" onClick={onToggleProduct} className="btn-ghost !py-1.5 !px-3 text-xs text-neutral-500">Deactivate</button>
+          <button type="button" onClick={onToggleProduct} className="btn-ghost text-[#171717]/70">Deactivate</button>
         ) : (
-          <button type="button" onClick={onDeleteProduct} className="btn-ghost !py-1.5 !px-3 text-xs text-[#a12b1f]">Delete</button>
+          <button type="button" onClick={onDeleteProduct} className="btn-ghost text-destructive">Delete</button>
         )}
       </div>
     </div>
@@ -657,33 +657,33 @@ function ProductCategoriesView({
       />
 
       <div className="panel overflow-hidden">
-        <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
-          <p className="text-[13px] font-semibold">Categories</p>
-          <span className="text-[11px] tabular-nums text-neutral-400 bg-neutral-50 border border-neutral-100 rounded px-1.5 py-0.5">
+          <div className="px-4 py-3 border-b border-[#E5E5E5] flex items-center justify-between">
+            <p className="text-[13px] font-semibold text-[#171717]">Categories</p>
+          <span className="text-xs tabular-nums text-[#171717]/70 bg-[#F8F8F7] border border-[#E5E5E5] rounded px-1.5 py-0.5">
             {categories.length}
           </span>
         </div>
         {categories.length === 0 ? (
           <div className="px-4 py-10 text-center">
-            <p className="text-[13px] text-neutral-400 mb-4">None yet — add whatever this product is split into.</p>
-            <button type="button" onClick={onAddCategory} className="btn-primary !py-2 !px-4 text-[13px]">Add Category</button>
+            <p className="text-[13px] text-[#171717]/70 mb-4">None yet — add whatever this product is split into.</p>
+            <button type="button" onClick={onAddCategory} className="btn-primary">Add Category</button>
           </div>
         ) : (
-          <div className="divide-y divide-neutral-100">
+          <div className="divide-y divide-[#E5E5E5]">
             {categories.map((c) => {
               const nDefs = defsOf(c.id).filter((d) => d.active).length;
               return (
                 <div
                   key={c.id}
-                  className={`flex items-center gap-3 px-4 py-3.5 ${c.active ? "" : "opacity-55 bg-neutral-50/50"}`}
+                  className={`flex items-center gap-3 px-4 py-3.5 ${c.active ? "" : "opacity-55 bg-[#F8F8F7]/50"}`}
                 >
                   <button
                     type="button"
                     onClick={() => onOpenCategory(c.id)}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <span className="block text-[14px] font-medium">{c.name}</span>
-                    <span className="block text-[12px] text-neutral-400 mt-0.5">
+                    <span className="block text-sm font-medium text-[#171717]">{c.name}</span>
+                    <span className="block text-[13px] text-[#171717]/70 mt-0.5">
                       {nDefs} {nDefs === 1 ? "Attribute" : "Attributes"}
                       {c.description ? ` · ${c.description}` : ""}
                     </span>
@@ -703,8 +703,8 @@ function ProductCategoriesView({
           </div>
         )}
         {categories.length > 0 && (
-          <div className="px-4 py-3 border-t border-neutral-100 bg-neutral-50/50">
-            <button type="button" onClick={onAddCategory} className="text-[13px] font-medium text-neutral-700 hover:text-black">
+          <div className="px-4 py-3 border-t border-[#E5E5E5]">
+            <button type="button" onClick={onAddCategory} className="text-sm font-medium text-[#171717] hover:bg-[#F8F8F7]">
               + Add Category
             </button>
           </div>
@@ -784,45 +784,45 @@ function AttributesConfigureView({
       {!hideHeading && (
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-widest text-neutral-400">{productName}</p>
+            <p className="text-xs uppercase tracking-widest text-[#171717]/70">{productName}</p>
             <div className="flex items-center gap-2 mt-0.5">
               <h2 className="text-[17px] font-semibold truncate">{heading}</h2>
               {inactive && (
-                <span className="text-[10px] uppercase tracking-wider text-neutral-400">deactivated</span>
+                <span className="text-xs uppercase tracking-wider text-[#171717]/70">deactivated</span>
               )}
               {onRename && <IconBtn onClick={onRename} title="Rename category">{I.edit}</IconBtn>}
             </div>
-            {description && <p className="text-[12px] text-neutral-400 mt-0.5">{description}</p>}
+            {description && <p className="text-[12px] text-[#171717]/70 mt-0.5">{description}</p>}
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={onAddAttribute} className="btn-primary !py-2 !px-3.5 text-[13px]">
+            <button type="button" onClick={onAddAttribute} className="btn-primary">
               Add Attribute
             </button>
             {onToggle && (inactive ? (
-              <button type="button" onClick={onToggle} className="btn-ghost !py-2 !px-3.5 text-[13px]">Reactivate</button>
+              <button type="button" onClick={onToggle} className="btn-ghost">Reactivate</button>
             ) : (
-              <button type="button" onClick={onToggle} className="btn-ghost !py-2 !px-3.5 text-[13px] text-neutral-500">Deactivate</button>
+              <button type="button" onClick={onToggle} className="btn-ghost text-[#171717]/70">Deactivate</button>
             ))}
           </div>
         </div>
       )}
 
       <div className="panel overflow-hidden mb-5">
-        <div className="px-4 py-3 border-b border-neutral-100">
-          <p className="text-[13px] font-semibold">Attributes</p>
-          <p className="text-[12px] text-neutral-400 mt-0.5">
+          <div className="px-4 py-3 border-b border-[#E5E5E5]">
+            <p className="text-[13px] font-semibold text-[#171717]">Attributes</p>
+            <p className="text-[13px] text-[#171717]/70 mt-0.5">
             Drag to change the order on purchase, sale and invoice screens. Identity of stock does not change.
           </p>
         </div>
         {defs.length === 0 ? (
           <div className="px-4 py-10 text-center">
-            <p className="text-[13px] text-neutral-400 mb-4">No attributes yet — e.g. Size, Grade, Brand.</p>
-            <button type="button" onClick={onAddAttribute} className="btn-primary !py-2 !px-4 text-[13px]">
+            <p className="text-[13px] text-[#171717]/70 mb-4">No attributes yet — e.g. Size, Grade, Brand.</p>
+            <button type="button" onClick={onAddAttribute} className="btn-primary">
               Add first attribute
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-neutral-100">
+          <div className="divide-y divide-[#E5E5E5]">
             {defs.map((d) => (
               <div
                 key={d.id}
@@ -850,8 +850,8 @@ function AttributesConfigureView({
           </div>
         )}
         {defs.length > 0 && (
-          <div className="px-4 py-3 border-t border-neutral-100 bg-neutral-50/50">
-            <button type="button" onClick={onAddAttribute} className="text-[13px] font-medium text-neutral-700 hover:text-black">
+          <div className="px-4 py-3 border-t border-[#E5E5E5] bg-[#F8F8F7]/50">
+            <button type="button" onClick={onAddAttribute} className="text-sm font-medium text-[#171717] hover:bg-[#F8F8F7]">
               + Add Attribute
             </button>
           </div>
@@ -859,20 +859,20 @@ function AttributesConfigureView({
       </div>
 
       <div className="panel overflow-hidden">
-        <div className="px-4 py-3 border-b border-neutral-100">
-          <p className="text-[13px] font-semibold">Variants</p>
-          <p className="text-[12px] text-neutral-400 mt-0.5">
+          <div className="px-4 py-3 border-b border-[#E5E5E5]">
+            <p className="text-[13px] font-semibold text-[#171717]">Variants</p>
+            <p className="text-[13px] text-[#171717]/70 mt-0.5">
             Created automatically when stock is bought or sold — not added here by hand.
           </p>
         </div>
         {variants.length === 0 ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-[13px] text-neutral-400 max-w-md mx-auto leading-relaxed">
+            <p className="text-[13px] text-[#171717]/70 max-w-md mx-auto leading-relaxed">
               None yet. The first purchase of {heading} with these attributes creates one.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-neutral-100">
+          <div className="divide-y divide-[#E5E5E5]">
             {variants.map((v) => (
               <VariantRow
                 key={v.id}
@@ -935,10 +935,10 @@ function AttrCard({
   };
 
   return (
-    <div className={`px-4 py-3 ${def.active ? "" : "opacity-55 bg-neutral-50/50"}`}>
+    <div className={`px-4 py-3 ${def.active ? "" : "opacity-55 bg-[#F8F8F7]/50"}`}>
       <div className="flex items-start gap-3">
         <span
-          className="mt-1 text-neutral-300 cursor-grab active:cursor-grabbing shrink-0"
+          className="mt-1 text-[#171717]/70 cursor-grab active:cursor-grabbing shrink-0"
           title="Drag to reorder"
           aria-hidden
         >
@@ -946,17 +946,17 @@ function AttrCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <p className="text-[14px] font-medium leading-tight">
+            <p className="text-sm font-medium leading-tight">
               {def.name}
-              {def.required && <span className="text-[#a12b1f] ml-0.5">*</span>}
+              {def.required && <span className="text-destructive ml-0.5">*</span>}
             </p>
-            <span className="text-[10px] uppercase tracking-wider font-medium text-neutral-400 bg-neutral-50 border border-neutral-100 rounded px-1.5 py-0.5">
+            <span className="text-xs uppercase tracking-wider font-medium text-[#171717]/70 bg-[#F8F8F7] border border-[#E5E5E5] rounded px-1.5 py-0.5">
               {TYPE_LABEL[def.type]}
               {def.unit ? ` · ${def.unit}` : ""}
               {def.required ? " · Required" : ""}
             </span>
           </div>
-          <p className="text-[12px] text-neutral-400 mt-1 leading-snug">
+          <p className="text-[13px] text-[#171717]/70 mt-1 leading-snug">
             {def.active
               ? def.type === "select"
                 ? `${activeOptions.length} ${activeOptions.length === 1 ? "option" : "options"}`
@@ -980,7 +980,7 @@ function AttrCard({
       </div>
 
       {open && def.type === "select" && (
-        <div className="mt-3 pt-3 border-t border-neutral-100 ml-7">
+        <div className="mt-3 pt-3 border-t border-[#E5E5E5] ml-7">
           {options.map((o) => (
             <div
               key={o.id}
@@ -990,7 +990,7 @@ function AttrCard({
               onDrop={() => dropOpt(o.id)}
               className={`flex items-center gap-2 py-1.5 ${o.active ? "" : "opacity-50"} ${optDrag === o.id ? "opacity-40" : ""}`}
             >
-              <span className="text-neutral-300 cursor-grab shrink-0">{I.grip}</span>
+              <span className="text-[#171717]/70 cursor-grab shrink-0">{I.grip}</span>
               {editingOpt === o.id ? (
                 <form
                   className="flex-1 flex items-center gap-2"
@@ -1000,30 +1000,30 @@ function AttrCard({
                     setEditingOpt(null);
                   }}
                 >
-                  <input
-                    value={optDraft}
-                    onChange={(e) => setOptDraft(e.target.value)}
-                    className="!py-1 text-[13px] flex-1"
-                    autoFocus
-                  />
-                  <BusyButton type="submit" className="!py-1 !px-2.5 text-xs" loading={isPending()}>Save</BusyButton>
+                    <input
+                      value={optDraft}
+                      onChange={(e) => setOptDraft(e.target.value)}
+                      className="flex-1"
+                      autoFocus
+                    />
+                    <BusyButton type="submit" className="px-2.5" loading={isPending()}>Save</BusyButton>
                 </form>
               ) : (
                 <>
-                  <span className={`flex-1 text-[13px] ${o.active ? "text-neutral-800" : "line-through text-neutral-400"}`}>
+                  <span className={`flex-1 text-[13px] ${o.active ? "text-[#171717]" : "line-through text-[#171717]/70"}`}>
                     {o.label}
                   </span>
                   <StatusPill active={o.active} />
                   <button
                     type="button"
-                    className="text-[12px] text-neutral-400 hover:text-black px-1.5 py-1"
+                    className="text-xs text-[#171717]/70 hover:text-[#171717] px-1.5 py-1"
                     onClick={() => { setEditingOpt(o.id); setOptDraft(o.label); }}
                   >
                     Rename
                   </button>
                   <button
                     type="button"
-                    className="text-[12px] text-neutral-400 hover:text-black px-1.5 py-1"
+                    className="text-xs text-[#171717]/70 hover:text-[#171717] px-1.5 py-1"
                     onClick={() => onPatchOption(o.id, { active: !o.active })}
                   >
                     {o.active ? "Deactivate" : "Reactivate"}
@@ -1031,7 +1031,7 @@ function AttrCard({
                   {!isOptionUsed(o.id) && (
                     <button
                       type="button"
-                      className="text-[12px] text-neutral-400 hover:text-[#a12b1f] px-1.5 py-1"
+                      className="text-xs text-[#171717]/70 hover:text-destructive px-1.5 py-1"
                       onClick={() => onDeleteOption(o.id)}
                     >
                       Delete
@@ -1054,9 +1054,9 @@ function AttrCard({
               value={newOpt}
               onChange={(e) => setNewOpt(e.target.value)}
               placeholder="New option"
-              className="!py-1.5 text-[13px] flex-1"
+              className="flex-1"
             />
-            <BusyButton type="submit" className="!py-1.5 !px-3 text-xs shrink-0" loading={isPending()}>Add Option</BusyButton>
+            <BusyButton type="submit" className="px-3 shrink-0" loading={isPending()}>Add Option</BusyButton>
           </form>
         </div>
       )}
@@ -1083,21 +1083,21 @@ function VariantRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(v.shortName);
   return (
-    <div className={`px-4 py-3 flex items-start gap-3 ${v.active ? "" : "opacity-55 bg-neutral-50/50"}`}>
+    <div className={`px-4 py-3 flex items-start gap-3 ${v.active ? "" : "opacity-55 bg-[#F8F8F7]/50"}`}>
       <div className="min-w-0 flex-1">
         {editing ? (
           <form
             className="flex items-center gap-2 max-w-sm"
             onSubmit={(e) => { e.preventDefault(); onRename(draft); setEditing(false); }}
           >
-            <input value={draft} onChange={(e) => setDraft(e.target.value)} className="!py-1.5 text-[13px] flex-1" />
-            <BusyButton type="submit" className="!py-1.5 !px-3 text-xs" loading={isPending()}>Save</BusyButton>
+            <input value={draft} onChange={(e) => setDraft(e.target.value)} className="flex-1" />
+            <BusyButton type="submit" className="px-3" loading={isPending()}>Save</BusyButton>
           </form>
         ) : (
           <>
-            <p className="text-[14px] font-medium leading-tight">{v.shortName}</p>
-            {attrsLine && <p className="text-[12px] text-neutral-400 mt-0.5 leading-snug">{attrsLine}</p>}
-            {used && <p className="text-[11px] text-neutral-300 mt-1">Used in purchases or sales</p>}
+            <p className="text-sm font-medium leading-tight">{v.shortName}</p>
+            {attrsLine && <p className="text-[13px] text-[#171717]/70 mt-0.5 leading-snug">{attrsLine}</p>}
+            {used && <p className="text-xs text-[#171717]/70 mt-1">Used in purchases or sales</p>}
           </>
         )}
       </div>
@@ -1160,7 +1160,7 @@ function AddProductModal({
   return (
     <Modal open onClose={onClose} title="Create Product" busy={isPending()}>
       {error && (
-        <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+        <div role="alert" className="text-[13px] font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3.5 py-2.5 mb-5">
           {error}
         </div>
       )}
@@ -1172,7 +1172,7 @@ function AddProductModal({
               type="button"
               onClick={() => { setMode(m); setError(null); }}
               className={`px-3 py-2.5 rounded-lg border text-[13px] font-medium ${
-                mode === m ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-600 hover:border-neutral-400"
+                mode === m ? "border-ink bg-ink text-white" : "border-[#E5E5E5] text-[#171717]/70 hover:border-[#E5E5E5]"
               }`}
             >
               {m === "scratch" ? "Start from scratch" : "Use template"}
@@ -1195,10 +1195,10 @@ function AddProductModal({
               </select>
             </div>
             <div>
-              <p className="text-[13px] font-medium text-neutral-800 mb-2">Product Structure</p>
+              <p className="text-[13px] font-medium text-[#171717] mb-2">Product Structure</p>
               <div className="space-y-2">
                 <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer !normal-case !mb-0 ${
-                  !usesCategories ? "border-neutral-900 bg-neutral-50" : "border-neutral-200 hover:border-neutral-400"
+                  !usesCategories               ? "border-ink bg-[#F8F8F7]" : "border-[#E5E5E5] hover:border-[#E5E5E5]"
                 }`}>
                   <input
                     type="radio"
@@ -1208,12 +1208,12 @@ function AddProductModal({
                     className="!w-4 !h-4 mt-0.5"
                   />
                   <span>
-                    <span className="block text-[13px] font-medium text-neutral-900">Product → Attributes</span>
-                    <span className="block text-[12px] text-neutral-400 mt-0.5">No category. Attributes belong to the product — e.g. Steel.</span>
+                    <span className="block text-[13px] font-medium text-[#171717]">Product → Attributes</span>
+                    <span className="block text-[12px] text-[#171717]/70 mt-0.5">No category. Attributes belong to the product — e.g. Steel.</span>
                   </span>
                 </label>
                 <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer !normal-case !mb-0 ${
-                  usesCategories ? "border-neutral-900 bg-neutral-50" : "border-neutral-200 hover:border-neutral-400"
+                  usesCategories               ? "border-ink bg-[#F8F8F7]" : "border-[#E5E5E5] hover:border-[#E5E5E5]"
                 }`}>
                   <input
                     type="radio"
@@ -1223,8 +1223,8 @@ function AddProductModal({
                     className="!w-4 !h-4 mt-0.5"
                   />
                   <span>
-                    <span className="block text-[13px] font-medium text-neutral-900">Product → Categories → Attributes</span>
-                    <span className="block text-[12px] text-neutral-400 mt-0.5">Each category can have its own attributes — e.g. Cement.</span>
+                    <span className="block text-[13px] font-medium text-[#171717]">Product → Categories → Attributes</span>
+                    <span className="block text-[12px] text-[#171717]/70 mt-0.5">Each category can have its own attributes — e.g. Cement.</span>
                   </span>
                 </label>
               </div>
@@ -1240,7 +1240,7 @@ function AddProductModal({
               <label
                 key={t.id}
                 className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer !normal-case !mb-0 ${
-                  tplId === t.id ? "border-neutral-900 bg-neutral-50" : "border-neutral-200 hover:border-neutral-400"
+                  tplId === t.id               ? "border-ink bg-[#F8F8F7]" : "border-[#E5E5E5] hover:border-[#E5E5E5]"
                 }`}
               >
                 <input
@@ -1251,8 +1251,8 @@ function AddProductModal({
                   className="!w-4 !h-4 mt-0.5"
                 />
                 <span>
-                  <span className="block text-[13px] font-medium text-neutral-900">{t.label}</span>
-                  <span className="block text-[12px] text-neutral-400 mt-0.5">
+                  <span className="block text-[13px] font-medium text-[#171717]">{t.label}</span>
+                  <span className="block text-[12px] text-[#171717]/70 mt-0.5">
                     {t.product.name} · {unitLabel(t.product.unit)} ·{" "}
                     {t.usesCategories
                       ? `${t.categories?.length ?? 0} ${(t.categories?.length ?? 0) === 1 ? "category" : "categories"}`
@@ -1261,7 +1261,7 @@ function AddProductModal({
                 </span>
               </label>
             ))}
-            <p className="text-[12px] text-neutral-400 leading-relaxed">
+            <p className="text-[12px] text-[#171717]/70 leading-relaxed">
               A template is only a shortcut. Everything it creates stays editable.
             </p>
           </div>
@@ -1294,7 +1294,7 @@ function AddCategoryModal({
   return (
     <Modal open onClose={onClose} title={`Add Category — ${productName}`} busy={isPending()}>
       {error && (
-        <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+        <div role="alert" className="text-[13px] font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3.5 py-2.5 mb-5">
           {error}
         </div>
       )}
@@ -1318,7 +1318,7 @@ function AddCategoryModal({
           <label htmlFor="cat-desc">Description</label>
           <input id="cat-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
         </div>
-        <label className="flex items-center gap-2.5 cursor-pointer !normal-case !text-[13px] text-neutral-700">
+        <label className="flex items-center gap-2.5 cursor-pointer normal-case text-xs text-[#171717]/60">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="!w-4 !h-4" />
           Active
         </label>
@@ -1363,7 +1363,7 @@ function AddAttributeModal({
   return (
     <Modal open onClose={onClose} title={`Add Attribute — ${scopeName}`} busy={isPending()}>
       {error && (
-        <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+        <div role="alert" className="text-[13px] font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3.5 py-2.5 mb-5">
           {error}
         </div>
       )}
@@ -1401,7 +1401,7 @@ function AddAttributeModal({
                   {options.length > 1 && (
                     <button
                       type="button"
-                      className="btn-ghost !px-2.5 text-neutral-400"
+                      className="btn-ghost !px-2.5 text-[#171717]/70"
                       onClick={() => setOptions((prev) => prev.filter((_, j) => j !== i))}
                     >
                       ×
@@ -1411,7 +1411,7 @@ function AddAttributeModal({
               ))}
               <button
                 type="button"
-                className="text-[13px] font-medium text-neutral-600 hover:text-black"
+                className="text-[13px] font-medium text-[#171717]/70 hover:bg-[#F8F8F7]"
                 onClick={() => setOptions((prev) => [...prev, ""])}
               >
                 + Add Option
@@ -1419,7 +1419,7 @@ function AddAttributeModal({
             </div>
           </div>
         )}
-        <label className="flex items-center gap-2.5 cursor-pointer !normal-case !text-[13px] text-neutral-700">
+        <label className="flex items-center gap-2.5 cursor-pointer normal-case text-xs text-[#171717]/60">
           <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} className="!w-4 !h-4" />
           Required
         </label>
@@ -1449,7 +1449,7 @@ function RenameModal({
   return (
     <Modal open onClose={onClose} title={title} busy={isPending()}>
       {error && (
-        <div role="alert" className="text-[13px] font-medium text-[#a12b1f] bg-[#faf5f2] border border-[#f0e2de] rounded-md px-3.5 py-2.5 mb-5">
+        <div role="alert" className="text-[13px] font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3.5 py-2.5 mb-5">
           {error}
         </div>
       )}

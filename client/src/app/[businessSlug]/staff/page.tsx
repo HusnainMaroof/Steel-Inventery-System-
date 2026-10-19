@@ -13,6 +13,7 @@ import {
   type StaffPage,
 } from "@/lib/staff-access";
 import { BusyButton, EmptyState, Modal, Page, PageTitle } from "@/components/ui";
+import { Users } from "lucide-react";
 
 function generatePassword(length = 12): string {
   const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -58,15 +59,15 @@ export default function StaffPage() {
       </div>
 
       {loadError ? (
-        <p role="alert" className="text-sm text-[#a12b1f] mb-4">
+        <p role="alert" className="text-sm text-destructive mb-4">
           {loadError}
         </p>
       ) : null}
 
       {staff.length === 0 ? (
-        <div className="panel p-8">
+        <div className="border border-[#E5E5E5] bg-white rounded-xl p-8">
           <EmptyState
-            emoji="👥"
+            icon={<Users />}
             title="No staff yet"
             hint="Create a sales manager, store keeper, or accountant with limited access."
             action={
@@ -81,26 +82,26 @@ export default function StaffPage() {
           {staff.map((member) => (
             <div
               key={member.id}
-              className="panel p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between"
+              className="border border-[#E5E5E5] bg-white rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between"
             >
               <div className="min-w-0">
-                <p className="text-[15px] font-semibold text-[#171717] truncate">{member.name}</p>
-                <p className="text-[13px] text-neutral-600 truncate mt-0.5">{member.email}</p>
-                <p className="text-[12px] text-neutral-500 mt-1">
+                <p className="text-base font-semibold text-[#171717] truncate">{member.name}</p>
+                <p className="text-[13px] text-[#171717]/70 truncate mt-0.5">{member.email}</p>
+                <p className="text-[13px] text-[#171717]/70 mt-1">
                   {member.title ?? "Staff"} · {accessSummary(member.access)}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  className="btn-ghost !py-2 !px-3 !text-xs"
+                  className="btn-ghost"
                   onClick={() => setEditTarget(member)}
                 >
                   Edit
                 </button>
                 <button
                   type="button"
-                  className="btn-ghost !py-2 !px-3 !text-xs text-[#a12b1f] hover:text-[#a12b1f]"
+                  className="btn-ghost"
                   disabled={removingId === member.id}
                   onClick={() => void revoke(member.id)}
                 >
@@ -223,14 +224,16 @@ function StaffModal({
       size="lg"
     >
       {error ? (
-        <p role="alert" className="text-sm text-[#a12b1f] mb-4">
+        <p role="alert" className="text-sm text-destructive mb-4">
           {error}
         </p>
       ) : null}
       <form className="flex flex-col gap-5" onSubmit={submit}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="staff-name">Full name</label>
+            <label htmlFor="staff-name" className="text-xs font-medium text-[#171717]/60">
+              Full name
+            </label>
             <input
               id="staff-name"
               required
@@ -240,8 +243,10 @@ function StaffModal({
             />
           </div>
           {!editing ? (
-            <div>
-              <label htmlFor="staff-email">Login email</label>
+          <div>
+            <label htmlFor="staff-email" className="text-xs font-medium text-[#171717]/60">
+              Login email
+            </label>
               <input
                 id="staff-email"
                 type="email"
@@ -253,17 +258,19 @@ function StaffModal({
               />
             </div>
           ) : (
-            <div>
-              <label>Login email</label>
-              <p className="text-[13px] text-neutral-600 py-2.5 px-3 border border-neutral-200 rounded-lg bg-neutral-50">
-                {member?.email}
-              </p>
-            </div>
+          <div>
+            <label className="text-xs font-medium text-[#171717]/60">Login email</label>
+            <p className="text-[13px] text-[#171717]/70 py-2.5 px-3 border border-[#E5E5E5] rounded-lg bg-[#F8F8F7]">
+              {member?.email}
+            </p>
+          </div>
           )}
         </div>
 
         <div>
-          <label htmlFor="staff-title">Job title</label>
+          <label htmlFor="staff-title" className="text-xs font-medium text-[#171717]/60">
+            Job title
+          </label>
           <input
             id="staff-title"
             list="staff-title-presets"
@@ -278,21 +285,21 @@ function StaffModal({
         </div>
 
         <div>
-          <div className="flex flex-wrap items-end justify-between gap-2 mb-2">
-            <label htmlFor="staff-password" className="!mb-0">
-              {editing ? "New password (optional)" : "Password"}
-            </label>
+            <div className="flex flex-wrap items-end justify-between gap-2 mb-2">
+              <label htmlFor="staff-password" className="!mb-0 text-xs font-medium text-[#171717]/60">
+                {editing ? "New password (optional)" : "Password"}
+              </label>
             {!editing ? (
-              <button
-                type="button"
-                className="text-[11px] font-medium text-neutral-600 underline underline-offset-2 hover:text-black"
-                onClick={() => {
-                  setForm((c) => ({ ...c, password: generatePassword() }));
-                  setShowPassword(true);
-                }}
-              >
-                Generate secure password
-              </button>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-[#171717]/70 underline underline-offset-2 hover:text-[#171717]"
+                  onClick={() => {
+                    setForm((c) => ({ ...c, password: generatePassword() }));
+                    setShowPassword(true);
+                  }}
+                >
+                  Generate secure password
+                </button>
             ) : null}
           </div>
           <div className="relative">
@@ -311,7 +318,7 @@ function StaffModal({
             <button
               type="button"
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-neutral-500 hover:text-black rounded-md"
+              className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center p-1.5 text-[#171717]/70 hover:text-[#171717] rounded-md"
               onClick={() => setShowPassword((v) => !v)}
             >
               {showPassword ? (
@@ -330,7 +337,7 @@ function StaffModal({
 
         <fieldset className="border-0 p-0 m-0">
           <legend className="text-[13px] font-semibold text-[#171717] mb-1">Pages they can access</legend>
-          <p className="text-[12px] text-neutral-500 mb-3">
+          <p className="text-[13px] text-[#171717]/70 mb-3">
             They only see these sections in the menu. Catalogue data loads for the pages you enable.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -341,10 +348,10 @@ function StaffModal({
                   key={page}
                   type="button"
                   onClick={() => togglePage(page)}
-                  className={`px-3 py-1.5 text-[12px] font-medium rounded-lg border transition-colors ${
+                  className={`min-w-[40px] min-h-[40px] px-3 py-1.5 text-[12px] font-medium rounded-lg border transition-colors text-center ${
                     on
                       ? "bg-[#171717] text-white border-[#171717]"
-                      : "bg-white text-[#171717] border-neutral-200 hover:border-neutral-400"
+                      : "bg-white text-[#171717] border-[#E5E5E5] hover:border-[#171717]"
                   }`}
                 >
                   {pageLabel(page)}
@@ -354,7 +361,7 @@ function StaffModal({
           </div>
         </fieldset>
 
-        <div className="flex justify-end gap-3 pt-2 border-t border-neutral-100">
+        <div className="flex justify-end gap-3 pt-2 border-t border-[#E5E5E5]">
           <button type="button" className="btn-ghost" onClick={close} disabled={pending}>
             Cancel
           </button>
