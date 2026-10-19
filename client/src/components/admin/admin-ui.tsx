@@ -15,6 +15,7 @@ import type {
   SubscriptionPlanOption,
   SubscriptionStatus,
 } from "@/app/actions/platform";
+import { uploadBusinessLogoAction } from "@/app/actions/media";
 import { AdminTemplatePickCard } from "@/components/admin/template-pick-card";
 import { BillingCycleBadge } from "@/components/admin/subscription-plans-ui";
 import { BusyButton, Modal } from "@/components/ui";
@@ -482,9 +483,13 @@ export function AddOwnerModal({
     password: "",
     subscriptionPlanId: defaultPlanId,
     templateIds: [] as string[],
+    logoUrl: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const logoInput = useRef<HTMLInputElement>(null);
 
   const close = () => {
     if (pending) return;
@@ -495,8 +500,10 @@ export function AddOwnerModal({
       password: "",
       subscriptionPlanId: defaultPlanId,
       templateIds: [],
+      logoUrl: "",
     });
     setError(null);
+    setLogoError(null);
     onClose();
   };
 
@@ -509,13 +516,31 @@ export function AddOwnerModal({
     }));
   };
 
+  const pickLogo = async (file: File | undefined) => {
+    if (!file) return;
+    setLogoBusy(true);
+    setLogoError(null);
+    try {
+      const payload = new FormData();
+      payload.append("logo", file);
+      const upload = await uploadBusinessLogoAction(payload);
+      if (!upload.ok) return setLogoError(upload.error);
+      setForm((current) => ({ ...current, logoUrl: upload.url }));
+    } catch {
+      setLogoError("Could not upload that image. Try again.");
+    } finally {
+      setLogoBusy(false);
+      if (logoInput.current) logoInput.current.value = "";
+    }
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (pending) return;
+    if (pending || logoBusy) return;
     setPending(true);
     setError(null);
     try {
-      const result = await createOwnerAction({ ...form });
+      const result = await createOwnerAction({ ...form, logoUrl: form.logoUrl || undefined });
       if (!result.ok) return setError(result.error);
       // The create response is the full owner row, so the list updates without a refetch.
       onCreated(result.owner);
@@ -566,6 +591,52 @@ export function AddOwnerModal({
               onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))}
             />
           </div>
+          <div>
+            <label htmlFor="owner-logo">
+              Logo <span className="normal-case tracking-normal text-[#171717]/70">(optional)</span>
+            </label>
+            <div className="flex flex-wrap items-center gap-3">
+              {form.logoUrl ? (
+                <img
+                  src={form.logoUrl}
+                  alt="Business logo preview"
+                  className="h-14 w-14 rounded-md border border-[#E5E5E5] bg-white object-contain"
+                />
+              ) : null}
+              <input
+                ref={logoInput}
+                id="owner-logo"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="sr-only"
+                onChange={(event) => void pickLogo(event.target.files?.[0])}
+              />
+              <button
+                type="button"
+                className="btn-ghost min-h-11"
+                disabled={logoBusy || pending}
+                onClick={() => logoInput.current?.click()}
+              >
+                {logoBusy ? "Uploading..." : form.logoUrl ? "Change logo" : "Upload logo"}
+              </button>
+              {form.logoUrl && !logoBusy ? (
+                <button
+                  type="button"
+                  className="btn-ghost min-h-11"
+                  disabled={pending}
+                  onClick={() => setForm((current) => ({ ...current, logoUrl: "" }))}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <p className="text-[11px] text-[#171717]/70 mt-1.5">
+              PNG, JPEG or WebP. Shown on the owner panel and printed bills. The owner can change it later in Settings.
+            </p>
+            {logoError && (
+              <p role="alert" className="text-[12px] text-[#a12b1f] mt-1.5">{logoError}</p>
+            )}
+          </div>
         </AdminFormSection>
 
         <AdminFormSection
@@ -615,6 +686,9 @@ export function AddOwnerModal({
               value={form.password}
               placeholder="At least 8 characters"
               autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
             />
             <p className="text-[11px] text-neutral-500 mt-1.5">Copy this before creating — it cannot be retrieved later.</p>
@@ -895,6 +969,10 @@ export function ResetPasswordModal({
             type="text"
             value={password}
             placeholder="At least 8 characters"
+            autoComplete="new-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             onChange={(event) => setPassword(event.target.value)}
           />
         </div>
