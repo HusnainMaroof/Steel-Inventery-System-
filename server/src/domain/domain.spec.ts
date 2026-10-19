@@ -236,3 +236,65 @@ describe("profit engine (§22)", () => {
     expect(computeProfit(sales, expenses).netProfit).toBe(-500);
   });
 });
+
+describe("computeProfit product scope", () => {
+  // Sale with two products plus discount/tax/flat charges. Charges and tax are
+  // spread by subtotal share, so per-product revenue reconciles to the grand total.
+  const sale = {
+    saleId: "s1",
+    lines: [
+      { productId: "steel", qty: 10, rate: 100, unitCost: 80 },
+      { productId: "cement", qty: 5, rate: 200, unitCost: 150 },
+    ],
+    discountPct: 5,
+    taxPct: 2,
+    loading: 300,
+    transport: 200,
+    labour: 100,
+  };
+
+  it("per-product revenue sums to the sale grand total", () => {
+    const all = computeProfit([sale], []);
+    const steel = computeProfit([sale], [], { productId: "steel" });
+    const cement = computeProfit([sale], [], { productId: "cement" });
+
+    const grandTotal = saleGrandTotal(sale.lines, {
+      discountPct: 5,
+      taxPct: 2,
+      loading: 300,
+      transport: 200,
+      labour: 100,
+    }).grandTotal;
+
+    expect(all.salesRevenue).toBeCloseTo(steel.salesRevenue + cement.salesRevenue, 2);
+    expect(all.salesRevenue).toBeCloseTo(grandTotal, 2);
+  });
+
+  it("stockCost is attributed per product and adds up", () => {
+    const steel = computeProfit([sale], [], { productId: "steel" });
+    const cement = computeProfit([sale], [], { productId: "cement" });
+    const all = computeProfit([sale], []);
+
+    expect(steel.stockCost).toBe(800);
+    expect(cement.stockCost).toBe(750);
+    expect(all.stockCost).toBe(1550);
+  });
+
+  it("does not give a product the whole invoice's flat charges (old bug)", () => {
+    const steel = computeProfit([sale], [], { productId: "steel" });
+    // Steel goods share of grand total = 1000/2000 * grandTotal
+    const grandTotal = saleGrandTotal(sale.lines, {
+      discountPct: 5,
+      taxPct: 2,
+      loading: 300,
+      transport: 200,
+      labour: 100,
+    }).grandTotal;
+    const steelGoodsShare = grandTotal * 0.5;
+
+    // Old bug gave steel the FULL 600 charges (revenue ~1569).
+    // Correct behaviour gives only the proportional charge (revenue ~1269).
+    expect(steel.salesRevenue).toBeLessThan(steelGoodsShare + 1);
+    expect(steel.salesRevenue).toBeCloseTo(steelGoodsShare, 2);
+  });
+});

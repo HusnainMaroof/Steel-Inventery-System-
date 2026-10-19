@@ -78,6 +78,9 @@ export function computeProfit(
   let stockCost = Dec(0);
 
   for (const sale of sales) {
+    // Subtotal is computed over ALL lines so that discount, tax and flat
+    // charges spread by each line's share of the full subtotal - the same
+    // rule as attributedLineRevenue and saleGrandTotal.
     const subtotal = sale.lines.reduce((sum, l) => sum.plus(Dec(l.qty).times(Dec(l.rate))), Dec(0));
     if (subtotal.lte(0)) continue;
     const totals = saleGrandTotal(
@@ -91,7 +94,11 @@ export function computeProfit(
       },
     );
 
+    // When scoped to a product, only that product's lines contribute to
+    // revenue and stock cost. Charges/tax/discount are still spread across
+    // the full subtotal (computed above), so per-product totals reconcile.
     for (const line of sale.lines) {
+      if (options.productId && line.productId !== options.productId) continue;
       const share = Dec(line.qty).times(Dec(line.rate)).div(subtotal);
       salesRevenue = salesRevenue.plus(Dec(totals.grandTotal).times(share));
       stockCost = stockCost.plus(Dec(line.qty).times(Dec(line.unitCost)));

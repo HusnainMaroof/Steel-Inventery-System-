@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { computeProfit, SaleForProfit } from "../domain/profit";
+import { attributedLineRevenue, computeProfit, SaleForProfit } from "../domain/profit";
 import { landedCostPerUnit, roundMoneyDecimal, saleGrandTotalDecimal } from "../domain/money";
 import { businessValue as businessValueOf, cashInHand as cashInHandOf } from "../domain/report-money";
 
@@ -40,9 +40,9 @@ export class ReportsService {
         ...(productId ? { lines: { some: { productId } } } : {}),
       },
       include: {
-        lines: {
-          where: productId ? { productId } : undefined,
-        },
+        // all lines of the sale: a product's share of discount, tax and flat
+        // charges is its share of the whole subtotal (scoped in computeProfit)
+        lines: true,
       },
       orderBy: { date: "asc" },
     });
@@ -209,14 +209,16 @@ export class ReportsService {
       chargeTotalsPromise,
     ]);
 
+    // cost lookups only need the scoped product's lines
+    const scopedLines = (s: { lines: { productId: string; purchaseId?: string | null }[] }) =>
+      s.lines.filter((l) => !productId || l.productId === productId);
     const productIdsInSales = [
-      ...new Set(sales.flatMap((s) => s.lines.map((l) => l.productId))),
+      ...new Set(sales.flatMap((s) => scopedLines(s).map((l) => l.productId))),
     ];
     const purchaseIdsFromLines = [
       ...new Set(
-        sales.flatMap((s) =>
-          s.lines.map((l) => l.purchaseId).filter((id): id is string => Boolean(id)),
-        ),
+        sales
+          .flatMap((s) => scopedLines(s).map((l) => l.purchaseId).filter((id): id is string => Boolean(id))),
       ),
     ];
     const costPurchasesPromise: Promise<
@@ -394,17 +396,25 @@ export class ReportsService {
       },
       remainingValuation: remainingValuation.toNumber(),
       businessValue: businessValue.toNumber(),
-      salesGrandTotals: sales.map((s) =>
-        saleGrandTotalDecimal(
-          s.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
-          {
-            discountPct: s.discountPct,
-            taxPct: s.taxPct,
-            loading: s.loadingCharges,
-            transport: s.transportCharges,
-            labour: s.labourCharges,
-          },
-        ).grandTotal.toNumber(),
+      // scoped: the product's attributed share of each sale, so the per-product
+      // figures add up to the invoice grand total
+      salesGrandTotals: salesForProfit.map((s) =>
+        productId
+          ? roundMoneyDecimal(
+              s.lines
+                .filter((l) => l.productId === productId)
+                .reduce((sum, l) => sum.plus(attributedLineRevenue(s, l)), new Prisma.Decimal(0)),
+            ).toNumber()
+          : saleGrandTotalDecimal(
+              s.lines.map((l) => ({ qty: l.qty, rate: l.rate })),
+              {
+                discountPct: s.discountPct,
+                taxPct: s.taxPct,
+                loading: s.loading,
+                transport: s.transport,
+                labour: s.labour,
+              },
+            ).grandTotal.toNumber(),
       ),
     };
   }
@@ -433,8 +443,8 @@ export class ReportsService {
     }
     const month = input.month ?? now.getMonth() + 1;
     return {
-      from: new Date(`${input.year}-${String(month).padStart(2, "0")}-01`),
-      to: new Date(input.year, month, 0),
+      from: new Date(Date.UTC(input.year, month - 1, 1)),
+      to: new Date(Date.UTC(input.year, month, 0)),
       label: `${input.year}-${String(month).padStart(2, "0")}`,
     };
   }
