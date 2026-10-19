@@ -101,6 +101,8 @@ jobs:
              if [ -f docker-compose.yml ]; then cp -f docker-compose.yml docker-compose.yml.rollback; fi && \
              echo "Running version: ${tag:-none}"'
 
+      # `docker run --env-file` keeps quotes around values, so the backup
+      # strips ' and " from DIRECT_URL before calling pg_dump.
       - name: Deploy to VPS
         id: deploy
         env:
@@ -131,7 +133,7 @@ jobs:
              docker compose pull && \
              mkdir -p /opt/tijaratt/backups && \
              docker run --rm --env-file ./server/.env.production -v /opt/tijaratt/backups:/backups postgres:18 \
-               sh -c 'set -e; url=\${DIRECT_URL#\\\"}; url=\${url%\\\"}; url=\$(printf %s \"\$url\" | sed -E \"s/([?&])schema=[^&]*&?/\\1/; s/[?&]\$//\"); file=/backups/pre-migrate-\$(date +%Y%m%d-%H%M%S).dump; pg_dump --format=custom --file=\"\$file\" \"\$url\"; pg_restore --list \"\$file\" > /dev/null; echo backup ok: \$file' && \
+               sh -c 'set -e; url=\$(printf %s \"\$DIRECT_URL\" | tr -d \"\\042\\047\" | sed -E \"s/([?&])schema=[^&]*&?/\\1/; s/[?&]\$//\"); file=/backups/pre-migrate-\$(date +%Y%m%d-%H%M%S).dump; pg_dump --format=custom --file=\"\$file\" \"\$url\"; pg_restore --list \"\$file\" > /dev/null; echo backup ok: \$file' && \
              docker compose run --rm backend npx prisma migrate deploy && \
              docker compose up -d"
 
