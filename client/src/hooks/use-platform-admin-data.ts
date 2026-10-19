@@ -11,7 +11,12 @@ import {
 } from "@/app/actions/platform";
 import { listOwnersAction, type OwnerAccount } from "@/app/actions/users";
 import { userFacingError } from "@/lib/user-error";
-import { invalidateAdminCache, readAdminCache, writeAdminCache } from "@/lib/admin-cache";
+import {
+  addOwnerToAdminCache,
+  invalidateAdminCache,
+  readAdminCache,
+  writeAdminCache,
+} from "@/lib/admin-cache";
 
 type LoadOpts = {
   owners?: boolean;
@@ -155,6 +160,11 @@ export function usePlatformAdminData(
     invalidateAdminCache();
   }, []);
 
+  /** Shows a just-created owner at once, from the create response. */
+  const addOwner = useCallback((owner: OwnerAccount) => {
+    setOwners(addOwnerToAdminCache(owner));
+  }, []);
+
   useEffect(() => {
     if (!enabled || loadedRef.current) return;
     loadedRef.current = true;
@@ -170,5 +180,6 @@ export function usePlatformAdminData(
     loadError,
     refresh: () => refresh(true),
     invalidate,
+    addOwner,
   };
 }

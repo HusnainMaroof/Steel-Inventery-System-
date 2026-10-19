@@ -9,7 +9,7 @@ import { EmptyState, Page } from "@/components/ui";
 
 export default function AdminBusinessesPage() {
   const { user, ready } = useAuth();
-  const { owners, templates, subscriptionPlans, loading, loadError, refresh, invalidate } =
+  const { owners, templates, subscriptionPlans, loading, loadError, addOwner } =
     usePlatformAdminData(user?.role === "SUPERADMIN", {
       owners: true,
       templates: true,
@@ -17,11 +17,6 @@ export default function AdminBusinessesPage() {
       overview: false,
     });
   const [addOpen, setAddOpen] = useState(false);
-
-  const reload = async () => {
-    invalidate();
-    await refresh();
-  };
 
   if (ready && user?.role !== "SUPERADMIN") return null;
   if (!ready || (loading && owners.length === 0)) return <AdminBusinessesSkeleton />;
@@ -67,7 +62,7 @@ export default function AdminBusinessesPage() {
         templates={templates}
         subscriptionPlans={subscriptionPlans}
         onClose={() => setAddOpen(false)}
-        onCreated={reload}
+        onCreated={addOwner}
       />
     </Page>
   );

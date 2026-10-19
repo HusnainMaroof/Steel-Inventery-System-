@@ -54,3 +54,25 @@ export function writeAdminCache(patch: AdminCachePatch) {
 export function invalidateAdminCache() {
   snapshot = null;
 }
+
+/** Same order as GET /owners: active first, then oldest first. */
+function ownerOrder(a: OwnerAccount, b: OwnerAccount) {
+  if (a.active !== b.active) return a.active ? -1 : 1;
+  return (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+}
+
+/**
+ * Puts a just-created owner into the cached list without a refetch. Templates and
+ * plans did not change, so they stay. The overview counts did change, so the
+ * overview slice is dropped and reloads when that page opens.
+ */
+export function addOwnerToAdminCache(owner: OwnerAccount): OwnerAccount[] {
+  const owners = [...(snapshot?.owners ?? []).filter((item) => item.id !== owner.id), owner].sort(
+    ownerOrder,
+  );
+  writeAdminCache({ owners });
+  if (snapshot) {
+    snapshot = { ...snapshot, overview: null, loaded: { ...snapshot.loaded, overview: false } };
+  }
+  return owners;
+}

@@ -472,7 +472,7 @@ export function AddOwnerModal({
   templates: ProductTemplateOption[];
   subscriptionPlans: SubscriptionPlanOption[];
   onClose: () => void;
-  onCreated: () => Promise<void>;
+  onCreated: (owner: OwnerAccount) => void;
 }) {
   const defaultPlanId = activeSubscriptionPlans(subscriptionPlans)[0]?.id ?? "sub_monthly";
   const [form, setForm] = useState({
@@ -517,7 +517,8 @@ export function AddOwnerModal({
     try {
       const result = await createOwnerAction({ ...form });
       if (!result.ok) return setError(result.error);
-      await onCreated();
+      // The create response is the full owner row, so the list updates without a refetch.
+      onCreated(result.owner);
       setPending(false);
       close();
     } finally {
