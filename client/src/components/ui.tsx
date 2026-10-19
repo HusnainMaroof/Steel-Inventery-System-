@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import gsap from "gsap";
 
@@ -632,6 +632,47 @@ export function EmptyState({
       )}
       {action && <div className="mt-4">{action}</div>}
     </motion.div>
+  );
+}
+
+/**
+ * Number field that keeps what the user typed ("14.0", "14.", "0.05").
+ * A plain controlled <input type="number"> fed with Number(text) drops a
+ * trailing "0" or ".", so amounts like 14.05 could not be typed.
+ */
+export function NumberInput({
+  value,
+  onValue,
+  decimals = 2,
+  ...rest
+}: {
+  value: number;
+  onValue: (n: number) => void;
+  /** most digits allowed after the point */
+  decimals?: number;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type">) {
+  const show = (n: number) => (n ? String(n) : "");
+  const [text, setText] = useState(() => show(value));
+  const [prev, setPrev] = useState(value);
+  if (value !== prev) {
+    setPrev(value);
+    if ((Number(text) || 0) !== (value || 0)) setText(show(value));
+  }
+  const pattern = new RegExp(`^\\d*\\.?\\d{0,${decimals}}$`);
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      value={text}
+      onChange={(e) => {
+        const t = e.target.value.replace(/,/g, "").trim();
+        if (!pattern.test(t)) return;
+        setText(t);
+        onValue(Number(t) || 0);
+      }}
+      {...rest}
+    />
   );
 }
 

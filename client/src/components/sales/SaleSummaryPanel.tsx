@@ -1,9 +1,19 @@
 "use client";
 
-import { BusyButton } from "@/components/ui";
+import { CheckCircle2, Clock3 } from "lucide-react";
+import { BusyButton, NumberInput } from "@/components/ui";
 import { fmtMoney } from "@/lib/format";
 
-const numVal = (n: number) => (n === 0 ? "" : String(n));
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function Row({ label, value, muted = false }: { label: string; value: string; muted?: boolean }) {
+  return (
+    <div className="flex justify-between items-center gap-3 text-sm">
+      <span className="text-[#171717]/70">{label}</span>
+      <span className={`tabular-nums ${muted ? "text-[#171717]/70" : "font-medium text-[#171717]"}`}>{value}</span>
+    </div>
+  );
+}
 
 export default function SaleSummaryPanel({
   subtotal,
@@ -54,119 +64,130 @@ export default function SaleSummaryPanel({
   hideSubmit?: boolean;
   submitting?: boolean;
 }) {
+  const total = round2(grandTotal);
+  const paid = Number(paidNow) || 0;
+  const due = round2(remaining);
+  const hasTotal = total > 0;
+  const over = hasTotal && paid > total + 0.005;
+  const fullyPaid = hasTotal && !over && due < 0.005;
+  const payMessage =
+    payError || (over ? `Paid now can't be more than the total of ${fmtMoney(total)}.` : "");
+
   return (
-    <div className="border border-neutral-200 rounded-xl bg-white p-5 xl:sticky xl:top-6">
-      <p className="text-xs uppercase tracking-widest text-neutral-500 mb-4">Summary</p>
+    <div className="border border-[#E5E5E5] rounded-xl bg-white p-4 sm:p-5">
+      <p className="text-xs font-medium uppercase tracking-wide text-[#171717]/60 mb-4">Summary</p>
 
-      <div className="space-y-3">
-        <div className="flex justify-between items-center text-sm">
-          <span className="text-neutral-500">Subtotal</span>
-          <span className="tabular-nums font-medium">{fmtMoney(subtotal)}</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+      <div className="space-y-4">
+        <Row label="Subtotal" value={fmtMoney(subtotal)} />
+
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="!mb-1">Discount (%)</label>
-            <input
-              type="number" min="0" max="100" step="any" placeholder="0"
-              value={numVal(discountPct)}
-              onChange={(e) => setDiscountPct(Number(e.target.value))}
-            />
+            <label htmlFor="sale-discount" className="!mb-1">Discount (%)</label>
+            <NumberInput id="sale-discount" placeholder="0" value={discountPct} onValue={setDiscountPct} />
           </div>
           <div>
-            <label className="!mb-1">Tax (%)</label>
-            <input
-              type="number" min="0" max="100" step="any" placeholder="0"
-              value={numVal(taxPct)}
-              onChange={(e) => setTaxPct(Number(e.target.value))}
-            />
+            <label htmlFor="sale-tax" className="!mb-1">Tax (%)</label>
+            <NumberInput id="sale-tax" placeholder="0" value={taxPct} onValue={setTaxPct} />
           </div>
         </div>
-        {discAmt > 0 && (
-          <div className="flex justify-between items-center text-sm">
-            <span className="text-neutral-500">Discount</span>
-            <span className="tabular-nums text-neutral-500">− {fmtMoney(discAmt)}</span>
-          </div>
-        )}
-        {taxAmt > 0 && (
-          <div className="flex justify-between items-center text-sm">
-            <span className="text-neutral-500">Tax</span>
-            <span className="tabular-nums text-neutral-500">+ {fmtMoney(taxAmt)}</span>
+        {(discAmt > 0 || taxAmt > 0) && (
+          <div className="space-y-2">
+            {discAmt > 0 && <Row label={`Discount (${discountPct}%)`} value={`- ${fmtMoney(discAmt)}`} muted />}
+            {taxAmt > 0 && <Row label={`Tax (${taxPct}%)`} value={`+ ${fmtMoney(taxAmt)}`} muted />}
           </div>
         )}
 
-        {/* Charges — loading / transport / labour, all optional flat amounts */}
-        <div className={`border rounded-lg px-3 py-3 ${chargesAmt > 0 ? "border-neutral-300 bg-neutral-50/70" : "border-dashed border-neutral-200"}`}>
-          <div className="flex items-baseline justify-between mb-2.5">
-            <span className="text-[11px] uppercase tracking-widest text-neutral-500 font-medium">Charges</span>
-            {chargesAmt > 0 && (
-              <span className="text-[11px] tabular-nums text-neutral-500">+ {fmtMoney(chargesAmt)}</span>
-            )}
+        {/* loading / transport / labour: optional flat amounts */}
+        <div className="rounded-lg bg-[#F8F8F7] p-3">
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-xs font-medium text-[#171717]/60">Extra charges (optional)</span>
+            {chargesAmt > 0 && <span className="text-xs tabular-nums text-[#171717]/70">+ {fmtMoney(chargesAmt)}</span>}
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="!mb-1 !text-[11px]">Loading</label>
-              <input
-                type="number" min="0" step="any" placeholder="0"
-                className="!py-2 !text-[13px]"
-                value={numVal(loadingCharges)}
-                onChange={(e) => setLoadingCharges(Number(e.target.value))}
-              />
-            </div>
-            <div>
-              <label className="!mb-1 !text-[11px]">Transport</label>
-              <input
-                type="number" min="0" step="any" placeholder="0"
-                className="!py-2 !text-[13px]"
-                value={numVal(transportCharges)}
-                onChange={(e) => setTransportCharges(Number(e.target.value))}
-              />
-            </div>
-            <div>
-              <label className="!mb-1 !text-[11px]">Labour</label>
-              <input
-                type="number" min="0" step="any" placeholder="0"
-                className="!py-2 !text-[13px]"
-                value={numVal(labourCharges)}
-                onChange={(e) => setLabourCharges(Number(e.target.value))}
-              />
-            </div>
+            {(
+              [
+                ["sale-loading", "Loading", loadingCharges, setLoadingCharges],
+                ["sale-transport", "Transport", transportCharges, setTransportCharges],
+                ["sale-labour", "Labour", labourCharges, setLabourCharges],
+              ] as const
+            ).map(([id, label, value, set]) => (
+              <div key={id} className="min-w-0">
+                <label htmlFor={id} className="!mb-1">{label}</label>
+                <NumberInput id={id} placeholder="0" value={value} onValue={set} className="bg-white" />
+              </div>
+            ))}
           </div>
-          <p className="text-[10px] text-neutral-400 mt-2">Optional — added to the invoice total</p>
         </div>
 
-        <div className="flex justify-between items-center py-2.5 px-3 bg-black text-white -mx-3">
-          <span className="text-xs uppercase tracking-widest text-neutral-400">Grand Total</span>
-          <span className="tabular-nums font-semibold">{fmtMoney(grandTotal)}</span>
+        <div className="flex justify-between items-center gap-3 rounded-lg bg-ink text-white px-4 py-3">
+          <span className="text-xs font-medium uppercase tracking-wide text-white/70">Grand total</span>
+          <span className="text-lg font-semibold tabular-nums">{fmtMoney(total)}</span>
         </div>
 
-        {/* Paid Now — the settle-now action, given distinct weight */}
-        <div className="border-2 border-amber-400 bg-amber-50/60 -mx-1 px-3 py-3 rounded-lg">
-          <label className="!mb-1 text-[11px] uppercase tracking-widest text-amber-700 font-medium">
-            Paid Now
-          </label>
-          <input
-            type="number" min="0" step="any" placeholder="0"
-            className="!border-amber-300 !py-2.5 text-base"
-            value={numVal(paidNow)}
-            onChange={(e) => setPaidNow(Number(e.target.value))}
-          />
-          {payError && (
-            <div className="mt-2 border border-red-200 bg-red-50 text-red-700 text-[11px] px-2.5 py-2">
-              {payError}
+        {/* paid now: what the customer pays today */}
+        <div>
+          <label htmlFor="sale-paid-now" className="!mb-1">Paid now</label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#171717]/60">Rs</span>
+            <NumberInput
+              id="sale-paid-now"
+              placeholder="0"
+              value={paidNow}
+              onValue={setPaidNow}
+              aria-invalid={!!payMessage}
+              aria-describedby={payMessage ? "sale-paid-error" : undefined}
+              className={`!pl-10 text-base font-medium tabular-nums ${payMessage ? "!border-destructive" : ""}`}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => setPaidNow(0)}
+              disabled={!hasTotal}
+              aria-pressed={hasTotal && paid === 0}
+              className={`min-h-10 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40 ${
+                hasTotal && paid === 0
+                  ? "bg-ink text-white border-ink"
+                  : "bg-white text-[#171717] border-[#E5E5E5] hover:bg-[#F8F8F7]"
+              }`}
+            >
+              On credit
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaidNow(total)}
+              disabled={!hasTotal}
+              aria-pressed={fullyPaid}
+              className={`min-h-10 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40 ${
+                fullyPaid
+                  ? "bg-ink text-white border-ink"
+                  : "bg-white text-[#171717] border-[#E5E5E5] hover:bg-[#F8F8F7]"
+              }`}
+            >
+              Fully paid
+            </button>
+          </div>
+          {payMessage ? (
+            <p id="sale-paid-error" role="alert" className="mt-1.5 text-[13px] text-destructive">{payMessage}</p>
+          ) : null}
+        </div>
+
+        {/* what is left after today's payment */}
+        {hasTotal && !over && (
+          fullyPaid ? (
+            <div className="flex items-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-sm font-medium text-success">
+              <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+              Fully paid. Nothing left to collect.
             </div>
-          )}
-        </div>
-
-        {remaining === 0 && grandTotal > 0 ? (
-          <div className="flex justify-between items-center px-3 py-2.5 -mx-1 rounded-lg border border-[#cfe3cd] bg-[#f0f7ef]">
-            <span className="text-xs uppercase tracking-widest text-[#2e6b2e] font-medium">Remaining Due</span>
-            <span className="tabular-nums font-semibold text-[#2e6b2e]">Fully paid</span>
-          </div>
-        ) : (
-          <div className={`flex justify-between items-center px-3 py-2.5 border border-dashed -mx-3 ${remaining > 0 ? "border-neutral-400" : "border-neutral-300"}`}>
-            <span className="text-xs uppercase tracking-widest text-neutral-500">Remaining Due</span>
-            <span className={`tabular-nums font-semibold ${remaining > 0 ? "" : "text-neutral-400"}`}>{fmtMoney(remaining)}</span>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-warning/10 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-medium text-warning">
+                <Clock3 className="size-4 shrink-0" aria-hidden />
+                {paid > 0 ? "Remaining due" : "Full amount on credit"}
+              </span>
+              <span className="text-sm font-semibold tabular-nums text-warning">{fmtMoney(due)}</span>
+            </div>
+          )
         )}
       </div>
 
@@ -175,14 +196,14 @@ export default function SaleSummaryPanel({
           <BusyButton type="submit" className="w-full mt-5" loading={submitting} disabled={!canSave}>
             Save Sale
           </BusyButton>
-          <p className="text-[11px] text-neutral-400 text-center mt-2.5">
-            Invoice for {customerName} created on save
+          <p className="text-[13px] text-[#171717]/70 text-center mt-2.5">
+            Invoice for {customerName} is created on save.
           </p>
         </>
       )}
       {hideSubmit && (
-        <p className="text-[11px] text-neutral-400 text-center mt-4">
-          Invoice for {customerName} · save with the button below
+        <p className="text-[13px] text-[#171717]/70 text-center mt-4">
+          Invoice for {customerName}. Save with the button below.
         </p>
       )}
     </div>

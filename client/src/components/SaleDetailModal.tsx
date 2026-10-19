@@ -5,24 +5,27 @@ import { BusinessLink } from "@/components/BusinessLink";
 import { useStore, saleTotal, saleDiscount, saleTax, saleGrandTotal } from "@/lib/store";
 import { Modal } from "@/components/ui";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
+import { CheckCircle2 } from "lucide-react";
 import { fmtMoney, fmtQtyWithUnit, fmtRateWithUnit, fmtDate, fmtTime } from "@/lib/format";
 import { productUsesCategories, resolveDefs } from "@/lib/catalogue";
 
 const statusStyles: Record<string, { label: string; cls: string }> = {
-  paid: { label: "Paid", cls: "bg-[#f0f7ef] text-[#2e6b2e] border-[#cfe3cd]" },
-  partially: {
-    label: "Partially paid",
-    cls: "bg-[#fdf6e4] text-[#8a5a00] border-[#ecd9a8]",
-  },
-  unpaid: { label: "Unpaid", cls: "bg-[#fdf1ef] text-[#a12b1f] border-[#f0d2cc]" },
+  paid: { label: "Paid", cls: "bg-success/10 text-success" },
+  partially: { label: "Partially paid", cls: "bg-warning/10 text-warning" },
+  unpaid: { label: "Unpaid", cls: "bg-destructive/10 text-destructive" },
 };
 
 export default function SaleDetailModal({
   saleId,
   onClose,
+  justSaved = false,
+  onNewSale,
 }: {
   saleId: string | null;
   onClose: () => void;
+  /** opened right after the sale was saved: show a confirmation */
+  justSaved?: boolean;
+  onNewSale?: () => void;
 }) {
   const { sales, customers, suppliers, payments, inventory, products, categories, variants, attributeDefs, salePaid } = useStore();
   const [payOpen, setPayOpen] = useState(false);
@@ -101,58 +104,87 @@ export default function SaleDetailModal({
     })
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 
+  const totalRows: { label: string; value: string }[] = [
+    { label: "Subtotal", value: fmtMoney(total) },
+    ...(disc > 0 ? [{ label: `Discount (${sale.discountPct ?? 0}%)`, value: `- ${fmtMoney(disc)}` }] : []),
+    ...(tax > 0 ? [{ label: `Tax (${sale.taxPct ?? 0}%)`, value: `+ ${fmtMoney(tax)}` }] : []),
+    ...((sale.loadingCharges ?? 0) > 0 ? [{ label: "Loading charges", value: `+ ${fmtMoney(sale.loadingCharges!)}` }] : []),
+    ...((sale.transportCharges ?? 0) > 0 ? [{ label: "Transport charges", value: `+ ${fmtMoney(sale.transportCharges!)}` }] : []),
+    ...((sale.labourCharges ?? 0) > 0 ? [{ label: "Labour cost", value: `+ ${fmtMoney(sale.labourCharges!)}` }] : []),
+  ];
+  const th = "text-xs font-medium uppercase tracking-wide text-[#171717]/60 px-4 py-3";
+
   return (
     <Modal
       open={!!sale}
       onClose={onClose}
       title={sale.invoiceNo}
-      subtitle={`${fmtDate(sale.date)} · ${cust?.name ?? sale.customerId}`}
       size="6xl"
       footer={
-        <div className="flex flex-wrap items-center gap-2">
-          <BusinessLink href={`/sales/${sale.id}`} className="btn-ghost !py-2 !px-4 text-[13px]">
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <BusinessLink href={`/sales/${sale.id}`} className="btn-ghost">
             Print / Save PDF
           </BusinessLink>
           {due > 0 && (
-            <button type="button" onClick={() => setPayOpen(true)} className="btn-ghost !py-2 !px-4 text-[13px]">
-              Receive Payment
+            <button type="button" onClick={() => setPayOpen(true)} className="btn-ghost">
+              Receive payment
             </button>
           )}
-          <button type="button" className="btn-primary !py-2 !px-4 text-[13px]" onClick={onClose}>
-            Continue
+          {justSaved && onNewSale && (
+            <button type="button" onClick={onNewSale} className="btn-ghost">
+              New sale
+            </button>
+          )}
+          <button type="button" className="btn-primary" onClick={onClose}>
+            Done
           </button>
         </div>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
-        <div className="min-w-0">
+      {justSaved && (
+        <div role="status" className="mb-5 flex items-start gap-3 rounded-lg bg-success/10 px-4 py-3">
+          <CheckCircle2 className="size-5 shrink-0 text-success mt-0.5" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-success">Sale saved</p>
+            <p className="text-[13px] text-[#171717]/70">
+              {sale.invoiceNo} for {cust?.name ?? "the customer"} is ready. Stock has been updated.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+        <div className="min-w-0 space-y-6">
           {/* header */}
-          <div className="flex flex-wrap items-start justify-between gap-4 mb-5 pb-5 border-b border-neutral-100">
-            <div>
-              <span className="text-[11px] uppercase tracking-wider font-medium text-black">Customer</span>
-              <p className="font-semibold text-[15px] text-black mt-1">{cust?.name ?? sale.customerId}</p>
-              <p className="text-[13px] text-black/60 mt-0.5">
-                {cust?.shop}
-                {cust?.phone ? ` · ${cust.phone}` : ""}
-              </p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <span className="text-xs font-medium uppercase tracking-wide text-[#171717]/60">Customer</span>
+              <p className="font-semibold text-base text-[#171717] mt-1">{cust?.name ?? sale.customerId}</p>
+              {(cust?.shop || cust?.phone) && (
+                <p className="text-[13px] text-[#171717]/70 mt-0.5">
+                  {[cust?.shop, cust?.phone].filter(Boolean).join(" · ")}
+                </p>
+              )}
             </div>
             <div className="text-right">
-              <span className={`inline-flex items-center text-[12px] font-medium px-2.5 py-1 rounded-md border ${st.cls}`}>
+              <span className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-md ${st.cls}`}>
                 {st.label}
               </span>
-              <p className="text-[12px] text-black/60 mt-2">{fmtTime(sale.createdAt)}</p>
+              <p className="text-[13px] text-[#171717]/70 mt-2 tabular-nums">
+                {fmtDate(sale.date)} · {fmtTime(sale.createdAt)}
+              </p>
             </div>
           </div>
 
           {/* items table */}
-          <div className="border border-neutral-200 rounded-lg overflow-x-auto mb-5">
-            <table>
+          <div className="border border-[#E5E5E5] rounded-xl overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr>
-                  <th>Item</th>
-                  <th className="num">Qty</th>
-                  <th className="num">Rate</th>
-                  <th className="num">Amount</th>
+                <tr className="bg-[#FAFAF9]">
+                  <th className={`${th} text-left`}>Item</th>
+                  <th className={`${th} text-right`}>Qty</th>
+                  <th className={`${th} text-right`}>Rate</th>
+                  <th className={`${th} text-right`}>Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -160,28 +192,24 @@ export default function SaleDetailModal({
                   const prod = prodNameOf(l);
                   const cat = catNameOf(l);
                   const attrs = attrRowsOf(l);
+                  const detail = [cat, ...attrs.map((a) => a.value)].filter(Boolean).join(" · ");
                   return (
-                    <tr key={i}>
-                      <td className="max-w-[260px]">
-                        <span className="block font-semibold text-[13px] text-black truncate">{prod || l.item}</span>
-                        {cat && <span className="block text-[11px] text-black/60 truncate">{cat}</span>}
-                        {attrs.map((a, j) => (
-                          <span key={j} className="block text-[11px] text-black/60 truncate">
-                            {a.label}: {a.value}
-                          </span>
-                        ))}
+                    <tr key={i} className="border-t border-[#E5E5E5] align-top">
+                      <td className="px-4 py-3 max-w-[320px]">
+                        <span className="block font-medium text-[#171717]">{prod || l.item}</span>
+                        {detail && <span className="block text-[13px] text-[#171717]/70">{detail}</span>}
                         {!l.attributeSnapshot && l.qualityName ? (
-                          <span className="inline-block mt-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#171717] bg-neutral-100 border border-neutral-300 rounded-sm">
+                          <span className="inline-block mt-1 px-1.5 py-0.5 text-xs font-medium text-[#171717] bg-[#F8F8F7] rounded">
                             {l.qualityName}
                           </span>
                         ) : null}
                         {supplierName(l.supplierId) ? (
-                          <span className="block text-[11px] text-black/60 truncate mt-0.5">Source: {supplierName(l.supplierId)}</span>
+                          <span className="block text-[13px] text-[#171717]/70">Source: {supplierName(l.supplierId)}</span>
                         ) : null}
                       </td>
-                      <td className="num text-black">{fmtQtyWithUnit(l.qty, l.unit)}</td>
-                      <td className="num text-black">{fmtRateWithUnit(l.rate, l.unit)}</td>
-                      <td className="num font-medium text-black">{fmtMoney(l.qty * l.rate)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">{fmtQtyWithUnit(l.qty, l.unit)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap text-[#171717]/70">{fmtRateWithUnit(l.rate, l.unit)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap font-medium">{fmtMoney(l.qty * l.rate)}</td>
                     </tr>
                   );
                 })}
@@ -192,17 +220,19 @@ export default function SaleDetailModal({
           {/* payment timeline */}
           {paymentEntries.length > 0 && (
             <div>
-              <h3 className="text-[12px] font-medium text-black uppercase tracking-wider mb-2">
+              <h3 className="text-xs font-medium uppercase tracking-wide text-[#171717]/60 mb-2">
                 Payments on this invoice
               </h3>
-              <div className="border border-neutral-200 rounded-lg divide-y divide-neutral-100 max-h-48 overflow-y-auto">
+              <div className="border border-[#E5E5E5] rounded-xl divide-y divide-[#E5E5E5] max-h-48 overflow-y-auto">
                 {paymentEntries.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
-                      <p className="text-[13px] text-black">{fmtDate(p.date)} · {p.method}</p>
-                      {p.note ? <p className="text-[12px] text-black/60 truncate">{p.note}</p> : null}
+                      <p className="text-sm text-[#171717]">
+                        {fmtDate(p.date)} · <span className="capitalize">{p.method}</span>
+                      </p>
+                      {p.note ? <p className="text-[13px] text-[#171717]/70 truncate">{p.note}</p> : null}
                     </div>
-                    <span className="shrink-0 text-[13px] font-medium tabular-nums text-black">{fmtMoney(p.amount)}</span>
+                    <span className="shrink-0 text-sm font-medium tabular-nums text-success">{fmtMoney(p.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -210,68 +240,49 @@ export default function SaleDetailModal({
           )}
         </div>
 
-        {/* summary sidebar */}
-        <div className="space-y-4 lg:sticky lg:top-0">
-          <div className="border border-neutral-200 rounded-lg overflow-hidden">
-            <div className="px-4 py-3 border-b border-neutral-100 bg-neutral-50/50">
-              <p className="text-[12px] font-medium text-black uppercase tracking-wider">Totals</p>
-            </div>
-            <div className="p-4 space-y-2.5 text-[13px]">
-              <div className="flex justify-between"><span className="text-black">Subtotal</span><span className="tabular-nums font-medium text-black">{fmtMoney(total)}</span></div>
-              {disc > 0 && (
-                <div className="flex justify-between"><span className="text-black">Discount ({sale.discountPct ?? 0}%)</span><span className="tabular-nums text-black">− {fmtMoney(disc)}</span></div>
-              )}
-              {tax > 0 && (
-                <div className="flex justify-between"><span className="text-black">Tax ({sale.taxPct ?? 0}%)</span><span className="tabular-nums text-black">+ {fmtMoney(tax)}</span></div>
-              )}
-              {(sale.loadingCharges ?? 0) > 0 && (
-                <div className="flex justify-between"><span className="text-black">Loading Charges</span><span className="tabular-nums text-black">+ {fmtMoney(sale.loadingCharges!)}</span></div>
-              )}
-              {(sale.transportCharges ?? 0) > 0 && (
-                <div className="flex justify-between"><span className="text-black">Transport Charges</span><span className="tabular-nums text-black">+ {fmtMoney(sale.transportCharges!)}</span></div>
-              )}
-              {(sale.labourCharges ?? 0) > 0 && (
-                <div className="flex justify-between"><span className="text-black">Labour Cost</span><span className="tabular-nums text-black">+ {fmtMoney(sale.labourCharges!)}</span></div>
-              )}
-              <div className="flex justify-between items-center pt-2 mt-2 border-t border-neutral-100">
-                <span className="font-semibold text-black">Total</span>
-                <span className="tabular-nums font-semibold text-[15px] text-black">{fmtMoney(grand)}</span>
+        {/* totals */}
+        <div className="border border-[#E5E5E5] rounded-xl bg-white p-4 sm:p-5 lg:sticky lg:top-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-[#171717]/60 mb-3">Totals</p>
+          <div className="space-y-2 text-sm">
+            {totalRows.map((r) => (
+              <div key={r.label} className="flex justify-between gap-3">
+                <span className="text-[#171717]/70">{r.label}</span>
+                <span className="tabular-nums text-[#171717]">{r.value}</span>
               </div>
-            </div>
+            ))}
+          </div>
+          <div className="flex justify-between items-center gap-3 rounded-lg bg-ink text-white px-4 py-3 mt-4">
+            <span className="text-xs font-medium uppercase tracking-wide text-white/70">Total</span>
+            <span className="text-lg font-semibold tabular-nums">{fmtMoney(grand)}</span>
           </div>
 
-          <div className="border border-neutral-200 rounded-lg overflow-hidden">
-            <div className="grid grid-cols-3 divide-x divide-neutral-200">
-              <div className="p-3 text-center">
-                <span className="block text-[10px] uppercase tracking-wider font-medium text-black">Total</span>
-                <span className="block font-semibold tabular-nums text-[13px] mt-1 text-black">{fmtMoney(grand)}</span>
-              </div>
-              <div className="p-3 text-center">
-                <span className="block text-[10px] uppercase tracking-wider font-medium text-black">Paid</span>
-                <span className="block font-semibold tabular-nums text-[13px] mt-1 text-[#2e6b2e]">{fmtMoney(paid)}</span>
-              </div>
-              <div className={`p-3 text-center ${due > 0 ? "bg-[#171717] text-white" : ""}`}>
-                <span className={`block text-[10px] uppercase tracking-wider font-medium ${due > 0 ? "text-white" : "text-black"}`}>Due</span>
-                <span className="block font-semibold tabular-nums text-[13px] mt-1">
-                  {due > 0 ? fmtMoney(due) : <span className="text-[#2e6b2e]">—</span>}
-                </span>
-              </div>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between gap-3">
+              <span className="text-[#171717]/70">Paid</span>
+              <span className="tabular-nums font-medium text-success">{fmtMoney(paid)}</span>
             </div>
-            {grand > 0 && (
-              <div className="px-4 pb-3 pt-2">
-                <div className="h-1.5 w-full bg-neutral-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${due > 0 ? "bg-[#171717]" : "bg-[#2e6b2e]"}`}
-                    style={{ width: `${paidPct}%` }}
-                  />
-                </div>
-                <div className="flex justify-between mt-1.5 text-[10px] text-black tabular-nums">
-                  <span>{due > 0 ? "Partially paid" : "Fully paid"}</span>
-                  <span>{Math.round(paidPct)}%</span>
-                </div>
-              </div>
-            )}
+            <div className="flex justify-between gap-3">
+              <span className="text-[#171717]/70">Due</span>
+              <span className={`tabular-nums font-semibold ${due > 0 ? "text-destructive" : "text-success"}`}>
+                {due > 0 ? fmtMoney(due) : "Nothing due"}
+              </span>
+            </div>
           </div>
+          {grand > 0 && (
+            <div className="mt-3">
+              <div
+                className="h-2 w-full bg-[#F0F0EE] rounded-full overflow-hidden"
+                role="progressbar"
+                aria-label="Paid so far"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(paidPct)}
+              >
+                <div className={`h-full rounded-full ${due > 0 ? "bg-warning" : "bg-success"}`} style={{ width: `${paidPct}%` }} />
+              </div>
+              <p className="mt-1.5 text-xs text-[#171717]/70 tabular-nums">{Math.round(paidPct)}% paid</p>
+            </div>
+          )}
         </div>
       </div>
 

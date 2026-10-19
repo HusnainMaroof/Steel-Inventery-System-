@@ -27,6 +27,7 @@ export default function SalesPage() {
   const { prefs } = useUiPreferences();
   const businessHref = useBusinessHref();
   const [viewId, setViewId] = useState<string | null>(null);
+  const [justSavedId, setJustSavedId] = useState<string | null>(null);
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [tab, setTab] = useState<"invoices" | "dues" | "print">("invoices");
@@ -150,6 +151,7 @@ export default function SalesPage() {
       saleRequestRef.current = null;
       api.removeAll();
       setNewOpen(false);
+      setJustSavedId(saleId);
       setViewId(saleId);
     } catch (reason) {
       setSubmitError(userFacingError(reason, "Could not save this sale. Check stock and try again."));
@@ -280,7 +282,19 @@ export default function SalesPage() {
         <PrintPack sales={sales} salePaid={salePaid} />
       )}
 
-      <SaleDetailModal saleId={viewId} onClose={() => setViewId(null)} />
+      <SaleDetailModal
+        saleId={viewId}
+        onClose={() => {
+          setViewId(null);
+          setJustSavedId(null);
+        }}
+        justSaved={!!viewId && viewId === justSavedId}
+        onNewSale={() => {
+          setViewId(null);
+          setJustSavedId(null);
+          startNewSale();
+        }}
+      />
       <ReceivePaymentModal saleId={paySaleId} onClose={() => setPaySaleId(null)} />
 
       {/* ================= NEW SALE — large overlay popup (~80% of screen) ================= */}

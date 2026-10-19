@@ -35,7 +35,33 @@ type SaleRow = {
 };
 
 const SALE_GRID =
-  "md:grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_80px_110px_110px_110px_44px] md:gap-3 md:px-4";
+  "md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.8fr)_130px_130px_140px_40px] md:gap-4 md:px-4";
+
+/** how many item lines a row shows before "+N more" */
+const ITEMS_SHOWN = 2;
+
+function StatusCell({ total, paid, due }: { total: number; paid: number; due: number }) {
+  if (due <= 0.005 && total > 0) {
+    return (
+      <span className="inline-flex items-center rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+        Paid
+      </span>
+    );
+  }
+  const partly = paid > 0.005;
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <span
+        className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
+          partly ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
+        }`}
+      >
+        {partly ? "Partly paid" : "Unpaid"}
+      </span>
+      <span className="text-sm font-semibold tabular-nums whitespace-nowrap text-destructive">{fmtMoney(due)} due</span>
+    </span>
+  );
+}
 
 type Status = "all" | "paid" | "partial" | "due";
 
@@ -233,22 +259,32 @@ export default function SalesTable({
     { label: "Delete", onClick: () => setDeleteId(s.id) },
   ];
 
-  const itemsBlock = (s: SaleRow) => (
-    <div className="space-y-2">
-      {s.items.map((it, i) => (
-        <div key={i}>
-          <span className="block text-sm font-medium text-[#171717] truncate">{it.product}</span>
-          {it.category && <span className="block text-[13px] text-[#171717]/70 truncate">{it.category}</span>}
-          {it.attrs.map((a, j) => (
-            <span key={j} className="block text-[13px] text-[#171717]/70 truncate">
-              {a.label}: {a.value}
-            </span>
-          ))}
-          <span className="block text-[13px] font-medium text-[#171717] tabular-nums">{it.qtyText}</span>
-        </div>
-      ))}
-    </div>
-  );
+  /* one compact line per item: "Cement · Grey Cement · 33 OPC · Lucky Cement   300 bags" */
+  const itemsBlock = (s: SaleRow) => {
+    const shown = s.items.slice(0, ITEMS_SHOWN);
+    const more = s.items.length - shown.length;
+    return (
+      <div className="space-y-1">
+        {shown.map((it, i) => {
+          const detail = [it.category, ...it.attrs.map((a) => a.value)].filter(Boolean).join(" · ");
+          return (
+            <div key={i} className="flex items-baseline justify-between gap-3 min-w-0">
+              <span className="min-w-0 truncate text-sm" title={detail ? `${it.product} · ${detail}` : it.product}>
+                <span className="font-medium text-[#171717]">{it.product}</span>
+                {detail && <span className="text-[13px] text-[#171717]/70"> · {detail}</span>}
+              </span>
+              <span className="shrink-0 text-[13px] font-medium text-[#171717] tabular-nums whitespace-nowrap">{it.qtyText}</span>
+            </div>
+          );
+        })}
+        {more > 0 && (
+          <span className="block text-[13px] text-[#171717]/70">
+            + {more} more item{more === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   // Same element while the list is unchanged, so keystrokes do not re-render every row.
   const resultsNode = useMemo(
@@ -293,10 +329,9 @@ export default function SalesTable({
                     >
                       <span>Customer</span>
                       <span>Items</span>
-                      <span className="text-right">Time</span>
                       <span className="text-right">Total</span>
                       <span className="text-right">Paid</span>
-                      <span className="text-right">Due</span>
+                      <span className="text-right">Status</span>
                       <span className="sr-only">Actions</span>
                     </div>
 
@@ -308,21 +343,21 @@ export default function SalesTable({
                           className="cursor-pointer transition-colors hover:bg-[#F8F8F7]"
                         >
                           <div className={`${SALE_GRID} items-start py-3.5`}>
-                            <span className="min-w-0 self-start text-sm font-medium text-[#171717] truncate">
-                              {s.customerName}
-                            </span>
+                            <div className="min-w-0 self-start">
+                              <span className="block text-sm font-medium text-[#171717] truncate">{s.customerName}</span>
+                              <span className="block text-[13px] text-[#171717]/70 tabular-nums">
+                                {s.invoiceNo} · {s.time}
+                              </span>
+                            </div>
                             <div className="min-w-0 self-start">{itemsBlock(s)}</div>
-                            <span className="self-start text-right text-sm text-[#171717]/70 tabular-nums whitespace-nowrap">
-                              {s.time}
-                            </span>
-                            <span className="self-start text-right text-sm font-medium text-[#171717] tabular-nums">
+                            <span className="self-start text-right text-sm font-semibold text-[#171717] tabular-nums whitespace-nowrap">
                               {fmtMoney(s.total)}
                             </span>
-                            <span className="self-start text-right text-sm text-[#171717] tabular-nums">{fmtMoney(s.paid)}</span>
-                            <span
-                              className={`self-start text-right text-sm font-semibold tabular-nums ${s.due > 0 ? "text-destructive" : "text-[#171717]"}`}
-                            >
-                              {s.due > 0 ? fmtMoney(s.due) : "-"}
+                            <span className="self-start text-right text-sm text-[#171717]/70 tabular-nums whitespace-nowrap">
+                              {s.paid > 0.005 ? fmtMoney(s.paid) : "-"}
+                            </span>
+                            <span className="self-start flex justify-end">
+                              <StatusCell total={s.total} paid={s.paid} due={s.due} />
                             </span>
                             <span className="self-start flex justify-end" onClick={(e) => e.stopPropagation()}>
                               <RowActionsMenu items={menuItems(s)} />
@@ -340,28 +375,25 @@ export default function SalesTable({
                           className="cursor-pointer rounded-xl border border-[#E5E5E5] bg-white p-4 active:bg-[#F8F8F7]"
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <span className="min-w-0 font-semibold text-sm text-black truncate">{s.customerName}</span>
-                            <span className="flex items-center gap-1 shrink-0">
-                              <span className="text-xs text-black tabular-nums">{s.time}</span>
+                            <div className="min-w-0">
+                              <span className="block font-semibold text-sm text-[#171717] truncate">{s.customerName}</span>
+                              <span className="block text-[13px] text-[#171717]/70 tabular-nums">
+                                {s.invoiceNo} · {s.time}
+                              </span>
+                            </div>
+                            <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
                               <RowActionsMenu items={menuItems(s)} />
                             </span>
                           </div>
-                          <div className="mt-2 mb-2">{itemsBlock(s)}</div>
-                          <div className="grid grid-cols-3 gap-2 border-t border-[#E5E5E5] pt-3">
+                          <div className="my-3">{itemsBlock(s)}</div>
+                          <div className="flex items-end justify-between gap-3 border-t border-[#E5E5E5] pt-3">
                             <div>
                               <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Total</span>
-                              <span className="block font-medium tabular-nums text-sm text-black">{fmtMoney(s.total)}</span>
-                            </div>
-                            <div>
-                              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Paid</span>
-                              <span className="block tabular-nums text-sm text-black">{fmtMoney(s.paid)}</span>
-                            </div>
-                            <div className="text-right">
-                              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Due</span>
-                              <span className={`block tabular-nums text-sm font-semibold ${s.due > 0 ? "text-[#a12b1f]" : "text-black"}`}>
-                                {s.due > 0 ? fmtMoney(s.due) : "-"}
+                              <span className="block font-semibold tabular-nums text-base text-[#171717] whitespace-nowrap">
+                                {fmtMoney(s.total)}
                               </span>
                             </div>
+                            <StatusCell total={s.total} paid={s.paid} due={s.due} />
                           </div>
                         </div>
                       ))}
@@ -477,7 +509,7 @@ export default function SalesTable({
         </div>
         <div className="text-right">
           <span className="block text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Outstanding</span>
-          <span className={`block text-2xl font-bold tabular-nums mt-1 ${totalDue > 0 ? "text-[#a12b1f]" : "text-black"}`}>
+          <span className={`block text-2xl font-bold tabular-nums mt-1 ${totalDue > 0 ? "text-destructive" : "text-[#171717]"}`}>
             {fmtMoney(totalDue)}
           </span>
         </div>

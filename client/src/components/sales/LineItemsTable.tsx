@@ -1,9 +1,8 @@
 "use client";
 
+import { NumberInput } from "@/components/ui";
 import { fmtMoney } from "@/lib/format";
 import type { SaleDraftApi, SaleDraftLine } from "./useSaleDraft";
-
-const numVal = (n: number) => (n === 0 ? "" : String(n));
 
 export default function LineItemsTable({
   api,
@@ -84,24 +83,23 @@ export default function LineItemsTable({
                 </td>
                 <td className="num">
                   <div className="inline-flex items-center justify-end gap-1.5">
-                    <input
-                      type="number" min="0" step="any"
-                      className={`!w-24 text-right ${over ? "!border-red-600" : ""}`}
-                      value={numVal(l.qty)}
-                      onChange={(e) => api.setLine(i, { qty: Number(e.target.value) })}
+                    <NumberInput
+                      aria-label="Quantity"
+                      decimals={3}
+                      className={`!w-24 text-right tabular-nums ${over ? "!border-destructive" : ""}`}
+                      value={l.qty}
+                      onValue={(n) => api.setLine(i, { qty: n })}
                       required
                     />
                   </div>
-                  {over && <span className="block text-[10px] text-red-600 font-normal">More than what is left in inventory.</span>}
+                  {over && <span className="block text-xs text-destructive font-normal mt-1">More than what is left in stock.</span>}
                 </td>
                 <td className="num">
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
+                  <NumberInput
+                    aria-label="Selling price"
                     className="!w-28 text-right tabular-nums"
-                    value={numVal(rate)}
-                    onChange={(e) => api.setLine(i, { rate: Number(e.target.value) })}
+                    value={rate}
+                    onValue={(n) => api.setLine(i, { rate: n })}
                     required
                   />
                 </td>

@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { fmtMoney, fmtQtyWithUnit, perUnitLabel, qtyUnitLabel } from "@/lib/format";
-import { OptionalSection } from "@/components/ui";
+import { NumberInput, OptionalSection } from "@/components/ui";
 import type { SaleDraftApi } from "./useSaleDraft";
-
-const numVal = (n: number) => (n === 0 ? "" : String(n));
 
 export default function AddItemBar({
   api,
@@ -144,14 +142,12 @@ export default function AddItemBar({
                       {pickedLabel}
                     </span>
                   ) : null}
-                  <input
-                    type="number"
-                    min="0"
-                    max={pickedStock || undefined}
-                    step="any"
-                    className={`!w-28 shrink-0 ${exactStocked && api.draftOver ? "!border-destructive" : ""}`}
-                    value={numVal(pick.qty)}
-                    onChange={(e) => setPick({ qty: Number(e.target.value) })}
+                  <NumberInput
+                    aria-label="Quantity"
+                    decimals={3}
+                    className={`!w-28 shrink-0 tabular-nums ${exactStocked && api.draftOver ? "!border-destructive" : ""}`}
+                    value={pick.qty}
+                    onValue={(n) => setPick({ qty: n })}
                   />
                 </div>
               </div>
@@ -171,14 +167,11 @@ export default function AddItemBar({
                       New selling price
                       <span className="font-normal text-[#171717]/70">{perUnitLabel(pickedUnit || api.draftUnit)}</span>
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
+                    <NumberInput
                       placeholder="Optional"
                       className="!w-32 tabular-nums"
-                      value={numVal(pick.rate)}
-                      onChange={(e) => setPick({ rate: Number(e.target.value) })}
+                      value={pick.rate}
+                      onValue={(n) => setPick({ rate: n })}
                       disabled={!pickVariant}
                     />
                   </div>
