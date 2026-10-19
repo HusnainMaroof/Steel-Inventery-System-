@@ -455,6 +455,9 @@ export default function Shell({ children }: { children: ReactNode }) {
           homeHref={roleHome}
           userName={displayName(user)}
           userSubtitle={userSubtitle(user)}
+          userEmail={user.email}
+          settingsHref={roleNav.find((n) => n.key === "settings")?.href}
+          staffHref={roleNav.find((n) => n.key === "staff")?.href}
           onSignOut={onSignOut}
         />
         <div className="flex">
