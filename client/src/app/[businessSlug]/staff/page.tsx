@@ -300,6 +300,9 @@ function StaffModal({
               id="staff-password"
               type={showPassword ? "text" : "password"}
               autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={form.password}
               onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
               placeholder={editing ? "Leave blank to keep current" : "At least 8 characters"}
