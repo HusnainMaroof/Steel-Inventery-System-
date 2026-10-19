@@ -1878,7 +1878,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         <div
           role="status"
           aria-live="polite"
-          className="fixed top-0 left-0 right-0 z-[99] h-0.5 overflow-hidden bg-neutral-200"
+          className="fixed top-0 left-0 right-0 z-99 h-0.5 overflow-hidden bg-neutral-200"
         >
           <div className="h-full w-1/3 bg-[#171717] animate-[skeleton-shimmer_1s_ease-in-out_infinite]" />
         </div>
@@ -1886,7 +1886,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       {error && user && user.role !== "SUPERADMIN" && (
         <div
           role="alert"
-          className="fixed right-4 bottom-4 z-[100] max-w-sm rounded-md border border-[#f0e2de] bg-[#faf5f2] px-4 py-3 text-sm text-[#a12b1f] shadow-lg"
+          className="fixed right-4 bottom-4 z-100 max-w-sm rounded-md border border-[#f0e2de] bg-[#faf5f2] px-4 py-3 text-sm text-[#a12b1f] shadow-lg"
         >
           <p>{error}</p>
           <button className="mt-2 underline" onClick={() => setReloadKey((value) => value + 1)}>
