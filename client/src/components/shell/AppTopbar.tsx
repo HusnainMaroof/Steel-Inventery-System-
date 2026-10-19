@@ -8,6 +8,8 @@ import { useEffect, useRef, useState } from "react";
 type AppTopbarProps = {
   brand: string;
   logoSrc: string | null;
+  /** Business panels show "Your logo" until a logo is uploaded; the platform panel shows its name. */
+  logoPlaceholder: boolean;
   homeHref: string;
   userName: string;
   userSubtitle: string;
@@ -28,6 +30,7 @@ function initialsFor(name: string) {
 export default function AppTopbar({
   brand,
   logoSrc,
+  logoPlaceholder,
   homeHref,
   userName,
   userSubtitle,
@@ -74,33 +77,34 @@ export default function AppTopbar({
   }
 
   return (
-    <header className="no-print relative z-20 flex h-[72px] items-center justify-between border-b border-[#E5E5E5] bg-white px-4 sm:px-6">
-      <Link
-        href={homeHref}
-        title={brand}
-        className="flex min-w-0 items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-      >
-        {logoSrc ? (
-          <Image
-            src={logoSrc}
-            alt={brand}
-            width={36}
-            height={36}
-            unoptimized
-            className="h-9 w-9 shrink-0 rounded-xl border border-[#E5E5E5] bg-white object-contain"
-          />
-        ) : (
-          <span
-            aria-hidden="true"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground"
-          >
-            {brand.trim().slice(0, 1).toUpperCase()}
-          </span>
-        )}
-        <span className="max-w-[min(45vw,280px)] truncate text-base font-semibold tracking-tight text-[#171717]">
-          {brand}
-        </span>
-      </Link>
+    <header className="no-print sticky top-0 z-30 flex h-[72px] items-center justify-between bg-[#F8F8F7] pr-4 sm:pr-6">
+      <div className="flex w-[232px] shrink-0 items-center pl-4 pr-2">
+        <Link
+          href={homeHref}
+          title={brand}
+          aria-label={`${brand} home`}
+          className="flex h-11 min-w-0 items-center rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          {logoSrc ? (
+            <Image
+              src={logoSrc}
+              alt={brand}
+              width={180}
+              height={44}
+              unoptimized
+              className="h-11 w-auto max-w-[180px] object-contain object-left"
+            />
+          ) : logoPlaceholder ? (
+            <span className="inline-flex h-11 items-center rounded-2xl bg-white px-4 text-[13px] font-medium text-[#171717]/70">
+              Your logo
+            </span>
+          ) : (
+            <span className="truncate pl-3.5 text-lg font-semibold tracking-tight text-[#171717]">
+              {brand}
+            </span>
+          )}
+        </Link>
+      </div>
 
       <div ref={menuRef} className="relative">
         <button

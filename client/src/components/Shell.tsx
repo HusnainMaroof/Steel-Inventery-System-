@@ -447,23 +447,24 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <div className="hidden md:flex">
-        <AppSidebar
-          items={roleNav.map((n) => ({ key: n.key, href: n.href, label: n.label }))}
-          pathname={pathname}
+      <div className="hidden md:block">
+        <AppTopbar
+          brand={brand}
+          logoSrc={logoSrc}
+          logoPlaceholder={useLogoPlaceholder}
+          homeHref={roleHome}
+          userName={displayName(user)}
+          userSubtitle={userSubtitle(user)}
           onSignOut={onSignOut}
-          helpHref="mailto:contact@tijartt.com"
         />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <AppTopbar
-            brand={brand}
-            logoSrc={logoSrc}
-            homeHref={roleHome}
-            userName={displayName(user)}
-            userSubtitle={userSubtitle(user)}
+        <div className="flex">
+          <AppSidebar
+            items={roleNav.map((n) => ({ key: n.key, href: n.href, label: n.label }))}
+            pathname={pathname}
             onSignOut={onSignOut}
+            helpHref="mailto:contact@tijartt.com"
           />
-          <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{mainContent}</main>
+          <main className="min-w-0 flex-1 px-4 pb-8 pt-2 sm:px-6 lg:px-8">{mainContent}</main>
         </div>
       </div>
 
