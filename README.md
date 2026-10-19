@@ -39,12 +39,6 @@ docs/             # All project documentation
   Server Actions.
 - [docs/frontend-design.md](docs/frontend-design.md) — design system:
   colour tokens, typography, layout and UX conventions.
-- [docs/NUMBER_AUDIT.md](docs/NUMBER_AUDIT.md) — number-reconciliation
-  QA checks every figure must pass.
-- [docs/DATABASE_OPTIMIZATION.md](docs/DATABASE_OPTIMIZATION.md) —
-  query/index work (historical audit; see the current-state note).
-- [docs/OPS_VERIFICATION.md](docs/OPS_VERIFICATION.md) — deploy-time
-  ops checklist.
 
 ## Scripts
 

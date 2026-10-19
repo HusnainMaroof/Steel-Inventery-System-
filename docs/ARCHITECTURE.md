@@ -22,7 +22,7 @@ client/                         # Next.js 16 UI
     actions/                    # login, owners, staff, platform, media
     api/health                  # Browser health probe
     api/auth/{me,status}        # Session user + registration flag
-    api/tradex/[...path]        # Catch-all BFF → Nest /api/v1
+    api/tijaratt/[...path]      # Catch-all BFF → Nest /api/v1
   src/components/               # Shell, StoreGate, feature UI
   src/lib/                      # Store, adapters, money, BFF, types
   src/hooks/                    # Paginated sales, platform admin
@@ -484,6 +484,4 @@ Unit tests cover domain money/FIFO, purchases, ledger bootstrap,
 staff-access, invoice atomicity, and settings sanitization. The e2e
 suite in `server/test/` needs a reachable `DATABASE_URL`.
 
-See also: [apis.md](apis.md), [frontend-design.md](frontend-design.md),
-[NUMBER_AUDIT.md](NUMBER_AUDIT.md),
-[DATABASE_OPTIMIZATION.md](DATABASE_OPTIMIZATION.md).
+See also: [apis.md](apis.md), [frontend-design.md](frontend-design.md).
