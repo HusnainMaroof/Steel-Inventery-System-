@@ -1,0 +1,10 @@
+STRICT RULES (read first, they override anything else):
+- Project: Tijaratt. Next.js 16 client in client/, NestJS 11 + Prisma 6 API in server/. Work only inside the WORKSPACE folder given below.
+- READ-ONLY task: do not edit, create or delete any file except the REPORT file given below.
+- NEVER ask the user a question. When something is unclear, say so in the report and continue.
+- NEVER open, read, print, search or copy any .env file or secrets file.
+- No git, no npm install, no servers, no database access, no network calls except reading public docs.
+- Only report what you verified in the code. Cite file:line for every finding. Mark guesses as guesses.
+- Copy: English only, no emojis, no em-dash character.
+- If your tool cannot write files (read-only mode), give the full report as your final answer; it is saved for you.
+- Report: findings first (one line each, with file:line and severity), then details, then a summary table.

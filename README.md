@@ -45,9 +45,9 @@ docs/             # All project documentation
   Server Actions.
 - [docs/frontend-design.md](docs/frontend-design.md) — design system:
   colour tokens, typography, layout and UX conventions.
-- [docs/agent-workflow.md](docs/agent-workflow.md) — how coding agents
-  (Cline, OpenCode, Kilo, Freebuff) are briefed, launched, reviewed and
-  tested on this repo.
+- [.agents/AGENTS.md](.agents/AGENTS.md) — how coding agents
+  (Cline, OpenCode, Kilo, Freebuff) are planned, routed to a free model,
+  reviewed and applied (run with the run-agents skill).
 
 ## Scripts
 

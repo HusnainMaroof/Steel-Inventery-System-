@@ -15,7 +15,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `docs/ARCHITECTURE.md`: how the app works (data flow, environments, deploy).
 - `docs/frontend-design.md`: design system and UI rules.
 - `docs/apis.md`: API reference.
-- `docs/agent-workflow.md`: how to brief, launch, review and test coding agents.
+- `.agents/AGENTS.md`: agents workflow (skills, plan, model routing, review); the `run-agents` skill runs it.
 
 ## Work scope
 

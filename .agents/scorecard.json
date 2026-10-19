@@ -1,0 +1,125 @@
+{
+  "_about": "One row per reviewed agent attempt. Written by: node .agents/bin/agents.cjs score <run> <0-100> [note]. The router reads it.",
+  "attempts": [
+    {
+      "t": "2026-10-19",
+      "run": "A",
+      "attempt": 1,
+      "profile": "ui-polisher",
+      "task_type": "ui-polish",
+      "tool": "cline",
+      "model": "poolside/laguna-s-2.1:free",
+      "score": 85,
+      "verdict": "refine",
+      "note": "New Sale stock message; supervisor removed extra lines and fixed the chip"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "B",
+      "attempt": 1,
+      "profile": "feature-builder",
+      "task_type": "client-feature",
+      "tool": "freebuff",
+      "model": "GPT-6 Luna",
+      "score": 90,
+      "verdict": "approve",
+      "note": "Customer dues tab; supervisor switched total to Decimal"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "C",
+      "attempt": 1,
+      "profile": "feature-builder",
+      "task_type": "client-feature",
+      "tool": "opencode",
+      "model": "opencode/deepseek-v4.1-flash-free",
+      "score": 90,
+      "verdict": "approve",
+      "note": "Print tab"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "D",
+      "attempt": 1,
+      "profile": "backend-fixer",
+      "task_type": "backend-fix",
+      "tool": "cline",
+      "model": "poolside/laguna-s-2.1:free",
+      "score": 75,
+      "verdict": "refine",
+      "note": "Report product scope; scoped salesGrandTotals still summed every line; Fix #2 comments"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "E",
+      "attempt": 1,
+      "profile": "browser-tester",
+      "task_type": "browser-test",
+      "tool": "cline",
+      "model": "poolside/laguna-s-2.1:free",
+      "score": 85,
+      "verdict": "refine",
+      "note": "Plan restriction test; looped on /profit (real path /reports)"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "F",
+      "attempt": 1,
+      "profile": "ui-polisher",
+      "task_type": "ui-polish",
+      "tool": "cline",
+      "model": "poolside/laguna-s-2.1:free",
+      "score": 85,
+      "verdict": "refine",
+      "note": "Admin Plans page; em dashes, wide pill, uneven chips"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "G",
+      "attempt": 1,
+      "profile": "ui-polisher",
+      "task_type": "ui-polish",
+      "tool": "cline",
+      "model": "poolside/laguna-s-2.1:free",
+      "score": 70,
+      "verdict": "refine",
+      "note": "Admin Businesses pages; full-width filter, tall empty card, no report, stray files"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "K",
+      "attempt": 1,
+      "profile": "ui-polisher",
+      "task_type": "ui-polish",
+      "tool": "kilo",
+      "model": "kilo/kilo-auto/free",
+      "score": 50,
+      "verdict": "reroute",
+      "note": "Reports page; broken headerLabel variable"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "t1-probe",
+      "attempt": 2,
+      "profile": "investigator",
+      "task_type": "investigate",
+      "tool": "cline",
+      "model": "poolside/laguna-s-2.1:free",
+      "score": 95,
+      "verdict": "approve",
+      "note": "regex check, correct file:line"
+    },
+    {
+      "t": "2026-10-19",
+      "run": "t2-probe",
+      "attempt": 1,
+      "profile": "investigator",
+      "task_type": "investigate",
+      "tool": "opencode",
+      "model": "opencode/deepseek-v4.1-flash-free",
+      "score": 95,
+      "verdict": "approve",
+      "note": "regex check, more detail, report saved from log"
+    }
+  ]
+}

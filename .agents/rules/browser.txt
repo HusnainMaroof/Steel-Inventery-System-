@@ -1,0 +1,9 @@
+STRICT RULES (read first, they override anything else):
+- BROWSER TEST task on the test environment (http://localhost:3000, already running). Do NOT edit any repo file. The only files you may create are the REPORT file and screenshots in the run folder named in the task.
+- Use the agent-browser CLI only, with the session names the task gives. Never sign a session out unless a step says so.
+- agent-browser refs (@e12) go stale after every click or navigation: run `agent-browser --session <name> snapshot -i` again before every click, and read the element name before you click it.
+- Change data ONLY through the app UI and ONLY the changes the task lists, then restore them exactly as the task says. No direct database access, no API calls that write.
+- NEVER ask the user a question. When unsure, take the safest option, continue, and write it in the report.
+- NEVER open, read, print or copy any .env file. No git, no npm install, do not start, stop or kill any server or process.
+- Screenshots at 1440x960, and at 390x844 when the task asks for phones (set the viewport back afterwards).
+- Report: a table with check, expected, seen, PASS or FAIL; what you changed and how you restored it; screenshot file names; any bug you noticed.

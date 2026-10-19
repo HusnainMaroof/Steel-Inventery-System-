@@ -498,7 +498,7 @@ authenticated endpoint lost ~215ms (one RTT); bootstrap p50 1342→108ms;
 A push to `main` is a production deploy. Migrations live in
 `server/prisma/migrations/` and are applied by the deploy job.
 
-How agents work on this repo: [agent-workflow.md](agent-workflow.md).
+How agents work on this repo: [.agents/AGENTS.md](../.agents/AGENTS.md).
 
 ---
 
@@ -518,4 +518,4 @@ staff-access, invoice atomicity, and settings sanitization. The e2e
 suite in `server/test/` needs a reachable `DATABASE_URL`.
 
 See also: [apis.md](apis.md), [frontend-design.md](frontend-design.md),
-[agent-workflow.md](agent-workflow.md).
+[.agents/AGENTS.md](../.agents/AGENTS.md).

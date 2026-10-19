@@ -1,0 +1,68 @@
+{
+  "_about": "Model router config (after OpenHands RouterLLM). Models are never fixed in profiles: the router picks one per launch from the live free-model list, the scorecard and model health. Edit tiers and excludes here, not in profiles.",
+  "tools": {
+    "cline": { "modes": ["edit", "readonly", "browser"], "worktree": true, "list": "cline-api" },
+    "opencode": { "modes": ["edit", "readonly", "browser"], "worktree": true, "list": "opencode-models" },
+    "kilo": { "modes": ["edit", "readonly"], "worktree": true, "list": "kilo-models" },
+    "freebuff": { "modes": ["edit"], "worktree": false, "list": "static" }
+  },
+  "static_models": {
+    "freebuff": ["GPT-6 Luna", "DeepSeek V4.1 Flash", "GLM 5.3 Flash", "Nemotron 3.5 Lightning"]
+  },
+  "exclude": [
+    "content-safety",
+    "lfm-",
+    "-vl",
+    "nano",
+    "inkling-small",
+    "^openrouter/",
+    "^opencode-go/"
+  ],
+  "exclude_why": {
+    "content-safety": "safety classifier, not a coding model",
+    "lfm-": "2.6B model, too small for code",
+    "-vl": "vision models, no gain for text-only coding",
+    "nano": "too small for multi-file edits",
+    "inkling-small": "too small",
+    "^openrouter/": "OpenCode openrouter/* needs an OpenRouter key; the keyless data dir has none",
+    "^opencode-go/": "separate OpenCode Go gateway, untested keyless"
+  },
+  "tiers": {
+    "strong": [
+      "laguna-s-",
+      "deepseek",
+      "nemotron-3-ultra",
+      "nemotron-3-super",
+      "glm-5",
+      "gemma-4-31b",
+      "minimax",
+      "kilo-auto",
+      "GPT-6 Luna",
+      "DeepSeek V4.1 Flash",
+      "GLM 5.3 Flash",
+      "thinkingmachines/inkling:free",
+      "beam",
+      "longcat"
+    ],
+    "light": [
+      "laguna-xs",
+      "north-mini",
+      "lightning",
+      "Lightning",
+      "mimo",
+      "gemma-4-26b",
+      "dots-3",
+      "xing"
+    ]
+  },
+  "cooldown_minutes": { "rate_limit": 30, "auth": 1440, "not_found": 10080, "crash": 15 },
+  "max_auto_fallbacks": 2,
+  "estimate": { "prior": 0.6, "prior_weight": 2 },
+  "weights": {
+    "task": 0.6,
+    "overall": 0.4,
+    "prefer_tool_bonus": 0.04,
+    "strong_tier_bonus": 0.02,
+    "recent_failure_penalty": 0.15
+  }
+}

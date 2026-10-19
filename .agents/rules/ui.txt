@@ -1,0 +1,27 @@
+STRICT RULES (read first):
+- Project: Tijaratt (Next.js 16 + React 19 + TypeScript strict + Tailwind v4 in client/). Follow AGENTS.md and client/AGENTS.md. Work only inside the WORKSPACE folder given below.
+- Edit ONLY the files listed under ALLOWED FILES. Do not create other files.
+- The REPORT file path given below is ALWAYS allowed to be created or overwritten, even though it is not in ALLOWED FILES.
+- NEVER stop to ask the user a question or wait for confirmation. When something is unclear, choose the safest option that follows these rules, continue, and note the choice in the report.
+- NEVER open, read, print, search or copy server/.env, server/.env.production, client/.env*, or any other env or secrets file.
+- No git. No npm install, no new dependencies. Do not start, stop or kill any server. No database access.
+- KEEP LAYOUT AND STRUCTURE. Do not move sections, remove features, rename things, or change behaviour, data or handlers. This is a visual polish pass: spacing, font sizes, alignment, colours, control sizes, card nesting.
+- Copy: English only, no emojis (replace emoji icons with lucide-react icons or remove them), no em-dash character in any text you write.
+
+DESIGN SYSTEM v2 (already applied globally; follow it, do not fight it):
+- Root font is 16px desktop / 15px phone. Use Tailwind text-sm (14px) for body and table cells, text-[13px] for secondary text, text-xs (12px) only for labels, table headers and badges. Never below 12px. Do not use text-[10px] or text-[11px].
+- Colours: primary green via tokens bg-primary / text-primary / border-primary / outline-primary, text-primary-foreground. Near-black bg-ink. Status: text-success, text-destructive, text-warning with bg-success/10 style tints. Neutrals: page #F8F8F7, cards bg-white, borders border-[#E5E5E5], body text text-[#171717], secondary text text-[#171717]/70. No gray tokens (text-gray-*, text-neutral-*, #737373, #6b7280). Never write the primary green as a hex.
+- Use green ONLY for primary actions (classes btn-primary already green) and the current location. Segmented controls and tabs: active = bg-ink text-white (segmented) or a 2px bg-ink underline (tabs). Do not turn other things green.
+- Controls: global input/select/textarea already have min-height 40px, 14px text, 8px radius, green focus ring. Do not shrink them with !text-xs, !py-1 etc. Remove such !-overrides that make a control smaller than 40px or text smaller than 14px. Buttons: use the existing btn-primary / btn-ghost classes (40px, 14px). Icon-only buttons are 40x40 with aria-label.
+- Toolbars: one row under the page title: search (flex-1) + filters + primary action, gap-3, all controls the same 40px height, wraps on small screens.
+- Cards and tables: cards bg-white border border-[#E5E5E5] rounded-xl. Never put a bordered card inside another bordered card inside another (no card-in-card-in-card). A table sits directly in ONE card: header row bg-[#FAFAF9] with th text-xs uppercase tracking-wide text-[#171717]/60, rows text-sm, row hover bg-[#F8F8F7], numeric columns right-aligned tabular-nums.
+- Row actions on lists go in the existing RowActionsMenu (kebab) from client/src/components/ui.tsx, not as a filled button per row. Destructive actions stay inside menus/confirm dialogs, never a red button on every row.
+- Spacing: section gaps space-y-6 / mb-6; card padding p-5 (p-4 on phones); keep a 4/8px rhythm.
+- Self-check from client/: npx tsc --noEmit ; npx eslint <each file you changed>. Fix every error you introduced.
+- Report: markdown at the REPORT path: per file what you changed (before -> after), anything you could not do, self-check output.
+
+HOW TO WORK (Karpathy guidelines):
+- Think before coding: before editing, write in the REPORT under "Assumptions" what you understood the task to be and every assumption you made. If two readings of the task are possible, pick the safer one and say so. Never pick silently.
+- Simplicity first: the minimum code that solves the task. No features, options, abstractions or error handling the task did not ask for. If your change is long, look for the shorter one.
+- Surgical changes: touch only what the task needs. Do not improve, reformat or re-comment nearby code. Match the existing style. Remove only the imports and variables YOUR change made unused. Mention unrelated problems in the report; do not fix them.
+- Goal-driven: the task's "Done when" / "Tests" are the goal. Loop until each check passes, and paste the proof (command output) in the report.

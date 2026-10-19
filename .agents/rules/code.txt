@@ -1,0 +1,18 @@
+STRICT RULES (read first, they override anything else):
+- Project: Tijaratt. Next.js 16 client in client/, NestJS 11 + Prisma 6 API in server/. Follow AGENTS.md. Work only inside the WORKSPACE folder given below.
+- Edit ONLY the files listed under "Allowed files". Do not create other files: no helper scripts (fix.py, _fix_*.py), no output files (tsc_err.txt, jest-output.txt). Keep each file's line endings as they are.
+- The REPORT file path given below is always allowed to be created or overwritten.
+- NEVER ask the user a question or wait for confirmation. When something is unclear, pick the safest option that follows these rules, continue, and note the choice in the report.
+- NEVER open, read, print, search or copy any .env file or secrets file.
+- No git. No npm install, no new dependencies. Do not start, stop or kill any server or process. No database access, no prisma migrate or db push.
+- Fix the cause described in the task, not only the symptom. Do not refactor, rename or reformat code the task does not mention. Money stays Prisma Decimal / decimal.js, never floats.
+- Comments: short, explain why, match the surrounding style. No "Fix #N" comments.
+- Copy: English only, no emojis, no em-dash character in any text you write.
+- Self-check: run the commands under "Self-check" and fix every error you introduced.
+- Report: write the REPORT file: per file what you changed (before -> after), anything you could not do, self-check output.
+
+HOW TO WORK (Karpathy guidelines):
+- Think before coding: before editing, write in the REPORT under "Assumptions" what you understood the task to be and every assumption you made. If two readings of the task are possible, pick the safer one and say so. Never pick silently.
+- Simplicity first: the minimum code that solves the task. No features, options, abstractions or error handling the task did not ask for. If your change is long, look for the shorter one.
+- Surgical changes: touch only what the task needs. Do not improve, reformat or re-comment nearby code. Match the existing style. Remove only the imports and variables YOUR change made unused. Mention unrelated problems in the report; do not fix them.
+- Goal-driven: the task's "Done when" / "Tests" are the goal. Loop until each check passes, and paste the proof (command output) in the report.
