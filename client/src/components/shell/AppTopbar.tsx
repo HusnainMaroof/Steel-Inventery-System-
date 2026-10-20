@@ -18,6 +18,8 @@ type AppTopbarProps = {
   logoSrc: string | null;
   /** Business panels show "Your logo" until a logo is uploaded; the platform panel shows its name. */
   logoPlaceholder: boolean;
+  /** Size classes for the logo image; a wide wordmark needs less height than a square shop logo. */
+  logoClassName?: string;
   homeHref: string;
   userName: string;
   userEmail?: string;
@@ -58,6 +60,7 @@ export default function AppTopbar({
   brand,
   logoSrc,
   logoPlaceholder,
+  logoClassName = "h-14",
   homeHref,
   userName,
   userEmail,
@@ -177,7 +180,7 @@ export default function AppTopbar({
               width={200}
               height={56}
               unoptimized
-              className="h-14 w-auto max-w-[200px] object-contain object-left"
+              className={`${logoClassName} w-auto max-w-[200px] object-contain object-left`}
             />
           ) : logoPlaceholder ? (
             <span className="inline-flex h-14 items-center rounded-2xl bg-white px-5 text-sm font-medium text-[#171717]/70">

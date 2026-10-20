@@ -58,7 +58,7 @@ export async function tijarattFetch<T>(
     return {
       ok: false,
       status: 503,
-      message: "Cannot reach the Tijaratt API. Is it running?",
+      message: "Cannot reach the Tijartt API. Is it running?",
     };
   }
 

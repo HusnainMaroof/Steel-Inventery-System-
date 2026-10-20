@@ -7,7 +7,7 @@ export function NotFoundScreen() {
       <Link
         href="/"
         className="relative z-10 w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#0099ff]"
-        aria-label="Tijaratt home"
+        aria-label="Tijartt home"
       >
         <TijarattBrand />
       </Link>
@@ -21,7 +21,7 @@ export function NotFoundScreen() {
         </h1>
         <p className="mx-auto mt-5 max-w-[480px] text-[16px] leading-[1.63] text-[#374151]">
           The address may have changed, or you may not have access to this
-          part of Tijaratt.
+          part of Tijartt.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Link

@@ -110,7 +110,7 @@ export function FeatureSection() {
             </div>
 
             <div className="relative z-[1] flex h-[220px] items-center justify-center max-[900px]:h-[180px] max-[640px]:h-[150px]">
-             <img src="/images/Feature section.png" alt="" />
+             <img src="/images/feature-dashboard.png" alt="Tijartt dashboard showing stock, sales, dues and profit for a trading business" />
             </div>
 
             <button

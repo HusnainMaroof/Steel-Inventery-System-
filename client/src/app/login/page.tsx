@@ -77,7 +77,7 @@ export default function LoginPage() {
         <Link
           href="/"
           className="w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary"
-          aria-label="Tijaratt home"
+          aria-label="Tijartt home"
         >
           <TijarattBrand />
         </Link>

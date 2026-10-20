@@ -1,6 +1,6 @@
-# Tijaratt architecture
+# Tijartt architecture
 
-Tijaratt is a multi-tenant depot ledger. Purchases add stock, sales remove
+Tijartt is a multi-tenant depot ledger. Purchases add stock, sales remove
 stock, and the dashboard, invoices, dues, and reports are derived from the
 same persisted records. There is no JSON ledger snapshot and no runtime
 demo seed.
@@ -117,7 +117,16 @@ the ledger store.
 Canonical paths are `isKnownAppPath` in `client/src/lib/app-routes.ts`.
 Unknown paths redirect to `/404?from=…`.
 
-**Public:** `/`, `/login`, `/offline`, `/404`.
+**Public:** `/`, `/login`, `/offline`, `/404`, `/pricing`, `/privacy-policy`, `/terms-and-conditions`.
+
+**SEO:** the site URL lives in `client/src/lib/site.ts`. `app/robots.ts` and
+`app/sitemap.ts` generate `/robots.txt` and `/sitemap.xml` (the proxy matcher
+skips both). The root layout sets `metadataBase`, the title template, Open
+Graph and Twitter defaults; each public page sets its own canonical. The home
+page renders Organization, WebSite and SoftwareApplication JSON-LD.
+`/login`, `/admin/*` and `/{businessSlug}/*` are `noindex, nofollow` through
+their layouts. `app/icon.png`, `app/apple-icon.png`, `app/opengraph-image.png`
+and `app/twitter-image.png` are file-convention assets.
 
 **Super Admin:** `/admin` → `/admin/overview`, `/admin/businesses`,
 `/admin/businesses/[ownerId]`, `/admin/products`, `/admin/subscriptions`.
@@ -255,7 +264,6 @@ multipart (`uploadBusinessLogoAction`), not JSON BFF.
 | `components/catalogue/` | Attribute fields, variant badge |
 | `components/invoice/` | Brand header |
 | `components/reports/` | Report sections |
-| `components/settings/` | Warehouse panel |
 | `components/admin/` | Overview, templates, subscription plans, business detail |
 | `components/customers/` | `CustomerHistoryModal`: sales and payments ledger with running balance |
 | Shared | `InvoiceDocument`, `ReceivePaymentModal`, `SaleDetailModal`, `DataTable`, `ui.tsx` |

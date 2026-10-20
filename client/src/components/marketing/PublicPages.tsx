@@ -28,7 +28,7 @@ export function PricingPage() {
             <h1 className="text-[clamp(48px,7vw,72px)] font-semibold leading-[1.03] tracking-[-0.037em] text-[#020520]">
               Choose a plan that fits
               <br />
-              <span className="text-[#0f46d8]">how you use Tijaratt.</span>
+              <span className="text-[#0f46d8]">how you use Tijartt.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-[590px] text-[17px] leading-[1.63] text-[#374151]">
               Monthly, yearly, and lifetime access are available. Contact us
@@ -51,7 +51,7 @@ export function PricingPage() {
               </div>
               <a
                 className={`${outlineButton} shrink-0`}
-                href="mailto:contact@tijartt.com?subject=Tijaratt%20pricing%20enquiry"
+                href="mailto:contact@tijartt.com?subject=Tijartt%20pricing%20enquiry"
               >
                 Ask about pricing
               </a>
@@ -78,7 +78,7 @@ export function PricingPage() {
                   <span className="text-[13px] text-[#374151]">{price}</span>
                   <a
                     className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[#e2e8f0] px-4 text-[12px] font-medium text-[#0f46d8] transition-colors hover:border-[#0f46d8] sm:w-28"
-                    href={`mailto:contact@tijartt.com?subject=${encodeURIComponent(`Tijaratt ${name} plan`)}`}
+                    href={`mailto:contact@tijartt.com?subject=${encodeURIComponent(`Tijartt ${name} plan`)}`}
                   >
                     Contact us
                   </a>
@@ -87,7 +87,7 @@ export function PricingPage() {
             </div>
             <p className="mt-4 text-[12px] leading-[1.6] text-[#6b7280]">
               Custom-duration plans can also be configured when required.
-              Module access is set for each plan by Tijaratt administration.
+              Module access is set for each plan by Tijartt administration.
             </p>
           </div>
         </section>
@@ -99,7 +99,7 @@ export function PricingPage() {
                 One system, with access matched to your plan.
               </h2>
               <p className="mt-4 text-[14px] leading-[1.65] text-[#374151]">
-                Tijaratt plans can include the business areas below. We will
+                Tijartt plans can include the business areas below. We will
                 confirm exactly what your selected plan includes.
               </p>
             </div>
@@ -122,9 +122,9 @@ export function PricingPage() {
           </p>
           <a
             className={`${outlineButton} mt-7`}
-            href="mailto:contact@tijartt.com?subject=Tijaratt%20pricing%20enquiry"
+            href="mailto:contact@tijartt.com?subject=Tijartt%20pricing%20enquiry"
           >
-            Contact Tijaratt
+            Contact Tijartt
           </a>
           <p className="mt-5 text-[12px] text-[#6b7280]">
             Already have an account?{" "}

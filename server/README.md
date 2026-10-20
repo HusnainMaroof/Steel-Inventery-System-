@@ -1,6 +1,6 @@
-# Tijaratt Server
+# Tijartt Server
 
-NestJS + Fastify + Prisma backend (modular monolith) for the Tijaratt
+NestJS + Fastify + Prisma backend (modular monolith) for the Tijartt
 system. PostgreSQL is hosted on Neon and accessed only through Prisma.
 
 ## Stack

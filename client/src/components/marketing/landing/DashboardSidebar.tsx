@@ -25,7 +25,7 @@ const items = [
 export function DashboardSidebar() {
   return (
     <aside className="flex h-full flex-col border-r border-[#E5E5E5] bg-white px-3 py-5 max-[640px]:hidden" aria-hidden="true">
-      <p className="mx-2 mb-4 text-[16px] font-bold tracking-[-0.03em] text-[#111]">Tijaratt</p>
+      <p className="mx-2 mb-4 text-[16px] font-bold tracking-[-0.03em] text-[#111]">Tijartt</p>
       <div className="flex min-h-0 flex-1 flex-col gap-1">
         {items.map((item) => (
           <div

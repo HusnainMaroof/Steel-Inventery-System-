@@ -5,11 +5,23 @@ import { StoreProvider } from "@/lib/store";
 import { ServerStatusMonitor } from "@/components/ServerStatusMonitor";
 import Shell from "@/components/Shell";
 import { InputGuards } from "@/components/InputGuards";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Tijaratt | Know what you have, owe, and earn",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Tijartt | Stock, Sales and Dues Ledger for Traders",
+    template: "%s | Tijartt",
+  },
   description:
-    "Tijaratt helps stock-based businesses see what they have, what they owe, and what they earn — stock, purchases, sales, payments, and profit in one record.",
+    "Track stock, purchases, sales, customer dues, supplier payments and profit in one simple ledger. Made for steel, cement, wire, paint and tiles traders.",
+  applicationName: SITE_NAME,
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "en_US",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({

@@ -21,7 +21,7 @@ export async function uploadBusinessLogoAction(
       cache: "no-store",
     });
   } catch {
-    return { ok: false, error: "Cannot reach the Tijaratt API. Is it running?" };
+    return { ok: false, error: "Cannot reach the Tijartt API. Is it running?" };
   }
 
   const text = await res.text();

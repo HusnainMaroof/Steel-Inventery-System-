@@ -1,24 +1,18 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Navbar } from "@/components/marketing/landing/Navbar";
 
 export function TijarattBrand({ inverse = false }: { inverse?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-3">
-      <span className="grid size-8 grid-cols-2 gap-[3px]" aria-hidden="true">
-        <span className={`rounded-[2px] ${inverse ? "bg-white" : "bg-[#171717]"}`} />
-        <span className={`rounded-[2px] ${inverse ? "bg-white/45" : "bg-[#171717]/30"}`} />
-        <span className={`rounded-[2px] ${inverse ? "bg-white/45" : "bg-[#171717]/30"}`} />
-        <span className={`rounded-[2px] ${inverse ? "bg-white" : "bg-[#171717]"}`} />
-      </span>
-      <span
-        className={`text-[18px] font-semibold tracking-[-0.035em] ${
-          inverse ? "text-white" : "text-[#171717]"
-        }`}
-      >
-        tijaratt
-      </span>
-    </span>
+    <Image
+      src="/images/tijartt-logo.png"
+      alt="Tijartt"
+      width={800}
+      height={328}
+      sizes="80px"
+      className={`h-8 w-auto ${inverse ? "invert" : ""}`}
+    />
   );
 }
 
@@ -61,7 +55,7 @@ export function PublicFooter() {
         </div>
       </div>
       <p className="mx-auto mt-10 max-w-[1180px] border-t border-[#E5E5E5] pt-5 text-[12px] text-[#171717]/70">
-        © 2026 Tijaratt. All rights reserved.
+        © 2026 Tijartt. All rights reserved.
       </p>
     </footer>
   );

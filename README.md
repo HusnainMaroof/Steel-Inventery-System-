@@ -1,4 +1,4 @@
-# Tijaratt — Business Ledger
+# Tijartt — Business Ledger
 
 A multi-tenant depot ledger for stock, sales, payments and profit.
 Authentication, business-owner accounts, invoice settings, and each

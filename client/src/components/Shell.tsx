@@ -380,12 +380,12 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   const brand =
     user.role === "SUPERADMIN"
-      ? "Tijaratt"
+      ? "Tijartt"
       : user.businessName?.trim() || user.name;
   const businessLogo = prefs.logoUrl.trim() || prefs.logoDataUrl.trim();
   const logoSrc =
     user.role === "SUPERADMIN"
-      ? null
+      ? "/images/tijartt-logo.png"
       : businessLogo || null;
   const useLogoPlaceholder = user.role !== "SUPERADMIN";
 
@@ -450,6 +450,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         brand={brand}
         logoSrc={logoSrc}
         logoPlaceholder={useLogoPlaceholder}
+        logoClassName={user.role === "SUPERADMIN" ? "h-10 pl-3.5" : undefined}
         homeHref={roleHome}
         userName={displayName(user)}
         userEmail={user.email}

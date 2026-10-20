@@ -1,29 +1,39 @@
+import type { Metadata } from "next";
 import { LegalPage } from "@/components/marketing/PublicPages";
 
-export const metadata = {
-  title: "Privacy Policy | Tijaratt",
-  description: "Learn how Tijaratt handles information when you use the service.",
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description:
+    "How Tijartt collects, uses and protects your business records, customer details and account information when you use the service.",
+  alternates: { canonical: "/privacy-policy" },
+  openGraph: {
+    title: "Privacy Policy | Tijartt",
+    description:
+      "How Tijartt collects, uses and protects your business records, customer details and account information when you use the service.",
+    url: "/privacy-policy",
+    images: ["/opengraph-image.png"],
+  },
 };
 
 export default function Page() {
   return (
     <LegalPage
       title="Privacy policy"
-      intro="This policy explains how Tijaratt handles information when you use our business management service."
+      intro="This policy explains how Tijartt handles information when you use our business management service."
       updated="September 25, 2026"
       sections={[
         {
           title: "Information used by the service",
           paragraphs: [
-            "Tijaratt processes the account details and business records needed to provide the service. These may include contact and sign-in details, product and stock records, purchases, sales, invoices, payments, and information about customers, suppliers, and staff entered by your business.",
-            "The business using Tijaratt is responsible for ensuring it has an appropriate reason to enter information about its customers, suppliers, and staff, and for providing any notices required by local law.",
+            "Tijartt processes the account details and business records needed to provide the service. These may include contact and sign-in details, product and stock records, purchases, sales, invoices, payments, and information about customers, suppliers, and staff entered by your business.",
+            "The business using Tijartt is responsible for ensuring it has an appropriate reason to enter information about its customers, suppliers, and staff, and for providing any notices required by local law.",
           ],
         },
         {
           title: "How information is used",
           paragraphs: [
             "Information is used to authenticate users, operate business features, keep records available to the authorised business, maintain the security and reliability of the service, and respond to support requests.",
-            "Tijaratt does not sell business records or use them to serve advertising. Access is limited to authorised users and to service operations that require it.",
+            "Tijartt does not sell business records or use them to serve advertising. Access is limited to authorised users and to service operations that require it.",
           ],
         },
         {
@@ -36,7 +46,7 @@ export default function Page() {
         {
           title: "Service providers and changes",
           paragraphs: [
-            "Tijaratt may rely on carefully selected providers to host, secure, and operate the service. Those providers may process information only to deliver their services to Tijaratt and are expected to protect it.",
+            "Tijartt may rely on carefully selected providers to host, secure, and operate the service. Those providers may process information only to deliver their services to Tijartt and are expected to protect it.",
             "This policy may change as the service or applicable requirements change. The current version will be published on this page with its revision date.",
           ],
         },

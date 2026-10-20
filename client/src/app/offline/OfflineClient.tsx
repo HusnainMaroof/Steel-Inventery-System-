@@ -64,7 +64,7 @@ export function OfflineClient() {
       <Link
         href="/"
         className="relative z-10 w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary"
-        aria-label="Tijaratt home"
+        aria-label="Tijartt home"
       >
         <TijarattBrand />
       </Link>
@@ -77,7 +77,7 @@ export function OfflineClient() {
           The server is taking a moment.
         </h1>
         <p className="mx-auto mt-5 max-w-[480px] text-[15px] leading-[1.63] text-[#171717]/80">
-          Tijaratt cannot reach the business server right now. Your records
+          Tijartt cannot reach the business server right now. Your records
           are safe, and this page will retry automatically.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
@@ -98,7 +98,7 @@ export function OfflineClient() {
           </Link>
         </div>
         <p className="mt-7 text-xs leading-[1.6] text-[#171717]/70">
-          Running Tijaratt locally? Start{" "}
+          Running Tijartt locally? Start{" "}
           <code className="rounded-md border border-[#E5E5E5] bg-white/70 px-1.5 py-1 font-mono text-xs text-[#171717]/80">
             npm run start:dev
           </code>{" "}

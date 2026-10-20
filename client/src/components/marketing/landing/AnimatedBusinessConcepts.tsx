@@ -30,7 +30,7 @@ export function AnimatedBusinessConcepts() {
   return (
     <span className="inline-flex shrink-0 items-center gap-4">
       <span className="sr-only">Have, Owe, and Earn</span>
-      <span className="inline-flex shrink-0 overflow-hidden">
+      <span className="inline-flex shrink-0 overflow-hidden" aria-hidden="true">
         <span
           key={active.id}
           className="grid shrink-0 place-items-center rounded-[10px] bg-[#3CB866] px-10 py-5 text-[#111] motion-safe:animate-headline-in min-[1440px]:px-12 max-[1024px]:px-8 max-[640px]:px-6"
@@ -44,7 +44,7 @@ export function AnimatedBusinessConcepts() {
             {concept.label}
           </span>
         ))}
-        <span key={active.id} className={`${label} col-start-1 row-start-1 motion-safe:animate-headline-in`}>
+        <span key={active.id} className={`${label} col-start-1 row-start-1 motion-safe:animate-headline-in`} aria-hidden="true">
           {active.label}
         </span>
       </span>

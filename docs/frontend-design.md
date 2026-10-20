@@ -145,7 +145,7 @@ until first ledger load). Printable `/sales/[id]` skips the sidebar.
 - `client/src/components/DataTable.tsx` — generic table with mobile card
   rendering (used by screens not yet converted to date-grouped layouts).
 - Feature folders: `components/sales/`, `catalogue/`, `invoice/`,
-  `reports/`, `settings/`, `admin/`.
+  `reports/`, `admin/`.
 
 When a component gains a new capability, existing screens keep their
 appearance exactly — extensions are opt-in parameters only.

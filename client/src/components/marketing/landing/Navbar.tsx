@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
@@ -30,11 +31,19 @@ export function Navbar() {
     <header className="sticky top-0 z-10 h-[64px] w-full max-w-[100vw] bg-[#F8F8F7] font-[Inter,ui-sans-serif,system-ui,sans-serif] text-[#171717] [font-feature-settings:'cv11','ss01']">
       <div className="relative mx-auto flex h-[64px] w-full max-w-[1220px] items-center justify-between px-10 max-[1024px]:px-6 max-[640px]:px-4">
         <Link
-          className={`text-[20px] font-extrabold tracking-[-0.04em] text-[#111] no-underline motion-safe:animate-rise motion-safe:delay-100 max-[640px]:text-[18px] ${focus}`}
+          className={`inline-flex items-center rounded-md motion-safe:animate-rise motion-safe:delay-100 ${focus}`}
           href="/"
-          aria-label="Tijaratt home"
+          aria-label="Tijartt home"
         >
-          Tijaratt
+          <Image
+            src="/images/tijartt-logo.png"
+            alt="Tijartt"
+            width={800}
+            height={328}
+            priority
+            sizes="(max-width: 640px) 80px, 88px"
+            className="h-9 w-auto max-[640px]:h-8"
+          />
         </Link>
         <nav
           className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-[34px] motion-safe:animate-fade motion-safe:delay-150 min-[1025px]:flex"
