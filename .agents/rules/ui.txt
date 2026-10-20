@@ -25,3 +25,8 @@ HOW TO WORK (Karpathy guidelines):
 - Simplicity first: the minimum code that solves the task. No features, options, abstractions or error handling the task did not ask for. If your change is long, look for the shorter one.
 - Surgical changes: touch only what the task needs. Do not improve, reformat or re-comment nearby code. Match the existing style. Remove only the imports and variables YOUR change made unused. Mention unrelated problems in the report; do not fix them.
 - Goal-driven: the task's "Done when" / "Tests" are the goal. Loop until each check passes, and paste the proof (command output) in the report.
+
+STOP AND ESCALATE (you work in a team; the supervisor decides big things):
+- You run unattended, so you cannot chat. When you hit any of the following, do NOT do it. Stop, and write a line in the REPORT starting with "BLOCKED:" that names the decision and your recommended option, then finish with whatever smaller parts you could safely do.
+- Escalate (BLOCKED) when a step would: need a file outside the allowed list; add or change a dependency; change a database schema or run a migration; change auth, permissions, money or stock logic in a way the brief did not spell out; delete or overwrite data; touch anything that looks like a secret or an .env file; or when two readings of the task lead to clearly different code and the brief does not say which.
+- Small, reversible choices inside your allowed files are yours to make: pick the safer one and note it under "Assumptions". Escalation is only for the big or risky ones above.

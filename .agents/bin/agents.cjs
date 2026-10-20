@@ -9,6 +9,7 @@
  *   node .agents/bin/agents.cjs launch <id> <profile> [--model tool:model] [--resume] [--no-fallback]
  *   node .agents/bin/agents.cjs score <id> <0-100> [note]   record the review score (router learns)
  *   node .agents/bin/agents.cjs scorecard                   runs / approvals / average per model
+ *   node .agents/bin/agents.cjs facts [subject] [--at ISO]  current temporal memory (Graphiti method)
  *   node .agents/bin/agents.cjs watch <id> [--once]         stuck detector
  *   node .agents/bin/agents.cjs check <id>                  automated review checks -> check.md
  *   node .agents/bin/agents.cjs apply <id>                  worktree diff -> patch.diff -> main tree
@@ -149,8 +150,11 @@ const health = () => readJson(path.join(STATE, "health.json"), {});
 function markHealth(key, reason) {
   const h = health();
   const mins = ROUTER.cooldown_minutes[reason] ?? 15;
-  h[key] = { reason, until: new Date(Date.now() + mins * 60000).toISOString() };
+  const until = new Date(Date.now() + mins * 60000).toISOString();
+  h[key] = { reason, until };
   writeJson(path.join(STATE, "health.json"), h);
+  // temporal memory: the model is unavailable, with a known expiry
+  addFact(key, "status", `cooling:${reason}`, "launch failure", { until });
 }
 const attemptsOf = () => readJson(SCORE_FILE, { attempts: [] }).attempts;
 // Expected review score (0..1), shrunk toward a prior so one lucky or unlucky run
@@ -200,6 +204,35 @@ function failureOf(log, minutes, report) {
   if (/model not found|unknown model|no such model|model .* is not available/i.test(t)) return "not_found";
   if (!report && minutes < 2) return "crash";
   return null;
+}
+
+/* ================= temporal memory (Graphiti method) =================
+ * Append-only facts: {subject, predicate, object, valid_from, valid_to, source}.
+ * A new fact with the same subject+predicate supersedes the old one (sets its
+ * valid_to) instead of deleting it, so the history stays and you can ask "what
+ * was true at time T". The router reads only currently-valid facts. */
+const FACTS = path.join(AGENTS, "memory.jsonl");
+const allFacts = () =>
+  fs.existsSync(FACTS) ? fs.readFileSync(FACTS, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+function addFact(subject, predicate, object, source, { supersede = true, until = null } = {}) {
+  const at = now();
+  if (supersede) {
+    // close the previous open fact for the same subject+predicate (rewrite the log)
+    const facts = allFacts();
+    let changed = false;
+    for (const f of facts) if (!f.valid_to && f.subject === subject && f.predicate === predicate) { f.valid_to = at; changed = true; }
+    if (changed) fs.writeFileSync(FACTS, facts.map((f) => JSON.stringify(f)).join("\n") + "\n");
+  }
+  fs.appendFileSync(FACTS, JSON.stringify({ subject, predicate, object, valid_from: at, valid_to: until, source }) + "\n");
+}
+const factsAt = (when = now()) =>
+  allFacts().filter((f) => f.valid_from <= when && (!f.valid_to || f.valid_to > when));
+
+/* lines the agent raised for the supervisor to decide (team escalation) */
+function blockers(id) {
+  const f = path.join(runDir(id), "report.md");
+  if (!fs.existsSync(f)) return [];
+  return fs.readFileSync(f, "utf8").split("\n").filter((l) => /^\s*BLOCKED:/i.test(l)).map((l) => l.trim());
 }
 
 const worktreePath = (id) => path.join(WT_ROOT, id);
@@ -340,8 +373,24 @@ const commands = {
     const data = readJson(SCORE_FILE, { attempts: [] });
     data.attempts.push({ t: now().slice(0, 10), run: id, attempt: l.attempt, profile: l.profile, task_type: l.task_type, tool: l.tool, model: l.model, score: s, verdict, note: note.join(" ") });
     writeJson(SCORE_FILE, data);
+    // temporal memory: this model's current standing on this task type
+    addFact(`${l.tool}:${l.model}`, `verdict:${l.task_type}`, verdict, `score ${id}#${l.attempt}=${s}`);
     event(id, "score", { attempt: l.attempt, score: s, verdict });
     console.log(`scored ${id} #${l.attempt} (${l.tool}:${l.model}): ${s} -> ${verdict}`);
+  },
+
+  facts() {
+    // facts <subject substring>  (default: all currently-valid facts)  [--at ISO] [--all]
+    const when = flag("--at") || now();
+    const subj = args.find((a) => !a.startsWith("--"));
+    const rows = (args.includes("--all") ? allFacts() : factsAt(when))
+      .filter((f) => !subj || f.subject.includes(subj))
+      .sort((a, b) => (a.subject + a.predicate).localeCompare(b.subject + b.predicate));
+    if (!rows.length) return console.log("no facts");
+    for (const f of rows) {
+      const span = f.valid_to ? `${f.valid_from.slice(0, 16)}..${f.valid_to.slice(0, 16)}` : `since ${f.valid_from.slice(0, 16)}`;
+      console.log(`${f.subject}  ${f.predicate} = ${f.object}  (${span}${f.valid_to ? "" : ", current"})`);
+    }
   },
 
   scorecard() {
@@ -379,10 +428,12 @@ const commands = {
         reportState = (Date.now() - stableSince) / 1000 >= 60 ? "stable" : "changing";
       }
       const iter = (text.match(/"iteration":(\d+)/g) || []).pop();
-      const status = { logAgeSec: Math.round(age), iteration: iter ? iter.split(":")[1] : "?", report: reportState, stuck: verdicts };
+      const blocked = blockers(id);
+      const status = { logAgeSec: Math.round(age), iteration: iter ? iter.split(":")[1] : "?", report: reportState, stuck: verdicts, blocked };
       if (once) return console.log(JSON.stringify(status, null, 1));
       let reason = null;
-      if (reportState === "stable") reason = "report stable 60s (done)";
+      if (blocked.length) reason = `escalation: ${blocked.length} BLOCKED line(s) for the supervisor`;
+      else if (reportState === "stable") reason = "report stable 60s (done)";
       else if (age > 600) reason = "log idle 10 min (stuck or finished without report)";
       else if (verdicts.length) reason = `stuck: ${verdicts.join("; ")}`;
       if (reason) {
@@ -456,10 +507,16 @@ const commands = {
       const dirs = [...new Set(serverTs.map((f) => path.posix.dirname(f.replace(/^server\//, ""))))];
       run("server jest (changed folders)", path.join(base, "server"), `npx jest ${dirs.join(" ")} --runInBand --passWithNoTests`);
     }
-    out.unshift(`RESULT: ${fail ? `${fail} problem(s)` : "all automated checks pass"}\n`);
+    const blocked = blockers(id);
+    if (blocked.length) {
+      out.push(`## Escalations (the agent asked the supervisor)\n`);
+      blocked.forEach((b) => out.push(`- ${b}`));
+      out.push("");
+    }
+    out.unshift(`RESULT: ${fail ? `${fail} problem(s)` : "all automated checks pass"}${blocked.length ? `, ${blocked.length} escalation(s)` : ""}\n`);
     fs.writeFileSync(path.join(dir, "check.md"), out.join("\n"));
-    event(id, "check", { problems: fail });
-    console.log(`check ${id}: ${fail ? `${fail} problem(s)` : "PASS"} -> ${path.relative(REPO, path.join(dir, "check.md"))}`);
+    event(id, "check", { problems: fail, escalations: blocked.length });
+    console.log(`check ${id}: ${fail ? `${fail} problem(s)` : "PASS"}${blocked.length ? `, ${blocked.length} escalation(s)` : ""} -> ${path.relative(REPO, path.join(dir, "check.md"))}`);
   },
 
   apply() {

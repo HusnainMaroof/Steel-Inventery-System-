@@ -12,6 +12,19 @@ The design follows two sources:
   risky actions, isolated workspaces, and a critic with iterative refinement.
 - **Karpathy guidelines** for LLM coding: think before coding, simplicity
   first, surgical changes, goal-driven execution.
+- **LangGraph** orchestration shape: the workflow is a state graph. Phases
+  are nodes, the run state lives in the run folder, and the critic verdict
+  is a conditional edge (approve -> apply, refine -> relaunch, reroute ->
+  next model). `agents.cjs` is that graph as a small state machine, so no
+  Python runtime or extra service is needed; a real LangGraph port is the
+  optional next step if the workflow ever needs branching beyond this.
+- **Graphiti** memory method: an append-only, bi-temporal fact store
+  (`.agents/memory.jsonl`). A fact is `subject, predicate, object` with a
+  `valid_from` and `valid_to`. A new fact supersedes the old one (closes its
+  `valid_to`) instead of overwriting it, so history is kept and you can ask
+  what was true at any time (`agents.cjs facts [--at ISO]`). The router
+  reads only currently-valid facts (for example which model is approved for a
+  task type, which model is cooling down and until when).
 
 Everything here is in the repo except run data (`.e2e-tmp/runs/`, git-ignored).
 To start a run, the owner says "run agents on <task>" and the supervisor
@@ -71,12 +84,15 @@ numbers, explain why.
 | `RouterLLM` / task-based model routing | Router ranks live free models per task type | `.agents/router.json`, `agents.cjs route` |
 | `TaskTrackerTool` | plan.md task table with status | `.agents/templates/plan.md` |
 | Event-sourced conversation | `events.jsonl` per run: created, worktree, launch, exit, fallback, watch, check, score, apply, cleanup | `.e2e-tmp/runs/<id>/events.jsonl` |
+| Temporal knowledge (Graphiti method) | Bi-temporal fact store the router and supervisor read | `.agents/memory.jsonl`, `agents.cjs facts` |
+| Graph orchestration (LangGraph shape) | Phases = nodes, verdict = conditional edge, run folder = state | `agents.cjs` |
 | `StuckDetector` (5 patterns) | `agents.cjs watch`: same call 4x, same error 3x, ping-pong 6 cycles, context-window errors, plus log idle 10 min | `agents.cjs` |
 | Confirmation policy (`ConfirmRisky`) | Risk levels; high risk needs the owner's yes | section 7 |
 | `DockerWorkspace` isolation | git worktree per run outside the repo, `node_modules` linked, no `.env` files inside | `agents.cjs worktree` |
 | Critic + iterative refinement (threshold, max 3) | Score /100, refine below 90, at most 3 attempts | `.agents/templates/review.md` |
 | Goal completion loop | Final goal check against plan.md "done when" | phase 10 |
 | Agent hooks (pre/post tool use) | Post-run `check` (scope, churn, tsc, eslint vs HEAD, jest) | `agents.cjs check` |
+| Agent asks before a big action | "Stop and escalate": the agent writes `BLOCKED:` in the report; `check`/`watch` surface it | rules files, phase 8 |
 
 ---
 
@@ -85,12 +101,14 @@ numbers, explain why.
 | Path | What |
 |---|---|
 | `.agents/AGENTS.md` | This workflow. |
-| `.agents/agents/*.md` | Agent profiles: investigator, backend-fixer, feature-builder, ui-polisher, test-writer, browser-tester, reviewer, doc-writer. |
+| `.agents/agents/*.md` | Agent profiles: investigator, backend-fixer, feature-builder, ui-polisher, test-writer, e2e-tester, browser-tester, reviewer, doc-writer. |
 | `.agents/rules/*.txt` | Rules pasted at the top of every prompt: `code`, `ui`, `browser`, `readonly`. |
 | `.agents/templates/` | `plan.md`, `brief.md`, `review.md`. |
 | `.agents/skills-map.md` | Which skills to load for which task. |
 | `.agents/router.json` | Tools, excluded models, tiers, cooldowns, routing weights. |
 | `.agents/scorecard.json` | Every reviewed attempt (tool, model, task type, score). The router learns from it. |
+| `.agents/memory.jsonl` | Bi-temporal fact store (Graphiti method): model standing per task, cooldowns, with valid_from / valid_to. |
+| `.agents/security/shannon.md` | Gated pentest runbook (Shannon). |
 | `.agents/bin/agents.cjs` | Supervisor CLI (section 5). |
 | `.claude/skills/run-agents/SKILL.md` | The skill the supervisor follows when the owner says "run agents". |
 | `.e2e-tmp/runs/<id>/` | Run folder (git-ignored): plan, brief, prompts, logs, report, check, critique, review, patch, events. |
@@ -117,6 +135,7 @@ notification then).
 | `... check <id>` | Writes check.md: scope (OK / OUT / STRAY), line-ending churn, client tsc, client eslint compared with HEAD, server tsc, server jest for changed folders. |
 | `... score <id> <0-100> [note]` | Records the review score for the last attempt in scorecard.json (90+ approve, 60-89 refine, below 60 reroute). |
 | `... scorecard` | Runs, approvals and average score per tool:model. |
+| `... facts [subject] [--at ISO] [--all]` | Temporal memory: currently-valid facts (or history, or at a past time). |
 | `... apply <id>` | Worktree changes -> `patch.diff` -> `git apply --3way` on the main tree. The changes arrive **staged**: review with `git diff --cached`; undo with `git restore --staged --worktree --source=HEAD -- <files>` (a plain `git checkout` does not undo staged changes). |
 | `... cleanup <id>` | Removes the worktree. It deletes the `node_modules` junctions FIRST; removing a worktree through a junction would delete the real `node_modules`. |
 | `... status` | Every run with its last event. |
@@ -213,6 +232,11 @@ days, crash 15 min (`router.json`).
 
 ### Phase 8. Critic (review)
 
+0. **Escalations first.** If `check` reports `BLOCKED:` lines, the agent is a
+   teammate asking you to decide a big thing (a file outside scope, a
+   migration, a dependency, auth or money logic, a destructive step). Decide
+   it: do that part yourself, or widen the brief and the allowed files and
+   relaunch with `--resume`. Never let the agent make that call on its own.
 1. `check <id>` and read check.md.
 2. Read the report (assumptions first) and the full diff with the code
    around it.
@@ -235,6 +259,22 @@ Worktree runs: `apply <id>`, then review the main-tree diff again,
 `cleanup <id>`. In-place runs: already in the tree. Then run tsc, eslint,
 the relevant tests, and check every changed screen with agent-browser at
 1440x960 and 390x844.
+
+### Phase 9b. Testing (when the owner wants it)
+
+Pick the level the owner asks for; they can be combined.
+
+| Level | What it is | How |
+|---|---|---|
+| Unit | Pure logic (money, FIFO, profit, pipes) | `test-writer` profile; supervisor runs `npx jest <path> --runInBand`. No DB. |
+| e2e (API + real DB) | A flow against a live test database | `e2e-tester` profile writes a `server/test/*.e2e-spec.ts` gated by env. The suite skips itself when the env is absent, so it never runs on the wrong DB. The **supervisor** runs it with the env set (never the agent, which has no DB): `cd server && DATABASE_URL=<test db> TEST_EMAIL=... TEST_PASSWORD=... npx jest test/<file> --runInBand`. CI already runs the DB-backed e2e suites against throwaway Postgres (`.github/workflows/ci.yml`). |
+| Browser (end to end UI) | Click through the real app at the test env | `browser-tester` profile with agent-browser, or the supervisor. Data changes only through the UI, only with owner approval, with a restore step. |
+| Security (pentest) | Live white-box pentest | Gated runbook `.agents/security/shannon.md`: Shannon, owner approval, test or local env only, never production. A static `security-review` pass needs no infra and runs on every auth, upload or money change. |
+
+The owner saying "test it" means: run the unit tests that cover the change,
+and offer the heavier levels (e2e, browser, security) with what each costs
+(time, their model credits for Shannon). Do not run e2e against a shared DB
+or Shannon against anything without a yes.
 
 ### Phase 10. Goal check and report
 
@@ -307,7 +347,7 @@ read-only run. If Freebuff screens change, `node .e2e-tmp/freebuff/drive.js prob
 | Client dev | `http://localhost:3000` (`cd client; TIJARATT_API_URL=http://127.0.0.1:4100 CLIENT_ORIGIN=http://localhost:3000 npx next dev -p 3000`) |
 | API dev | `http://127.0.0.1:4100` (`cd server; npm run start:dev`, loads `server/.env.e2e`, the test DB) |
 | Test DB | Neon `tijaratt_test`; test data scripts in `.e2e-tmp/fresh/` (write data: ask first) |
-| Production | `https://tijartt.com`, deployed by GitHub Actions on push to `main`; never used for tests |
+| Production | `https://www.tijartt.com`, deployed by GitHub Actions on push to `main`; never used for tests |
 
 Reuse running servers; never start a second one. The GitHub repo is public:
 no passwords in repo files. Test owner passwords are in

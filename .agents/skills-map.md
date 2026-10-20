@@ -15,7 +15,9 @@ Always-on for every task: `AGENTS.md`, `docs/ARCHITECTURE.md`,
 | animation, motion, transition, toast, notification | `animation-vocabulary`, `gsap-core`, `notifications-toasts` | Exact term, timing, reduced motion |
 | API, endpoint, NestJS, service, guard, pipe, DTO, validation, error handling | `nodejs-backend-patterns` | Error handling, validation, layering |
 | query, SQL, Prisma, index, slow, migration, Postgres | `supabase-postgres-best-practices` | Query and index rules, transaction scope |
+| test, e2e, end to end, verify a flow, reconcile, regression | `nodejs-backend-patterns` | e2e spec gating, exact assertions; see .agents/agents/e2e-tester.md and browser-tester.md |
 | auth, login, session, token, permission, plan access, secret, upload, injection | `security-review` | OWASP checks for the touched code |
+| pentest, penetration test, vulnerability, exploit, security audit, "is my app secure" | `security-review` | Static review first; a live pentest with Shannon is a separate gated run, see .agents/security/shannon.md (owner approval, test env only) |
 | refactor, architecture, structure, coupling, "where is X done" | `improve-codebase-architecture`, `use-codeatlas` | Module boundaries, the search results the investigator needs |
 | SEO, landing page, marketing page | `seo-audit`, `frontend-design` | On-page SEO checks |
 | new free agent tool, model list, agent CLI flags | `use-cline`, `use-opencode`, `use-kilocode`, `use-freebuff` | Exact flags and current free models |

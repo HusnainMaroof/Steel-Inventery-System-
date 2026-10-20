@@ -1,0 +1,18 @@
+{"subject":"cline:poolside/laguna-s-2.1:free","predicate":"verdict:ui-polish","object":"refine","valid_from":"2026-10-19T00:00:00.000Z","valid_to":"2026-10-20T10:38:42.786Z","source":"scorecard G"}
+{"subject":"freebuff:GPT-6 Luna","predicate":"verdict:client-feature","object":"approve","valid_from":"2026-10-19T00:00:00.000Z","valid_to":null,"source":"scorecard B"}
+{"subject":"opencode:opencode/deepseek-v4.1-flash-free","predicate":"verdict:client-feature","object":"approve","valid_from":"2026-10-19T00:00:00.000Z","valid_to":"2026-10-20T10:53:28.266Z","source":"scorecard C"}
+{"subject":"cline:poolside/laguna-s-2.1:free","predicate":"verdict:backend-fix","object":"refine","valid_from":"2026-10-19T00:00:00.000Z","valid_to":null,"source":"scorecard D"}
+{"subject":"cline:poolside/laguna-s-2.1:free","predicate":"verdict:browser-test","object":"refine","valid_from":"2026-10-19T00:00:00.000Z","valid_to":null,"source":"scorecard E"}
+{"subject":"kilo:kilo/kilo-auto/free","predicate":"verdict:ui-polish","object":"reroute","valid_from":"2026-10-19T00:00:00.000Z","valid_to":null,"source":"scorecard K"}
+{"subject":"cline:poolside/laguna-s-2.1:free","predicate":"verdict:investigate","object":"approve","valid_from":"2026-10-19T00:00:00.000Z","valid_to":null,"source":"scorecard t1-probe"}
+{"subject":"opencode:opencode/deepseek-v4.1-flash-free","predicate":"verdict:investigate","object":"approve","valid_from":"2026-10-19T00:00:00.000Z","valid_to":null,"source":"scorecard t2-probe"}
+{"subject":"opencode:opencode/deepseek-v4.1-flash-free","predicate":"verdict:docs","object":"approve","valid_from":"2026-10-20T10:26:17.998Z","valid_to":null,"source":"score 2026-10-20-product-video-doc#1=94"}
+{"subject":"cline:poolside/laguna-s-2.1:free","predicate":"verdict:ui-polish","object":"approve","valid_from":"2026-10-20T10:38:42.786Z","valid_to":null,"source":"score 2026-10-20-admin-polish#1=95"}
+{"subject":"opencode:opencode/deepseek-v4.1-flash-free","predicate":"verdict:client-feature","object":"approve","valid_from":"2026-10-20T10:53:28.266Z","valid_to":"2026-10-20T12:31:19.900Z","source":"score 2026-10-20-admin-behaviour#1=92"}
+{"subject":"kilo:kilo/nvidia/nemotron-3-ultra-550b-a55b:free","predicate":"verdict:review","object":"refine","valid_from":"2026-10-20T10:53:28.401Z","valid_to":null,"source":"score 2026-10-20-admin-behaviour-review#1=60"}
+{"subject":"opencode:opencode/deepseek-v4.1-flash-free","predicate":"verdict:ui-polish","object":"approve","valid_from":"2026-10-20T11:17:26.582Z","valid_to":null,"source":"score 2026-10-20-settings-ux#1=94"}
+{"subject":"kilo:kilo/nvidia/nemotron-3-ultra-550b-a55b:free","predicate":"verdict:backend-fix","object":"approve","valid_from":"2026-10-20T11:25:27.322Z","valid_to":null,"source":"score 2026-10-20-owner-edit-api#1=90"}
+{"subject":"cline:poolside/laguna-s-2.1:free","predicate":"verdict:client-feature","object":"approve","valid_from":"2026-10-20T11:36:13.239Z","valid_to":"2026-10-20T12:35:53.809Z","source":"score 2026-10-20-owner-edit-ui#1=93"}
+{"subject":"opencode:opencode/deepseek-v4.1-flash-free","predicate":"verdict:client-feature","object":"approve","valid_from":"2026-10-20T12:31:19.900Z","valid_to":null,"source":"score 2026-10-20-seo-tech#1=90"}
+{"subject":"kilo:kilo/nvidia/nemotron-3-ultra-550b-a55b:free","predicate":"verdict:ui-polish","object":"refine","valid_from":"2026-10-20T12:32:27.416Z","valid_to":null,"source":"score 2026-10-20-seo-markup#1=85"}
+{"subject":"cline:poolside/laguna-s-2.1:free","predicate":"verdict:client-feature","object":"approve","valid_from":"2026-10-20T12:35:53.809Z","valid_to":null,"source":"score 2026-10-20-seo-content#1=94"}

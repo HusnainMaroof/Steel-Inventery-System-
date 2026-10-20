@@ -2,7 +2,7 @@
   "_about": "Model router config (after OpenHands RouterLLM). Models are never fixed in profiles: the router picks one per launch from the live free-model list, the scorecard and model health. Edit tiers and excludes here, not in profiles.",
   "tools": {
     "cline": { "modes": ["edit", "readonly", "browser"], "worktree": true, "list": "cline-api" },
-    "opencode": { "modes": ["edit", "readonly", "browser"], "worktree": true, "list": "opencode-models" },
+    "opencode": { "modes": ["edit", "readonly"], "worktree": true, "list": "opencode-models" },
     "kilo": { "modes": ["edit", "readonly"], "worktree": true, "list": "kilo-models" },
     "freebuff": { "modes": ["edit"], "worktree": false, "list": "static" }
   },
