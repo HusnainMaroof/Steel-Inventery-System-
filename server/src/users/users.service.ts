@@ -18,6 +18,7 @@ import { uniqueBusinessSlug } from "../common/slug";
 import { newRecordId } from "../common/record-id";
 import { buildTemplateRows, catalogueInsertCtes } from "../catalog/template-rows";
 import { sanitizeAccess } from "../common/staff-access";
+import { sanitizeText } from "../common/security/sanitize-text";
 import { CreateOwnerDto } from "./dto/create-owner.dto";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateSubscriptionDto } from "./dto/update-subscription.dto";
@@ -199,7 +200,7 @@ export class UsersService {
 
   async updateOwner(
     id: string,
-    dto: { password?: string; active?: boolean },
+    dto: { password?: string; active?: boolean; name?: string; email?: string; businessName?: string },
     actorId?: string,
   ) {
     const user = await this.prisma.user.findUnique({ where: { id } });
@@ -207,22 +208,52 @@ export class UsersService {
     if (user.role !== "ADMIN") {
       throw new ForbiddenException("Only business-owner logins can be updated");
     }
-    const data: { passwordHash?: string; active?: boolean } = {};
-    if (dto.password) {
-      data.passwordHash = await this.authService.hashPassword(dto.password);
+
+    const name = dto.name !== undefined ? sanitizeText(dto.name, 80) : undefined;
+    const businessName = dto.businessName !== undefined ? sanitizeText(dto.businessName, 80) : undefined;
+    const email = dto.email !== undefined ? dto.email.trim().toLowerCase() : undefined;
+    // MinLength runs before trimming, so "  " would otherwise save an empty name.
+    if ((name !== undefined && name.length < 2) || (businessName !== undefined && businessName.length < 2)) {
+      throw new BadRequestException("Names must be at least 2 characters.");
     }
-    if (dto.active !== undefined) data.active = dto.active;
-    if (!Object.keys(data).length) {
+
+    if (email && email !== user.email) {
+      await this.authService.assertEmailAvailable(email);
+    }
+
+    const userData: { passwordHash?: string; active?: boolean; name?: string; email?: string } = {};
+    if (dto.password) {
+      userData.passwordHash = await this.authService.hashPassword(dto.password);
+    }
+    if (dto.active !== undefined) userData.active = dto.active;
+    if (name !== undefined) userData.name = name;
+    if (email !== undefined) userData.email = email;
+
+    const hasUserChanges = Object.keys(userData).length > 0;
+    const hasBusinessChanges = businessName !== undefined;
+
+    if (!hasUserChanges && !hasBusinessChanges) {
       return this.prisma.user.findUniqueOrThrow({ where: { id }, select: ownerSelect });
     }
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data,
-      select: ownerSelect,
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (hasBusinessChanges) {
+        await tx.business.update({
+          where: { id: user.businessId },
+          data: { name: businessName! },
+        });
+      }
+      return tx.user.update({
+        where: { id },
+        data: userData,
+        select: ownerSelect,
+      });
     });
+
     if (dto.password || dto.active === false) {
       await this.authService.invalidateSessions(id);
     }
+
     if (dto.active === false) {
       await this.audit.log({
         businessId: updated.business.id,
@@ -240,6 +271,20 @@ export class UsersService {
         entityId: id,
       });
     }
+
+    const hasProfileOrBusinessChanges =
+      name !== undefined || email !== undefined || hasBusinessChanges;
+    if (hasProfileOrBusinessChanges) {
+      this.tokenVersions.invalidateBusiness(user.businessId);
+      await this.audit.log({
+        businessId: user.businessId,
+        actorId: actorId ?? null,
+        action: "owner.updated",
+        entityType: "user",
+        entityId: id,
+      });
+    }
+
     return updated;
   }
 

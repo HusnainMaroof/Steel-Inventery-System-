@@ -19,6 +19,7 @@ import {
   DetailRow,
   fmtDate,
   planLabel,
+  EditOwnerModal,
   ResetPasswordModal,
   StatusBadge,
   SubBadge,
@@ -35,7 +36,7 @@ import { useAuth } from "@/lib/auth";
 import { invalidateAdminCache } from "@/lib/admin-cache";
 import { planPagesSummary, sanitizePlanPages } from "@/lib/staff-access";
 import { ConfirmModal, Page } from "@/components/ui";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Pencil } from "lucide-react";
 
 type OwnerResult = Awaited<ReturnType<typeof getOwnerAction>>;
 type TemplatesResult = Awaited<ReturnType<typeof listProductTemplatesAction>>;
@@ -88,12 +89,17 @@ export default function AdminBusinessDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resetOpen, setResetOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [revokeOpen, setRevokeOpen] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const loadOwner = useCallback(async (force = false) => {
     if (!ownerId) return;
@@ -132,16 +138,24 @@ export default function AdminBusinessDetailPage() {
     setRevoking(true);
     const result = await updateOwnerAction(owner.id, { active: false });
     setRevoking(false);
-    if (!result.ok) return;
+    if (!result.ok) {
+      setRevokeError(result.error);
+      return;
+    }
+    setRevokeOpen(false);
     await reloadOwner();
   };
 
   const reactivate = async () => {
     if (!owner) return;
+    setActionError(null);
     setReactivating(true);
     const result = await updateOwnerAction(owner.id, { active: true });
     setReactivating(false);
-    if (!result.ok) return;
+    if (!result.ok) {
+      setActionError(result.error);
+      return;
+    }
     await reloadOwner();
   };
 
@@ -150,7 +164,10 @@ export default function AdminBusinessDetailPage() {
     setDeleting(true);
     const result = await deleteOwnerAction(owner.id);
     setDeleting(false);
-    if (!result.ok) return;
+    if (!result.ok) {
+      setDeleteError(result.error);
+      return;
+    }
     invalidateAdminCache();
     router.push("/admin/businesses");
   };
@@ -160,8 +177,12 @@ export default function AdminBusinessDetailPage() {
   if (loadError || !owner) {
     return (
       <Page>
-        <Link href="/admin/businesses" className="text-[12px] text-neutral-500 hover:text-black mb-4 inline-block">
-          ← Back to businesses
+        <Link
+          href="/admin/businesses"
+          className="text-[13px] text-[#171717]/70 hover:text-[#171717] mb-4 inline-flex items-center gap-1"
+        >
+          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+          Back to businesses
         </Link>
         <p role="alert" className="text-sm text-[#a12b1f]">{loadError ?? "Business not found."}</p>
       </Page>
@@ -197,12 +218,16 @@ export default function AdminBusinessDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
           <button type="button" className="btn-primary flex-1 sm:flex-none" onClick={() => setSubOpen(true)}>
             Subscription
           </button>
           <button type="button" className="btn-ghost flex-1 sm:flex-none" onClick={() => setTemplatesOpen(true)}>
             Templates
+          </button>
+          <button type="button" className="btn-ghost inline-flex items-center justify-center gap-2 flex-1 sm:flex-none" onClick={() => setEditOpen(true)}>
+            <Pencil className="w-4 h-4" aria-hidden="true" />
+            Edit
           </button>
           <div className="shrink-0">
             <ActionMenu
@@ -211,7 +236,10 @@ export default function AdminBusinessDetailPage() {
                 owner.active
                   ? {
                       label: revoking ? "Revoking..." : "Revoke login",
-                      onClick: () => void revoke(),
+                      onClick: () => {
+                        setRevokeError(null);
+                        setRevokeOpen(true);
+                      },
                       danger: true,
                       disabled: revoking,
                     }
@@ -222,7 +250,10 @@ export default function AdminBusinessDetailPage() {
                     },
                 {
                   label: "Delete business",
-                  onClick: () => setDeleteOpen(true),
+                  onClick: () => {
+                    setDeleteError(null);
+                    setDeleteOpen(true);
+                  },
                   danger: true,
                   disabled: deleting,
                 },
@@ -231,6 +262,8 @@ export default function AdminBusinessDetailPage() {
           </div>
         </div>
       </div>
+
+      {actionError ? <p role="alert" className="text-sm text-[#a12b1f] mb-4">{actionError}</p> : null}
 
       {/* usage strip on its own row, so it never stretches to a tall empty card */}
       <div className="mb-4">
@@ -299,6 +332,11 @@ export default function AdminBusinessDetailPage() {
         onClose={() => setResetOpen(false)}
         onUpdated={reloadOwner}
       />
+      <EditOwnerModal
+        owner={editOpen ? owner : null}
+        onClose={() => setEditOpen(false)}
+        onUpdated={reloadOwner}
+      />
       <SubscriptionModal
         owner={subOpen ? owner : null}
         subscriptionPlans={subscriptionPlans}
@@ -312,12 +350,26 @@ export default function AdminBusinessDetailPage() {
         onUpdated={reloadOwner}
       />
       <ConfirmModal
+        open={revokeOpen}
+        onClose={() => setRevokeOpen(false)}
+        onConfirm={revoke}
+        title={`Turn off login for ${owner.business.name}?`}
+        confirmLabel="Turn off login"
+        loading={revoking}
+        error={revokeError}
+      >
+        <p className="text-sm text-[#171717]/70">
+          The owner can no longer sign in. The business and all its records stay as they are. You can turn the login back on from this page at any time.
+        </p>
+      </ConfirmModal>
+      <ConfirmModal
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={confirmDelete}
         title={`Delete ${owner.business.name}?`}
         confirmLabel="Delete permanently"
         loading={deleting}
+        error={deleteError}
       >
         <p className="text-sm text-[#171717]/70">
           This permanently removes the business owner account, all staff logins, and every record

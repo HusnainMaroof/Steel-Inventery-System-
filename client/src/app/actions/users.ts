@@ -178,7 +178,7 @@ export async function deleteOwnerAction(
 
 export async function updateOwnerAction(
   id: string,
-  input: { password?: string; active?: boolean },
+  input: { password?: string; active?: boolean; name?: string; email?: string; businessName?: string },
 ): Promise<{ ok: true; owner: OwnerAccount } | { ok: false; error: string }> {
   if (input.password !== undefined && input.password.length < 8) {
     return { ok: false, error: "Password must be at least 8 characters." };

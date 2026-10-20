@@ -71,10 +71,23 @@ export function planLabel(
  */
 export type BusinessStatus = "Active" | "Expired" | "Login off";
 
+/**
+ * Mirrors isSubscriptionActive in server/src/subscription/subscription.util.ts.
+ * The owners list has no subscriptionActive field, and status alone stays ACTIVE
+ * after the end date passes, when the owner can no longer sign in.
+ */
+export function isSubscriptionLive(business: OwnerBusiness): boolean {
+  const cycle = business.subscriptionPlanDef?.billingCycle;
+  if (!cycle) return true;
+  if (business.subscriptionStatus !== "ACTIVE") return false;
+  if (cycle === "LIFETIME" || !business.subscriptionEndsAt) return true;
+  return new Date(business.subscriptionEndsAt).getTime() >= Date.now();
+}
+
 /** The one status a business row shows; the list filter uses the same rule. */
 export function businessStatus(owner: OwnerAccount): BusinessStatus {
   if (!owner.active) return "Login off";
-  if (owner.business.subscriptionStatus !== "ACTIVE") return "Expired";
+  if (!isSubscriptionLive(owner.business)) return "Expired";
   return "Active";
 }
 
@@ -176,9 +189,9 @@ function activeSubscriptionPlans(plans: SubscriptionPlanOption[]) {
 
 export function StatCard({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
-    <div className="card p-5">
-      <p className="text-xs font-medium text-[#171717]/60">{label}</p>
-      <p className="text-2xl sm:text-3xl font-semibold mt-2 tabular-nums">{value}</p>
+    <div className="min-w-0 rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+      <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">{label}</p>
+      <p className="text-2xl sm:text-3xl font-bold mt-1 tabular-nums text-[#171717]">{value}</p>
       {hint && <p className="text-[13px] text-[#171717]/70 mt-1">{hint}</p>}
     </div>
   );
@@ -377,7 +390,7 @@ export function BusinessListTable({
     <>
       <ul className="md:hidden space-y-3">
         {owners.map((owner) => {
-          const subActive = owner.business.subscriptionStatus === "ACTIVE";
+          const subActive = isSubscriptionLive(owner.business);
           const href = `/admin/businesses/${owner.id}`;
           return (
             <li key={owner.id}>
@@ -425,7 +438,7 @@ export function BusinessListTable({
             </thead>
             <tbody className="divide-y divide-[#E5E5E5]">
               {owners.map((owner) => {
-                const subActive = owner.business.subscriptionStatus === "ACTIVE";
+                const subActive = isSubscriptionLive(owner.business);
                 const href = `/admin/businesses/${owner.id}`;
                 return (
                   <tr
@@ -613,10 +626,10 @@ function AdminFormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-neutral-200 bg-neutral-50/40 p-4 sm:p-5">
+    <section className="rounded-lg border border-[#E5E5E5] bg-[#FAFAF9] p-4 sm:p-5">
       <div className="mb-4">
-        <h3 className="text-[13px] font-semibold text-neutral-900">{title}</h3>
-        {description ? <p className="text-[12px] text-neutral-500 mt-1 leading-relaxed">{description}</p> : null}
+        <h3 className="text-[13px] font-semibold text-[#171717]">{title}</h3>
+        {description ? <p className="text-[12px] text-[#171717]/70 mt-1 leading-relaxed">{description}</p> : null}
       </div>
       <div className="flex flex-col gap-4">{children}</div>
     </section>
@@ -655,6 +668,10 @@ export function AddOwnerModal({
     templateIds: [] as string[],
     logoUrl: "",
   });
+  // The select can show a plan that is not the one in state when plans load after mount.
+  const planIdInUse = activeSubscriptionPlans(subscriptionPlans).some((plan) => plan.id === form.subscriptionPlanId)
+    ? form.subscriptionPlanId
+    : defaultPlanId;
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
@@ -715,7 +732,7 @@ export function AddOwnerModal({
     setPending(true);
     setError(null);
     try {
-      const result = await createOwnerAction({ ...form, logoUrl: form.logoUrl || undefined });
+      const result = await createOwnerAction({ ...form, subscriptionPlanId: planIdInUse, logoUrl: form.logoUrl || undefined });
       if (!result.ok) return setError(result.error);
       // The create response is the full owner row, so the list updates without a refetch.
       onCreated(result.owner);
@@ -735,21 +752,23 @@ export function AddOwnerModal({
       subtitle="Set up login, subscription, and optional catalogue templates. The owner adds their logo later in Settings."
       size="lg"
       footer={
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
-          <button type="button" className="btn-ghost w-full sm:w-auto" onClick={close}>
-            Cancel
-          </button>
-          <BusyButton type="submit" form="register-owner-form" loading={pending} className="w-full sm:w-auto">
-            Create owner account
-          </BusyButton>
+        <div className="flex flex-col gap-3">
+          {error && (
+            <p role="alert" className="text-sm text-[#a12b1f] rounded-md border border-[#f0d2cc] bg-[#fdf1ef] px-3 py-2">
+              {error}
+            </p>
+          )}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+            <button type="button" className="btn-ghost w-full sm:w-auto" onClick={close}>
+              Cancel
+            </button>
+            <BusyButton type="submit" form="register-owner-form" loading={pending} className="w-full sm:w-auto">
+              Create owner account
+            </BusyButton>
+          </div>
         </div>
       }
     >
-      {error && (
-        <p role="alert" className="text-sm text-[#a12b1f] mb-4 rounded-md border border-[#f0d2cc] bg-[#fdf1ef] px-3 py-2">
-          {error}
-        </p>
-      )}
       <form id="register-owner-form" className="flex flex-col gap-5" onSubmit={submit}>
         <AdminFormSection
           title="Business"
@@ -849,7 +868,7 @@ export function AddOwnerModal({
               </label>
               <button
                 type="button"
-                className="text-xs font-medium text-neutral-600 hover:text-black underline underline-offset-2"
+                className="text-xs font-medium text-[#171717]/70 hover:text-[#171717] underline underline-offset-2"
                 onClick={() => setForm((f) => ({ ...f, password: randomPassword() }))}
               >
                 Generate secure password
@@ -866,7 +885,7 @@ export function AddOwnerModal({
               spellCheck={false}
               onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
             />
-            <p className="text-xs text-neutral-500 mt-1.5">Copy this before creating - it cannot be retrieved later.</p>
+            <p className="text-xs text-[#171717]/70 mt-1.5">Copy this before creating - it cannot be retrieved later.</p>
           </div>
         </AdminFormSection>
 
@@ -875,7 +894,7 @@ export function AddOwnerModal({
             <label htmlFor="owner-plan">Subscription plan</label>
             <select
               id="owner-plan"
-              value={form.subscriptionPlanId}
+              value={planIdInUse}
               onChange={(e) => setForm((f) => ({ ...f, subscriptionPlanId: e.target.value }))}
             >
               {activeSubscriptionPlans(subscriptionPlans).map((plan) => (
@@ -885,10 +904,10 @@ export function AddOwnerModal({
               ))}
             </select>
             {(() => {
-              const plan = subscriptionPlans.find((p) => p.id === form.subscriptionPlanId);
+              const plan = subscriptionPlans.find((p) => p.id === planIdInUse);
               if (!plan) return null;
               return (
-                <p className="flex flex-wrap items-center gap-2 text-xs text-neutral-600 mt-2">
+                <p className="flex flex-wrap items-center gap-2 text-xs text-[#171717]/70 mt-2">
                   <span>Billing type:</span>
                   <BillingCycleBadge cycle={plan.billingCycle} durationDays={plan.durationDays} />
                 </p>
@@ -897,11 +916,11 @@ export function AddOwnerModal({
           </div>
           <div>
             <p className="text-sm font-medium mb-1">Product templates (optional)</p>
-            <p className="text-xs text-neutral-500 mb-3">
+            <p className="text-xs text-[#171717]/70 mb-3">
               Pre-build catalogue on first login - steel, cement, wire, paint, tiles, etc.
             </p>
             {templates.length === 0 ? (
-              <p className="text-[12px] text-neutral-400 rounded-md border border-dashed border-neutral-200 px-3 py-4 text-center">
+              <p className="text-[12px] text-[#171717]/60 rounded-md border border-dashed border-[#E5E5E5] px-3 py-4 text-center">
                 No templates yet. You can assign them later from the business detail page.
               </p>
             ) : (
@@ -975,7 +994,6 @@ export function SubscriptionModal({
 
   return (
     <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Subscription - ${owner?.business.name ?? ""}`}>
-      {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
           <label htmlFor="sub-plan">Plan</label>
@@ -1009,6 +1027,7 @@ export function SubscriptionModal({
             />
           </div>
         )}
+        {error && <p role="alert" className="text-sm text-[#a12b1f]">{error}</p>}
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
           <BusyButton type="submit" loading={pending} disabled={!owner}>
@@ -1068,8 +1087,7 @@ export function TemplatesModal({
 
   return (
     <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Product templates - ${owner?.business.name ?? ""}`} size="lg">
-      {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
-      <p className="text-xs text-neutral-500 mb-4">
+      <p className="text-xs text-[#171717]/70 mb-4">
         Add catalogue templates to an existing business. Products that already exist (same name) are skipped.
         {assigned.length ? ` Last applied ${fmtDate(owner?.business.templatesAppliedAt)}.` : ""}
       </p>
@@ -1092,6 +1110,7 @@ export function TemplatesModal({
             );
           })}
         </div>
+        {error && <p role="alert" className="text-sm text-[#a12b1f]">{error}</p>}
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
           <BusyButton type="submit" loading={pending} disabled={!owner}>
@@ -1135,7 +1154,6 @@ export function ResetPasswordModal({
 
   return (
     <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Reset password - ${owner?.name ?? ""}`}>
-      {error && <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p>}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
           <label htmlFor="reset-password">New password</label>
@@ -1151,6 +1169,7 @@ export function ResetPasswordModal({
             onChange={(event) => setPassword(event.target.value)}
           />
         </div>
+        {error && <p role="alert" className="text-sm text-[#a12b1f]">{error}</p>}
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
           <BusyButton type="submit" loading={pending} disabled={!owner}>
@@ -1158,6 +1177,128 @@ export function ResetPasswordModal({
           </BusyButton>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function EditOwnerForm({ owner, onUpdated, onClose, pending, setPending }: {
+  owner: OwnerAccount;
+  onUpdated: () => Promise<void>;
+  onClose: () => void;
+  pending: boolean;
+  setPending: (value: boolean) => void;
+}) {
+  const [businessName, setBusinessName] = useState(owner.business.name);
+  const [ownerName, setOwnerName] = useState(owner.name);
+  const [ownerEmail, setOwnerEmail] = useState(owner.email);
+  const [error, setError] = useState<string | null>(null);
+
+  const businessNameRef = useRef<HTMLInputElement>(null);
+  const ownerNameRef = useRef<HTMLInputElement>(null);
+  const ownerEmailRef = useRef<HTMLInputElement>(null);
+
+  const close = () => {
+    if (pending) return;
+    setError(null);
+    onClose();
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (pending) return;
+    const trimmedBusiness = businessName.trim();
+    const trimmedOwner = ownerName.trim();
+    const trimmedEmail = ownerEmail.trim();
+    if (trimmedBusiness.length < 2 || trimmedBusiness.length > 80) {
+      setError("Business name must be 2 to 80 characters.");
+      businessNameRef.current?.focus();
+      return;
+    }
+    if (trimmedOwner.length < 2 || trimmedOwner.length > 80) {
+      setError("Owner name must be 2 to 80 characters.");
+      ownerNameRef.current?.focus();
+      return;
+    }
+    if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+      setError("Enter a valid email address.");
+      ownerEmailRef.current?.focus();
+      return;
+    }
+    const input: { name?: string; email?: string; businessName?: string } = {};
+    if (trimmedBusiness !== owner.business.name) input.businessName = trimmedBusiness;
+    if (trimmedOwner !== owner.name) input.name = trimmedOwner;
+    if (trimmedEmail !== owner.email) input.email = trimmedEmail;
+    if (Object.keys(input).length === 0) {
+      close();
+      return;
+    }
+    setPending(true);
+    const result = await updateOwnerAction(owner.id, input).finally(() => setPending(false));
+    if (!result.ok) return setError(result.error);
+    await onUpdated();
+    close();
+  };
+
+  return (
+    <form className="flex flex-col gap-4" onSubmit={submit}>
+      <div>
+        <label htmlFor="edit-business-name">Business name</label>
+        <input
+          id="edit-business-name"
+          type="text"
+          value={businessName}
+          autoComplete="off"
+          onChange={(event) => setBusinessName(event.target.value)}
+          ref={businessNameRef}
+        />
+        <p className="text-[13px] text-[#171717]/70 mt-1.5">The business link stays /{owner.business.slug ?? ""}.</p>
+      </div>
+      <div>
+        <label htmlFor="edit-owner-name">Owner name</label>
+        <input id="edit-owner-name" type="text" value={ownerName} autoComplete="off" onChange={(event) => setOwnerName(event.target.value)} ref={ownerNameRef} />
+      </div>
+      <div>
+        <label htmlFor="edit-owner-email">Owner email</label>
+        <input
+          id="edit-owner-email"
+          type="email"
+          value={ownerEmail}
+          autoComplete="off"
+          onChange={(event) => setOwnerEmail(event.target.value)}
+          ref={ownerEmailRef}
+        />
+        <p className="text-[13px] text-[#171717]/70 mt-1.5">The owner signs in with this email. Changing it does not sign them out.</p>
+      </div>
+      {error && <p role="alert" className="text-sm text-[#a12b1f]">{error}</p>}
+      <div className="flex justify-end gap-3">
+        <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
+        <BusyButton type="submit" loading={pending}>
+          Save
+        </BusyButton>
+      </div>
+    </form>
+  );
+}
+
+export function EditOwnerModal({
+  owner,
+  onClose,
+  onUpdated,
+}: {
+  owner: OwnerAccount | null;
+  onClose: () => void;
+  onUpdated: () => Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+
+  const close = () => {
+    if (pending) return;
+    onClose();
+  };
+
+  return (
+    <Modal open={Boolean(owner)} onClose={close} busy={pending} title={`Edit - ${owner?.business.name ?? ""}`}>
+      {owner ? <EditOwnerForm key={owner.id} owner={owner} onUpdated={onUpdated} onClose={close} pending={pending} setPending={setPending} /> : null}
     </Modal>
   );
 }

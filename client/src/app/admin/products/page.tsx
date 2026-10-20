@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Package } from "lucide-react";
 import {
   listProductTemplatesFullAction,
   type ProductTemplateFull,
@@ -89,7 +90,7 @@ export default function AdminProductsPage() {
       {!loadError && templates.length === 0 ? (
         <div className="panel">
           <EmptyState
-            emoji="📦"
+            icon={<Package className="w-8 h-8" />}
             title="No templates"
             hint="Create a product template with attributes and dropdown options."
             action={<button className="btn-primary" onClick={() => setAddOpen(true)}>+ New template</button>}

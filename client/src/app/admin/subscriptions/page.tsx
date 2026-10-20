@@ -32,6 +32,7 @@ export default function AdminSubscriptionsPage() {
   });
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SubscriptionPlanOption | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const reload = async () => {
     invalidate();
@@ -39,7 +40,12 @@ export default function AdminSubscriptionsPage() {
   };
 
   const togglePlan = async (plan: SubscriptionPlanOption) => {
-    await updateSubscriptionPlanAction(plan.id, { active: !plan.active });
+    setToggleError(null);
+    const result = await updateSubscriptionPlanAction(plan.id, { active: !plan.active });
+    if (!result.ok) {
+      setToggleError(result.error);
+      return;
+    }
     await reload();
   };
 
@@ -85,6 +91,7 @@ export default function AdminSubscriptionsPage() {
       </div>
 
       {loadError ? <p role="alert" className="text-sm text-[#a12b1f] mb-4">{loadError}</p> : null}
+      {toggleError ? <p role="alert" className="text-sm text-[#a12b1f] mb-4">{toggleError}</p> : null}
 
       {!loadError && sorted.length === 0 ? (
         <EmptyState

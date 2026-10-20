@@ -81,15 +81,15 @@ export default function AdminSystemPage() {
           <p className="text-2xl font-semibold mt-2">
             {apiOk === null ? "Checking…" : apiOk ? "Online" : "Unreachable"}
           </p>
-          <p className="text-xs text-neutral-500 mt-2">
-            Probes <code className="text-[11px] bg-neutral-100 px-1 rounded">/api/health</code>
+          <p className="text-xs text-[#171717]/70 mt-2">
+            Probes <code className="text-xs bg-[#F8F8F7] px-1 rounded">/api/health</code>
             {checkedAt ? ` · last check ${checkedAt}` : ""}
           </p>
           <button
             type="button"
             onClick={() => void runCheck(true)}
             disabled={checking}
-            className="btn-ghost min-h-11"
+            className="btn-ghost min-h-11 mt-4"
           >
             {checking ? "Checking…" : "Check again"}
           </button>
@@ -103,7 +103,7 @@ export default function AdminSystemPage() {
         <div className="panel p-5">
           <p className="text-xs font-medium text-[#171717]/60">Your role</p>
           <p className="text-lg font-semibold mt-2">Super Admin</p>
-          <p className="text-xs text-neutral-500 mt-2 leading-relaxed">
+          <p className="text-xs text-[#171717]/70 mt-2 leading-relaxed">
             You manage businesses, subscription plans, and catalogue templates. You do not operate tenant
             ledgers from this panel. Owners and staff use their business URLs.
           </p>
@@ -112,7 +112,7 @@ export default function AdminSystemPage() {
 
       <section className="panel p-5">
         <h2 className="text-sm font-semibold mb-3">Platform checklist</h2>
-        <ul className="text-sm text-neutral-700 space-y-2 list-disc pl-5">
+        <ul className="text-sm text-[#171717]/70 space-y-2 list-disc pl-5">
           <li>
             <Link href="/admin/businesses" className="font-medium hover:underline">
               Businesses

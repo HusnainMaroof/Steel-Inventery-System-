@@ -1,4 +1,4 @@
-# Tijaratt APIs
+# Tijartt APIs
 
 Nest serves REST under `/api/v1` (URI versioning, global prefix `api`).
 `GET /health` is unversioned and public.
@@ -114,7 +114,7 @@ Prefix `/api/v1/owners`. `@Roles("SUPERADMIN")`.
 | GET | `/owners` | — | Paginated active business owners |
 | GET | `/owners/:id` | — | One owner + business + subscription |
 | POST | `/owners` | `CreateOwnerDto` | Create `Business` + `ADMIN` login; optional plan + template ids |
-| PATCH | `/owners/:id` | `UpdateOwnerDto` | Name / email / password / active |
+| PATCH | `/owners/:id` | `UpdateOwnerDto` | Owner name, email (lowercased, must be free), business name (slug never changes), password, active. Name or email changes refresh the cached business and write an `owner.updated` audit row. |
 | PATCH | `/owners/:id/subscription` | `UpdateSubscriptionDto` | Plan, status, expiry |
 | POST | `/owners/:id/templates` | `ApplyTemplatesDto` | Apply catalogue templates (skips duplicate product names) |
 | DELETE | `/owners/:id` | — | Revoke login (`active: false`). Does **not** delete the business or ledger. |

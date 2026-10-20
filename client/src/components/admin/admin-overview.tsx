@@ -95,12 +95,12 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
 
       <section>
         <h2 className="text-[13px] font-semibold text-[#171717] mb-3">
-          Ledger activity (30 days)
+          Ledger activity, all businesses (30 days)
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <StatCard label="Sales" value={totals.sales30d} hint="All tenants" />
-          <StatCard label="Purchases" value={totals.purchases30d} hint="All tenants" />
-          <StatCard label="Payments" value={totals.payments30d} hint="All tenants" />
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard label="Sales" value={totals.sales30d} />
+          <StatCard label="Purchases" value={totals.purchases30d} />
+          <StatCard label="Payments" value={totals.payments30d} />
         </div>
       </section>
 
@@ -108,22 +108,22 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
         <section className="xl:col-span-7 panel p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 className="text-sm font-semibold">Subscription mix</h2>
-            <Link href="/admin/subscriptions" className="text-xs font-medium text-neutral-600 hover:text-black">
+            <Link href="/admin/subscriptions" className="text-xs font-medium text-[#171717]/70 hover:text-[#171717]">
               Manage plans →
             </Link>
           </div>
           {subscriptions.byPlan.length === 0 ? (
-            <p className="text-sm text-neutral-500">No plans configured yet.</p>
+            <p className="text-sm text-[#171717]/70">No plans configured yet.</p>
           ) : (
             <ul className="space-y-3">
               {subscriptions.byPlan.map((plan) => (
                 <li
                   key={plan.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 pb-3 last:border-0 last:pb-0"
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5E5E5] pb-3 last:border-0 last:pb-0"
                 >
                   <div>
-                    <p className="text-[13px] font-medium text-neutral-900">{plan.label}</p>
-                    <p className="text-xs text-neutral-500 mt-0.5">
+                    <p className="text-[13px] font-medium text-[#171717]">{plan.label}</p>
+                    <p className="text-xs text-[#171717]/70 mt-0.5">
                       {plan.count} business{plan.count === 1 ? "" : "es"}
                     </p>
                   </div>
@@ -146,15 +146,15 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
                 <dt className="text-[#171717]/60 text-xs font-medium">Active plans</dt>
                 <dd className="font-semibold tabular-nums mt-0.5">
                   {catalog.activePlans}
-                  <span className="text-neutral-400 font-normal text-xs"> / {catalog.totalPlans}</span>
+                  <span className="text-[#171717]/60 font-normal text-xs"> / {catalog.totalPlans}</span>
                 </dd>
               </div>
             </dl>
             <div className="flex flex-wrap gap-2 mt-4">
-              <Link href="/admin/products" className="btn-ghost !py-1.5 !px-3 text-xs">
+              <Link href="/admin/products" className="btn-ghost">
                 Catalog
               </Link>
-              <Link href="/admin/subscriptions" className="btn-ghost !py-1.5 !px-3 text-xs">
+              <Link href="/admin/subscriptions" className="btn-ghost">
                 Plans
               </Link>
             </div>
@@ -163,12 +163,12 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
           <div className={`panel p-4 ${needsAttention ? "border-[#f0d2cc]" : ""}`}>
             <h2 className="text-sm font-semibold mb-3">Needs attention</h2>
             {!needsAttention ? (
-              <p className="text-sm text-neutral-500">All subscriptions and owner logins look healthy.</p>
+              <p className="text-sm text-[#171717]/70">All subscriptions and owner logins look healthy.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {attention.expiredSubscriptions > 0 ? (
                   <li className="flex justify-between gap-2">
-                    <span className="text-neutral-700">Expired subscriptions</span>
+                    <span className="text-[#171717]/70">Expired subscriptions</span>
                     <span className="font-semibold tabular-nums text-[#a12b1f]">
                       {attention.expiredSubscriptions}
                     </span>
@@ -176,13 +176,13 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
                 ) : null}
                 {attention.expiringSoon > 0 ? (
                   <li className="flex justify-between gap-2">
-                    <span className="text-neutral-700">Expiring within 14 days</span>
+                    <span className="text-[#171717]/70">Expiring within 14 days</span>
                     <span className="font-semibold tabular-nums text-warning">{attention.expiringSoon}</span>
                   </li>
                 ) : null}
                 {attention.revokedOwners > 0 ? (
                   <li className="flex justify-between gap-2">
-                    <span className="text-neutral-700">Revoked owner logins</span>
+                    <span className="text-[#171717]/70">Revoked owner logins</span>
                     <span className="font-semibold tabular-nums">{attention.revokedOwners}</span>
                   </li>
                 ) : null}
@@ -196,20 +196,20 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
       </div>
 
       <section className="panel overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-100">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-[#E5E5E5]">
           <div>
             <h2 className="text-sm font-semibold">Businesses on the platform</h2>
-            <p className="text-xs text-neutral-500 mt-0.5">
+            <p className="text-xs text-[#171717]/70 mt-0.5">
               Sorted by attention, then 30-day activity
             </p>
           </div>
-          <Link href="/admin/businesses" className="btn-primary !py-2 !px-3 text-xs">
+          <Link href="/admin/businesses?new=1" className="btn-primary">
             + Register owner
           </Link>
         </div>
 
         {sorted.length === 0 ? (
-          <p className="text-sm text-neutral-500 p-4">No businesses registered yet.</p>
+          <p className="text-sm text-[#171717]/70 p-4">No businesses registered yet.</p>
         ) : (
           <>
             <ul className="md:hidden divide-y divide-[#E5E5E5]">
@@ -247,20 +247,20 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#E5E5E5] bg-[#F8F8F7]">
-                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70">
+                  <tr className="bg-[#FAFAF9]">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60">
                       Business
                     </th>
-                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60">
                       Plan
                     </th>
-                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60">
                       Status
                     </th>
-                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60">
                       30-day activity
                     </th>
-                    <th className="px-4 py-2.5 text-xs uppercase tracking-wider font-medium text-[#171717]/70 text-right">
+                    <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-right">
                       Action
                     </th>
                   </tr>
@@ -283,7 +283,7 @@ export function AdminOverviewDashboard({ overview }: { overview: PlatformOvervie
                       <td className="px-4 py-3 text-right">
                         <Link
                           href={`/admin/businesses/${row.ownerId}`}
-                          className="btn-ghost !py-1.5 !px-3 text-xs"
+                          className="btn-ghost"
                         >
                           Manage
                         </Link>

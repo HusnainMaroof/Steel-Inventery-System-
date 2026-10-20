@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AddOwnerModal, BusinessListTable, planLabel, businessStatus, type BusinessStatus } from "@/components/admin/admin-ui";
 import { AdminBusinessesSkeleton } from "@/components/skeletons";
 import { usePlatformAdminData } from "@/hooks/use-platform-admin-data";
@@ -12,7 +13,19 @@ const PAGE_SIZE = 20;
 
 type StatusFilter = "All" | BusinessStatus;
 
+// useSearchParams needs a Suspense boundary, or the production build fails.
 export default function AdminBusinessesPage() {
+  return (
+    <Suspense fallback={<AdminBusinessesSkeleton />}>
+      <AdminBusinessesContent />
+    </Suspense>
+  );
+}
+
+function AdminBusinessesContent() {
+  const router = useRouter();
+  // "?new=1" (from the Overview "+ Register owner" link) opens the register modal.
+  const openFromLink = useSearchParams().get("new") === "1";
   const { user, ready } = useAuth();
   const { owners, templates, subscriptionPlans, loading, loadError, addOwner } =
     usePlatformAdminData(user?.role === "SUPERADMIN", {
@@ -141,10 +154,14 @@ export default function AdminBusinessesPage() {
       )}
 
       <AddOwnerModal
-        open={addOpen}
+        open={addOpen || openFromLink}
         templates={templates}
         subscriptionPlans={subscriptionPlans}
-        onClose={() => setAddOpen(false)}
+        onClose={() => {
+          setAddOpen(false);
+          // replace, not push, so Back still returns to Overview
+          if (openFromLink) router.replace("/admin/businesses");
+        }}
         onCreated={addOwner}
       />
     </Page>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   createCatalogTemplateAction,
   type CatalogTemplateAttribute,
@@ -19,12 +20,12 @@ const UNIT_OPTIONS = [
 
 function AttributeBlock({ attribute }: { attribute: CatalogTemplateAttribute }) {
   return (
-    <div className="rounded-md border border-neutral-100 bg-neutral-50/50 px-3 py-2">
-      <p className="text-[12px] font-medium text-neutral-900">
+    <div className="rounded-md border border-[#E5E5E5] bg-[#FAFAF9] px-3 py-2">
+      <p className="text-[12px] font-medium text-[#171717]">
         {attribute.name}
-        {attribute.required ? <span className="text-neutral-400 font-normal"> · required</span> : null}
+        {attribute.required ? <span className="text-[#171717]/60 font-normal"> · required</span> : null}
       </p>
-      <p className="text-xs text-neutral-500 mt-0.5 capitalize">
+      <p className="text-xs text-[#171717]/70 mt-0.5 capitalize">
         {attribute.type}
         {attribute.unit ? ` · ${attribute.unit}` : ""}
       </p>
@@ -33,7 +34,7 @@ function AttributeBlock({ attribute }: { attribute: CatalogTemplateAttribute }) 
           {attribute.options.map((option) => (
             <span
               key={option}
-              className="inline-flex rounded-full bg-white border border-neutral-200 px-2 py-0.5 text-xs text-neutral-600"
+              className="inline-flex rounded-full bg-white border border-[#E5E5E5] px-2 py-0.5 text-xs text-[#171717]/70"
             >
               {option}
             </span>
@@ -67,11 +68,12 @@ export function TemplateCatalogCard({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full text-left px-4 py-3.5 flex items-start justify-between gap-3 hover:bg-neutral-50/80 transition-colors"
+        className="w-full text-left px-4 py-3.5 flex items-start justify-between gap-3 hover:bg-[#F8F8F7] transition-colors"
+        aria-expanded={expanded}
       >
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[14px] font-semibold text-neutral-900">{template.label}</span>
+            <span className="text-sm font-semibold text-[#171717]">{template.label}</span>
             {meta ? (
               <span className="text-xs font-medium text-[#171717]/70 bg-[#F0F0EE] px-1.5 py-0.5 rounded">
                 {meta.trade}
@@ -81,11 +83,11 @@ export function TemplateCatalogCard({
                 Custom
               </span>
             ) : null}
-            <span className="text-xs text-neutral-400">
+            <span className="text-xs text-[#171717]/60">
               {catalogStructureLabel(template.usesCategories)}
             </span>
           </span>
-          <span className="block text-xs text-neutral-600 mt-1">
+          <span className="block text-xs text-[#171717]/70 mt-1">
             {template.product.name} · {template.product.unit}
             {template.usesCategories && categoryCount
               ? ` · ${categoryCount} categor${categoryCount === 1 ? "y" : "ies"}`
@@ -93,25 +95,25 @@ export function TemplateCatalogCard({
             {attrCount ? ` · ${attrCount} attribute${attrCount === 1 ? "" : "s"}` : ""}
           </span>
           {meta ? (
-            <span className="block text-xs text-neutral-500 mt-1 leading-snug">{meta.hint}</span>
+            <span className="block text-xs text-[#171717]/70 mt-1 leading-snug">{meta.hint}</span>
           ) : null}
         </span>
-        <span className="text-neutral-400 text-xs shrink-0 pt-0.5">{expanded ? "▲" : "▼"}</span>
+        <ChevronDown className={`w-4 h-4 shrink-0 text-[#171717]/60 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 border-t border-neutral-100">
+        <div className="px-4 pb-4 border-t border-[#E5E5E5]">
           {template.product.description ? (
-            <p className="text-[12px] text-neutral-600 mt-3">{template.product.description}</p>
+            <p className="text-[12px] text-[#171717]/70 mt-3">{template.product.description}</p>
           ) : null}
 
           {template.usesCategories && template.categories?.length ? (
             <div className="mt-4 space-y-4">
               {template.categories.map((category) => (
                 <div key={category.name}>
-                  <p className="text-[12px] font-semibold text-neutral-800">{category.name}</p>
+                  <p className="text-[12px] font-semibold text-[#171717]">{category.name}</p>
                   {category.description ? (
-                    <p className="text-xs text-neutral-500 mt-0.5">{category.description}</p>
+                    <p className="text-xs text-[#171717]/70 mt-0.5">{category.description}</p>
                   ) : null}
                   <div className="grid gap-2 mt-2">
                     {category.attributes.map((attribute) => (
@@ -202,7 +204,6 @@ export function AddCatalogTemplateModal({
 
   return (
     <Modal open={open} onClose={close} busy={pending} title="New product template" size="lg">
-      {error ? <p role="alert" className="text-sm text-[#a12b1f] mb-3">{error}</p> : null}
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
           <label htmlFor="tpl-label">Template label</label>
@@ -246,7 +247,7 @@ export function AddCatalogTemplateModal({
           <p className="text-sm font-medium mb-2">Attributes / variants</p>
           <div className="space-y-3">
             {attributes.map((row, index) => (
-              <div key={index} className="border border-neutral-200 rounded-lg p-3 space-y-2">
+              <div key={index} className="border border-[#E5E5E5] rounded-lg p-3 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     value={row.name}
@@ -283,7 +284,7 @@ export function AddCatalogTemplateModal({
                     placeholder="Options, comma-separated"
                   />
                 ) : null}
-                <label className="flex items-center gap-2 text-[12px] text-neutral-600">
+                <label className="flex items-center gap-2 text-[12px] text-[#171717]/70">
                   <input
                     type="checkbox"
                     checked={row.required}
@@ -309,7 +310,7 @@ export function AddCatalogTemplateModal({
           </div>
           <button
             type="button"
-            className="text-[12px] font-medium text-neutral-600 hover:text-black mt-2"
+            className="text-[12px] font-medium text-[#171717]/70 hover:text-[#171717] mt-2"
             onClick={() =>
               setAttributes((prev) => [...prev, { name: "", type: "select", required: true, options: "" }])
             }
@@ -318,6 +319,7 @@ export function AddCatalogTemplateModal({
           </button>
         </div>
 
+        {error ? <p role="alert" className="text-sm text-[#a12b1f]">{error}</p> : null}
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={close}>Cancel</button>
           <BusyButton type="submit" loading={pending}>Create template</BusyButton>
