@@ -329,7 +329,7 @@ export default function DashboardPage() {
           className="w-full sm:w-auto"
           disableFuture
         />
-        {/* period switcher — uses preset when no custom range is active */}
+        {/* period switcher: uses the preset when no custom range is active */}
         <div className="flex w-full items-center gap-1 overflow-x-auto rounded-xl bg-[#F4F4F2] p-1 sm:ml-auto sm:w-auto">
           {PERIODS.map((p) => (
             <button

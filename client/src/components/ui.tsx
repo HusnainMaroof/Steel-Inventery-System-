@@ -53,6 +53,8 @@ export function CustomSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
+  // Open the panel from the right edge when there is not enough room on the right.
+  const [alignRight, setAlignRight] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -73,6 +75,8 @@ export function CustomSelect({
   }, [open, highlight]);
 
   const openList = () => {
+    const rect = ref.current?.getBoundingClientRect();
+    setAlignRight(!!rect && rect.left + Math.max(rect.width, 220) > window.innerWidth - 8);
     setHighlight(Math.max(0, options.findIndex((o) => o.value === value)));
     setOpen(true);
   };
@@ -119,7 +123,12 @@ export function CustomSelect({
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => (open ? setOpen(false) : openList())}
+        onClick={(e) => {
+          // Keyboard Enter/Space are handled in onKeyDown; a synthetic click (detail 0) would toggle twice.
+          if (e.detail === 0) return;
+          if (open) setOpen(false);
+          else openList();
+        }}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -149,8 +158,8 @@ export function CustomSelect({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            style={{ transformOrigin: "top" }}
-            className="absolute z-50 mt-1.5 w-full min-w-[220px] overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-1 shadow-[0_16px_40px_-16px_rgba(17,17,17,0.28)]"
+            style={{ transformOrigin: alignRight ? "top right" : "top left" }}
+            className={`absolute z-50 mt-1.5 w-full min-w-[220px] overflow-hidden ${alignRight ? "right-0" : "left-0"} rounded-xl border border-[#E5E5E5] bg-white p-1 shadow-[0_16px_40px_-16px_rgba(17,17,17,0.28)]`}
           >
             <div ref={listRef} id={listId} role="listbox" aria-label={ariaLabel} className="max-h-64 overflow-y-auto">
               {options.map((o, index) => {
@@ -197,9 +206,12 @@ export function SearchBar({
   ariaLabel,
   className = "",
   debounceMs = 250,
+  format,
 }: {
   value: string;
   onSearch: (query: string) => void;
+  /** Optional clean-up applied while typing (for example phone formatting). */
+  format?: (text: string) => string;
   placeholder?: string;
   ariaLabel?: string;
   className?: string;
@@ -250,7 +262,7 @@ export function SearchBar({
         <input
           type="text"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => setText(format ? format(e.target.value) : e.target.value)}
           placeholder={placeholder}
           aria-label={ariaLabel ?? placeholder}
           className="!w-full !pl-9 !pr-16"

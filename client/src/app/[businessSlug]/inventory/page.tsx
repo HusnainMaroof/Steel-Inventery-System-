@@ -356,7 +356,7 @@ export default function InventoryPage() {
                             </span>
                           </span>
                           <div className="min-w-0 self-center">
-                            <span className="block truncate text-[13px] font-semibold text-[#171717]">{prodName ?? "—"}</span>
+                            <span className="block truncate text-[13px] font-semibold text-[#171717]">{prodName ?? "-"}</span>
                             {cat && <span className="block truncate text-[13px] text-[#171717]/70">{cat.name}</span>}
                             {attrs.map((a, i) => (
                               <span key={i} className="block truncate text-[13px] text-[#171717]/70">
@@ -404,7 +404,7 @@ export default function InventoryPage() {
                           <span className="text-[12px] tabular-nums text-[#171717]/70">Stock after: {fmtQtyWithUnit(m.after, m.unit)}</span>
                         </div>
                         <div className="mt-1.5 min-w-0">
-                          <span className="block truncate text-[13px] font-semibold text-[#171717]">{prodName ?? "—"}</span>
+                          <span className="block truncate text-[13px] font-semibold text-[#171717]">{prodName ?? "-"}</span>
                           {cat && <span className="block truncate text-[13px] text-[#171717]/70">{cat.name}</span>}
                           {attrs.map((a, i) => (
                             <span key={i} className="block truncate text-[13px] text-[#171717]/70">
@@ -534,7 +534,7 @@ export default function InventoryPage() {
                               </span>
                             </div>
                             <span className="self-center text-right text-[13px] font-medium tabular-nums text-[#171717]">
-                              {st === "out" ? "—" : fmtMoney(r.stockValue)}
+                              {st === "out" ? "-" : fmtMoney(r.stockValue)}
                             </span>
                             <span className="self-center text-right text-[13px] tabular-nums text-[#171717]">{lots.length}</span>
                             <span className="flex justify-end self-center">{menu}</span>
@@ -573,7 +573,7 @@ export default function InventoryPage() {
                               <div className="text-right">
                                 <span className="block text-[12px] font-semibold text-[#171717]/70">Stock Value</span>
                                 <span className="block text-[13px] font-semibold tabular-nums text-[#171717]">
-                                  {st === "out" ? "—" : fmtMoney(r.stockValue)}
+                                  {st === "out" ? "-" : fmtMoney(r.stockValue)}
                                 </span>
                                 <span className="mt-0.5 block text-[12px] tabular-nums text-[#171717]/70">{lots.length} lot{lots.length === 1 ? "" : "s"}</span>
                               </div>
@@ -654,7 +654,7 @@ export default function InventoryPage() {
                           <span>{fmtDate(l.purchasedAt)}</span>
                         </div>
                         <div className="mt-0.5 flex items-center justify-between gap-3 text-[12px] text-[#171717]/70">
-                          <span>{purchased !== undefined ? `Purchased: ${fmtQtyWithUnit(purchased, l.unit)}` : "—"}</span>
+                          <span>{purchased !== undefined ? `Purchased: ${fmtQtyWithUnit(purchased, l.unit)}` : "-"}</span>
                           <span>Landed: {fmtRateWithUnit(l.landedPerUnit)}</span>
                         </div>
                         {(l.warehouseId || l.locationId) && (

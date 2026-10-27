@@ -41,15 +41,16 @@ export function CookieNotice() {
     <div
       role="region"
       aria-label="Cookie notice"
-      className={`fixed right-4 bottom-4 left-4 z-50 max-w-[380px] rounded-2xl border border-line bg-white p-5 text-[#171717] shadow-[0_18px_50px_-20px_rgba(17,17,17,0.35)] transition-[opacity,translate] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-safe:animate-rise motion-reduce:transition-none sm:right-auto sm:bottom-6 sm:left-6 ${
+      className={`fixed right-3 bottom-3 left-3 z-50 max-w-[380px] rounded-2xl border border-line bg-white p-3.5 text-[#171717] sm:p-5 shadow-[0_18px_50px_-20px_rgba(17,17,17,0.35)] transition-[opacity,translate] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-safe:animate-rise motion-reduce:transition-none sm:right-auto sm:bottom-6 sm:left-6 ${
         state === "leaving" ? "translate-y-3 opacity-0" : ""
       }`}
     >
-      <p className="text-[16px] font-semibold tracking-[-0.01em]">Only the cookie you need</p>
-      <p className="mt-2 text-[14px] leading-[1.55] text-[#171717]/70">
+      <p className="hidden text-[16px] font-semibold tracking-[-0.01em] sm:block">Only the cookie you need</p>
+      <div className="flex items-center gap-3 sm:block">
+      <p className="min-w-0 flex-1 text-[13px] leading-[1.45] text-[#171717]/70 sm:mt-2 sm:text-[14px] sm:leading-[1.55]">
         We use one cookie to keep you signed in. No ads and no tracking.
       </p>
-      <div className="mt-4 flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-4 sm:mt-4">
         <button
           type="button"
           onClick={dismiss}
@@ -61,8 +62,10 @@ export function CookieNotice() {
           href="/privacy-policy"
           className="inline-flex min-h-11 items-center text-[14px] font-medium text-[#171717] underline decoration-[#171717]/30 underline-offset-4 hover:decoration-[#171717]"
         >
-          Privacy policy
+          <span className="sm:hidden">Privacy</span>
+          <span className="hidden sm:inline">Privacy policy</span>
         </Link>
+      </div>
       </div>
     </div>
   );

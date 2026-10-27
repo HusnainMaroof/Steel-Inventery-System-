@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { saleGrandTotal, useStore } from "@/lib/store";
 import { useBusinessHref } from "@/components/BusinessLink";
 import { Skeleton } from "@/components/skeletons";
@@ -137,10 +137,9 @@ export default function SalesTable({
   });
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // Typing stays responsive: the list filters on a deferred copy of the search text.
-  const deferredSearch = useDeferredValue(search);
+  // The search applies only when the user presses Search (see SearchBar).
   const hasFilters =
-    deferredSearch.trim() !== "" || statusFilter !== "all" || !!(dateRange.from || dateRange.to);
+    search.trim() !== "" || statusFilter !== "all" || !!(dateRange.from || dateRange.to);
   // When a filter is active, filter across the full ledger (allSales) instead of the current server page,
   // and hide server pagination. When no filter is active, keep the server page and its PaginationBar.
   const displaySales = (hasFilters ? allSales : sales) ?? sales;
@@ -197,7 +196,7 @@ export default function SalesTable({
   );
 
   const groups = useMemo(() => {
-    const q = deferredSearch.toLowerCase().trim();
+    const q = search.toLowerCase().trim();
     const filtered = rows
       .filter((r) => {
         if (q && !r.searchHay.includes(q)) return false;
@@ -224,7 +223,7 @@ export default function SalesTable({
         sales: list,
         dayTotal: list.reduce((a, r) => a.plus(toDecimal(r.total)), new Decimal(0)).toNumber(),
       }));
-  }, [rows, deferredSearch, statusFilter, dateRange]);
+  }, [rows, search, statusFilter, dateRange]);
 
   const totalDue = groups.reduce((a, g) => a.plus(toDecimal(g.sales.reduce((b, r) => b.plus(toDecimal(r.due)), new Decimal(0)).toNumber())), new Decimal(0)).toNumber();
   const filteredCount = groups.reduce((a, g) => a + g.sales.length, 0);
@@ -333,8 +332,15 @@ export default function SalesTable({
                             <span className="self-start text-right text-sm font-semibold text-[#171717] tabular-nums whitespace-nowrap">
                               {fmtMoney(s.total)}
                             </span>
-                            <span className="self-start text-right text-sm font-medium text-[#171717] tabular-nums whitespace-nowrap">
-                              {fmtMoney(s.paid > 0.005 ? s.paid : 0)}
+                            <span className="self-start text-right whitespace-nowrap">
+                              <span className="block text-sm font-medium tabular-nums text-[#171717]">
+                                {fmtMoney(s.paid > 0.005 ? s.paid : 0)}
+                              </span>
+                              {s.due > 0.005 ? (
+                                <span className="mt-0.5 block text-[13px] font-semibold tabular-nums text-destructive">
+                                  {fmtMoney(s.due)} due
+                                </span>
+                              ) : null}
                             </span>
                             <span className="self-start flex justify-end" onClick={(e) => e.stopPropagation()}>
                               <RowActionsMenu items={menuItems(s)} />
@@ -375,6 +381,11 @@ export default function SalesTable({
                               <span className="mt-0.5 block whitespace-nowrap text-base font-medium tabular-nums text-[#171717]">
                                 {fmtMoney(s.paid > 0.005 ? s.paid : 0)}
                               </span>
+                              {s.due > 0.005 ? (
+                                <span className="mt-0.5 block whitespace-nowrap text-[13px] font-semibold tabular-nums text-destructive">
+                                  {fmtMoney(s.due)} due
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         </div>

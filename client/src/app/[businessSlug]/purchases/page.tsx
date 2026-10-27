@@ -261,8 +261,9 @@ export default function PurchasesPage() {
   const matchesQuery = (p: Purchase) => {
     if (!query.trim()) return true;
     const q = query.trim().toLowerCase();
-    // Search looks at the supplier name only.
-    return supplierName(p.supplierId).toLowerCase().includes(q);
+    // Search looks at the supplier name only (never the raw supplier id).
+    const name = suppliers.find((s) => s.id === p.supplierId)?.name ?? "";
+    return name.toLowerCase().includes(q);
   };
   const matchesDate = (p: Purchase) => dateInIsoRange(p.date, dateRange);
   const filteredPurchases = purchases.filter((p) => matchesQuery(p) && matchesDate(p));

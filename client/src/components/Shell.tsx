@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import type { ComponentProps, ReactNode } from "react";
 import { useAuth, homeFor } from "@/lib/auth";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/business-path";
 import { MARKETING_PATHS, isPublicPath } from "@/lib/app-routes";
 import { TenantSidebar, TenantSidebarContent } from "@/components/shell/TenantSidebar";
+import { useDrawerFocus } from "@/components/shell/useDrawerFocus";
 import { AdminShell, PLATFORM_ADMIN_NAV } from "@/components/shell/AdminShell";
 import { canOpenPath, pagesFor } from "@/lib/staff-access";
 import { useUiPreferences } from "@/lib/preferences";
@@ -29,6 +30,9 @@ type SidebarProps = Omit<ComponentProps<typeof TenantSidebarContent>, "layoutGro
 function MobileNav({ sidebar }: { sidebar: SidebarProps }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+  useDrawerFocus(drawerOpen, drawerRef, menuButtonRef);
 
   useEffect(() => {
     document.body.style.overflow = drawerOpen ? "hidden" : "";
@@ -60,6 +64,7 @@ function MobileNav({ sidebar }: { sidebar: SidebarProps }) {
     <div className="contents md:hidden">
       <header className="no-print sticky top-0 z-40 flex h-14 items-center justify-between border-b border-line bg-white/95 px-3 backdrop-blur">
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
@@ -92,6 +97,9 @@ function MobileNav({ sidebar }: { sidebar: SidebarProps }) {
               onClick={() => setDrawerOpen(false)}
             />
             <motion.aside
+              ref={drawerRef}
+              role="dialog"
+              aria-modal="true"
               aria-label="Menu"
               className="fixed inset-y-2 left-2 z-50 w-[82vw] max-w-[300px] overflow-hidden rounded-[20px] border border-line bg-white shadow-[0_24px_60px_-20px_rgba(17,17,17,0.35)]"
               initial={{ x: reduceMotion ? 0 : "-110%" }}

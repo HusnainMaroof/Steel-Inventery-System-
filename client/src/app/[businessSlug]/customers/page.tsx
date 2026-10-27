@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useStore, saleGrandTotal } from "@/lib/store";
-import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, RowActionsMenu, CustomSelect } from "@/components/ui";
+import { BusyButton, ConfirmModal, CustomSelect, EmptyState, Modal, Page, PageTitle, RowActionsMenu, SearchBar, useToggle } from "@/components/ui";
 import { Search } from "lucide-react";
 import ReceivePaymentModal from "@/components/ReceivePaymentModal";
 import CustomerHistoryModal from "@/components/customers/CustomerHistoryModal";
@@ -19,7 +19,6 @@ export default function CustomersPage() {
   const { open, onOpen, onClose } = useToggle();
   const [form, setForm] = useState({ name: "", shop: "", phone: "" });
 
-  const [searchInput, setSearchInput] = useState("");
   const [searchMode, setSearchMode] = useState<"name" | "phone">("name");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [appliedMode, setAppliedMode] = useState<"name" | "phone">("name");
@@ -61,9 +60,6 @@ export default function CustomersPage() {
     return digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits;
   };
 
-  const onSearchChange = (v: string) => {
-    setSearchInput(searchMode === "phone" ? formatPhone(v) : v);
-  };
 
   const [savingCustomer, setSavingCustomer] = useState(false);
   const savingCustomerRef = useRef(false);
@@ -129,26 +125,16 @@ export default function CustomersPage() {
             compact
             className="w-full sm:w-40 shrink-0"
           />
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#171717]/70 pointer-events-none" />
-            <input
-              type="text"
-              placeholder={searchMode === "name" ? "Search by name..." : "Search by phone..."}
-              aria-label={searchMode === "name" ? "Search by name" : "Search by phone"}
-              value={searchInput}
-              onChange={(e) => onSearchChange(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { setAppliedSearch(searchInput); setAppliedMode(searchMode); } }}
-              className="!w-full !pl-9"
-            />
-          </div>
-          <button onClick={() => { setAppliedSearch(searchInput); setAppliedMode(searchMode); }} className="btn-ghost whitespace-nowrap shrink-0">
-            Search
-          </button>
-          {appliedSearch.trim() !== "" && (
-            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setSearchMode("name"); setAppliedMode("name"); }} className="btn-ghost whitespace-nowrap shrink-0">
-              Clear
-            </button>
-          )}
+          <SearchBar
+            value={appliedSearch}
+            onSearch={(q) => {
+              setAppliedSearch(q);
+              setAppliedMode(searchMode);
+            }}
+            format={searchMode === "phone" ? formatPhone : undefined}
+            placeholder={searchMode === "name" ? "Search by name" : "Search by phone"}
+            className="min-w-[240px] flex-1"
+          />
         </div>
       )}
 
@@ -182,10 +168,10 @@ export default function CustomersPage() {
                       <span className="font-semibold text-[#171717] truncate block text-sm">{c.name}</span>
                     </td>
                     <td className="py-3 px-4">
-                      <span className="text-[#171717]/70 truncate block text-sm">{c.shop || "—"}</span>
+                      <span className="text-[#171717]/70 truncate block text-sm">{c.shop || "-"}</span>
                     </td>
                     <td className="py-3 px-4">
-                      <span className="text-[#171717]/70 tabular-nums text-sm">{c.phone || "—"}</span>
+                      <span className="text-[#171717]/70 tabular-nums text-sm">{c.phone || "-"}</span>
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span onClick={(e) => e.stopPropagation()}>
@@ -214,7 +200,7 @@ export default function CustomersPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <span className="block font-semibold text-sm text-[#171717] truncate">{c.name}</span>
-                    <span className="block text-[13px] text-[#171717]/70 truncate">{c.shop || "—"}</span>
+                    <span className="block text-[13px] text-[#171717]/70 truncate">{c.shop || "-"}</span>
                   </div>
                   <span onClick={(e) => e.stopPropagation()}>
                     <RowActionsMenu
@@ -227,7 +213,7 @@ export default function CustomersPage() {
                   </span>
                 </div>
                 <div className="mt-2 text-right">
-                  <span className="text-[13px] text-[#171717]/70 tabular-nums">{c.phone || "—"}</span>
+                  <span className="text-[13px] text-[#171717]/70 tabular-nums">{c.phone || "-"}</span>
                 </div>
               </div>
             ))}
@@ -293,11 +279,11 @@ export default function CustomersPage() {
               <div className="border border-[#E5E5E5] mb-6">
                 <div className="flex justify-between items-center gap-3 py-2.5 px-4 border-b border-[#E5E5E5]">
                   <span className="text-sm font-medium truncate">{t.name}</span>
-                  <span className="text-xs text-[#171717]/70 shrink-0 tabular-nums">{t.phone || "—"}</span>
+                  <span className="text-xs text-[#171717]/70 shrink-0 tabular-nums">{t.phone || "-"}</span>
                 </div>
                 <div className="flex justify-between py-2 px-4 border-b border-[#E5E5E5] text-xs">
                   <span className="text-[#171717]/70">Shop / Area</span>
-                  <span className="tabular-nums">{t.shop || "—"}</span>
+                  <span className="tabular-nums">{t.shop || "-"}</span>
                 </div>
                 <div className="flex justify-between py-2 px-4 border-b border-[#E5E5E5] text-xs">
                   <span className="text-[#171717]/70">Invoices on record</span>

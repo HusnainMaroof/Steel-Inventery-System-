@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { AuthUser } from "@/lib/auth";
 import { displayName } from "@/lib/auth-types";
+import { useDrawerFocus } from "@/components/shell/useDrawerFocus";
 
 export const PLATFORM_ADMIN_NAV = [
   { key: "overview", href: "/admin/overview", label: "Overview" },
@@ -129,6 +130,8 @@ export function AdminShell({
 }) {
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+  useDrawerFocus(open, drawerRef, toggleRef);
   const reduceMotion = useReducedMotion();
   const current = PLATFORM_ADMIN_NAV.find((item) => isActive(pathname, item.href));
 
@@ -136,10 +139,7 @@ export function AdminShell({
     if (!open) return;
     document.body.style.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        toggleRef.current?.focus();
-      }
+      if (event.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -183,7 +183,10 @@ export function AdminShell({
               onClick={() => setOpen(false)}
             />
             <motion.aside
+              ref={drawerRef}
               id="admin-drawer"
+              role="dialog"
+              aria-modal="true"
               aria-label="Admin menu"
               className="fixed inset-y-0 left-0 z-50 w-[82vw] max-w-[300px] bg-white md:hidden"
               initial={{ x: reduceMotion ? 0 : "-100%" }}
@@ -193,10 +196,7 @@ export function AdminShell({
             >
               <button
                 type="button"
-                onClick={() => {
-                  setOpen(false);
-                  toggleRef.current?.focus();
-                }}
+                onClick={() => setOpen(false)}
                 className={`absolute top-6 right-4 min-h-10 rounded-full px-3 text-[14px] font-medium text-[#171717]/70 hover:text-ink ${focusRing}`}
               >
                 Close
