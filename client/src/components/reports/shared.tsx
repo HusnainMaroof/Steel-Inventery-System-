@@ -17,12 +17,12 @@ export function Section({
   return (
     <section className={`mb-6 sm:mb-8 ${className}`}>
       <div className="flex items-center justify-between gap-3 mb-3 min-h-[44px]">
-        <h2 className="text-xs uppercase tracking-wide font-semibold text-[#171717]/60">
+        <h2 className="text-[16px] font-bold text-[#171717]">
           {title}
         </h2>
         {action}
       </div>
-      <div className="border border-[#E5E5E5] bg-white rounded-xl p-4 sm:p-5">
+      <div className="border border-[#E5E5E5] bg-white rounded-2xl p-4 sm:p-5">
         {children}
       </div>
     </section>
@@ -48,7 +48,7 @@ export function StatementRow({
 }
 
 export function StatementRule() {
-  return <div className="border-t border-[#171717] my-1" aria-hidden />;
+  return <div className="border-t border-[#E5E5E5] my-1" aria-hidden />;
 }
 
 export function StatementTotal({
@@ -62,8 +62,8 @@ export function StatementTotal({
 }) {
   if (dark) {
     return (
-      <div className="flex items-baseline justify-between gap-4 mt-2 -mx-4 sm:-mx-5 px-4 sm:px-5 py-3 bg-[#111]">
-        <span className="text-[12px] uppercase tracking-widest font-semibold text-white">{label}</span>
+      <div className="flex items-baseline justify-between gap-4 mt-2 -mx-4 sm:-mx-5 px-4 sm:px-5 py-3 bg-[#111] rounded-b-2xl">
+        <span className="text-[14px] font-semibold text-white">{label}</span>
         <span className="tabular-nums text-[18px] sm:text-[20px] font-bold text-white">
           {fmtSignedMoney(value)}
         </span>
@@ -71,8 +71,8 @@ export function StatementTotal({
     );
   }
   return (
-    <div className="flex items-baseline justify-between gap-4 py-3 border-t border-[#171717] mt-1">
-      <span className="text-[12px] uppercase tracking-widest font-semibold text-[#171717]">{label}</span>
+    <div className="flex items-baseline justify-between gap-4 py-3 border-t border-[#E5E5E5] mt-1">
+      <span className="text-[14px] font-semibold text-[#171717]">{label}</span>
       <span className="tabular-nums text-[16px] font-bold text-[#171717]">{fmtSignedMoney(value)}</span>
     </div>
   );

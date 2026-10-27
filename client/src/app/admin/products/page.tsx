@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Package } from "lucide-react";
 import {
   listProductTemplatesFullAction,
   type ProductTemplateFull,
@@ -9,6 +8,7 @@ import {
 import { AddCatalogTemplateModal, TemplateCatalogCard } from "@/components/admin/catalog-templates";
 import { AdminProductsSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/lib/auth";
+import { AdminPageHeader, AdminCard, AdminSectionTitle } from "@/components/admin/admin-ui";
 import { EmptyState, Page } from "@/components/ui";
 import { invalidateAdminCache } from "@/lib/admin-cache";
 import { BUILTIN_TEMPLATE_META } from "@/lib/admin-platform-meta";
@@ -73,36 +73,31 @@ export default function AdminProductsPage() {
 
   return (
     <Page>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Catalog</h1>
-          <p className="text-[#171717]/70 text-xs mt-1 max-w-xl">
-            Product templates for new businesses: steel, cement, wire, paint, tiles, and any custom ones you add.
-          </p>
-        </div>
-        <button className="btn-primary w-full sm:w-auto" onClick={() => setAddOpen(true)}>
-          + New template
-        </button>
-      </div>
+      <AdminPageHeader
+        title="Catalog"
+        meta="Product templates for new businesses."
+        actions={
+          <button className="btn-primary w-full sm:w-auto" onClick={() => setAddOpen(true)}>
+            New template
+          </button>
+        }
+      />
 
       {loadError ? <p role="alert" className="text-sm text-[#a12b1f] mb-4">{loadError}</p> : null}
 
       {!loadError && templates.length === 0 ? (
-        <div className="panel">
+        <AdminCard>
           <EmptyState
-            icon={<Package className="w-8 h-8" />}
             title="No templates"
             hint="Create a product template with attributes and dropdown options."
-            action={<button className="btn-primary" onClick={() => setAddOpen(true)}>+ New template</button>}
+            action={<button className="btn-primary" onClick={() => setAddOpen(true)}>New template</button>}
           />
-        </div>
+        </AdminCard>
       ) : (
         <div className="space-y-8">
           {builtIn.length > 0 ? (
             <section>
-              <h2 className="text-sm font-semibold text-[#171717] mb-3">
-                Built-in trade types
-              </h2>
+              <AdminSectionTitle title="Built-in trade types" />
               <div className="space-y-3">
                 {builtIn.map((template) => (
                   <TemplateCatalogCard
@@ -117,9 +112,7 @@ export default function AdminProductsPage() {
           ) : null}
           {custom.length > 0 ? (
             <section>
-              <h2 className="text-sm font-semibold text-[#171717] mb-3">
-                Custom templates
-              </h2>
+              <AdminSectionTitle title="Custom templates" />
               <div className="space-y-3">
                 {custom.map((template) => (
                   <TemplateCatalogCard

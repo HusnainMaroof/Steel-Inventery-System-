@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import type { ReactNode } from "react";
-import { useAuth, homeFor, type AuthUser } from "@/lib/auth";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import type { ComponentProps, ReactNode } from "react";
+import { useAuth, homeFor } from "@/lib/auth";
 import { displayName, roleLabel } from "@/lib/auth-types";
 import {
   businessSlugFromPath,
@@ -13,205 +13,22 @@ import {
   pagePathFromBusinessRoute,
 } from "@/lib/business-path";
 import { MARKETING_PATHS, isPublicPath } from "@/lib/app-routes";
-import AppSidebar from "@/components/shell/AppSidebar";
-import AppTopbar from "@/components/shell/AppTopbar";
+import { TenantSidebar, TenantSidebarContent } from "@/components/shell/TenantSidebar";
+import { AdminShell, PLATFORM_ADMIN_NAV } from "@/components/shell/AdminShell";
 import { canOpenPath, pagesFor } from "@/lib/staff-access";
 import { useUiPreferences } from "@/lib/preferences";
 import { AuthBootstrapSkeleton, skeletonForPath } from "@/components/skeletons";
 import { ErrorState } from "@/components/ui";
 
-const ICONS: Record<string, ReactNode> = {
-  dashboard: <path d="M2 8.5 8 3l6 5.5V14a.5.5 0 0 1-.5.5h-3v-4h-3v4h-3A.5.5 0 0 1 2 14Z" />,
-  purchases: <path d="M2 3h2l1.6 8.5a1 1 0 0 0 1 .8h5.9a1 1 0 0 0 1-.8L15 6H4.5M6.5 14.5h.01M11.5 14.5h.01" />,
-  inventory: <path d="M3 5.5 8 3l5 2.5v5L8 13 3 10.5ZM3 5.5 8 8l5-2.5M8 8v5" />,
-  products: <path d="M8 2 3 4.5v7L8 14l5-2.5v-7L8 2ZM3 4.5 8 7l5-2.5M8 7v7" />,
-  sales: <path d="M3 2.5h10v11l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2ZM5.5 6h5M5.5 8.5h5" />,
-  customers: <path d="M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 13.5c.7-2.2 3-3.5 5.5-3.5s4.8 1.3 5.5 3.5" />,
-  suppliers: <path d="M2.5 13.5v-6l3-1.5v7.5M5.5 13.5h5v-9l-5 1.5M10.5 13.5h3v-4l-3-1.2M4 8.5h.01M7.5 9.5h.01" />,
-  payments: <path d="M2 5.5h12v7H2ZM2 5.5 8 2.5l6 3M11.5 9h.01" />,
-  expenses: <path d="M3 2.5h10v11H3ZM6 5.5h4M6 8h4M6 10.5h2.5" />,
-  reports: <path d="M4 2.5h6l2.5 2.5v8.5H4ZM10 2.5V5h2.5M6 8h4M6 10.5h4" />,
-  settings: <path d="M6.5 2.5h3l.6 1.6 1.5.6 1.4-.8 2.1 2.1-.8 1.4.6 1.5 1.6.6v3l-1.6.6-.6 1.5.8 1.4-2.1 2.1-1.4-.8-1.5.6-.6 1.6h-3l-.6-1.6-1.5-.6-1.4.8-2.1-2.1.8-1.4-.6-1.5L2 9.5v-3l1.6-.6.6-1.5-.8-1.4L5.5 1.9l1.4.8 1.5-.6ZM8 10.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z" />,
-  staff: <path d="M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 13.5c.7-2.2 3-3.5 5.5-3.5s4.8 1.3 5.5 3.5M11.5 6.5h3M13 5v3" />,
-  overview: <path d="M2 8.5 8 3l6 5.5V14a.5.5 0 0 1-.5.5h-3v-4h-3v4h-3A.5.5 0 0 1 2 14Z" />,
-  businesses: <path d="M2.5 3.5h11v9h-11ZM5 6.5h6M5 9h4M8 12.5v2.5M6 15h4" />,
-  subscriptions: <path d="M2 5.5h12v7H2ZM2 5.5 8 2.5l6 3M11.5 9h.01" />,
-  system: <path d="M8 1.75a6.25 6.25 0 1 0 0 12.5 6.25 6.25 0 0 0 0-12.5ZM8 4v4l2.5 1.5" />,
-};
-
-const PLATFORM_ADMIN_NAV = [
-  { key: "overview" as const, href: "/admin/overview", label: "Overview" },
-  { key: "businesses" as const, href: "/admin/businesses", label: "Businesses" },
-  { key: "subscriptions" as const, href: "/admin/subscriptions", label: "Plans" },
-  { key: "products" as const, href: "/admin/products", label: "Catalog" },
-  { key: "system" as const, href: "/admin/system", label: "System" },
-];
-
-function userSubtitle(user: AuthUser): string {
-  if (user.role === "SUPERADMIN") return roleLabel(user.role);
-  if (user.role === "SUBADMIN") return `${roleLabel(user.role, user.title)} · ${user.businessName}`;
-  return `${roleLabel(user.role)} · ${user.businessName}`;
-}
-
-function UserBlock({
-  user,
-  onSignOut,
-  collapsed = false,
-}: {
-  user: AuthUser;
-  onSignOut: () => void;
-  collapsed?: boolean;
-}) {
-  const name = displayName(user);
-  const initials = name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-  const subtitle = userSubtitle(user);
-
-  if (collapsed)
-    return (
-      <div className="flex flex-col items-center gap-3 pt-4 mt-4 border-t border-neutral-200">
-        <div className="w-8 h-8 rounded-full bg-[#171717] text-white flex items-center justify-center text-[10px] font-semibold tracking-wide shrink-0">
-          {initials}
-        </div>
-        <button
-          onClick={onSignOut}
-          title="Sign out"
-          aria-label="Sign out"
-          className="text-neutral-400 hover:text-black transition-colors"
-        >
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 1.75v6.5M3.4 4.1a5.75 5.75 0 1 0 9.2 0" />
-          </svg>
-        </button>
-      </div>
-    );
-
-  return (
-    <div className="flex items-center gap-2.5 px-2 pt-4 mt-4 border-t border-neutral-200">
-      <div className="w-8 h-8 rounded-full bg-[#171717] text-white flex items-center justify-center text-[10px] font-semibold tracking-wide shrink-0">
-        {initials}
-      </div>
-      <div className="leading-tight min-w-0 flex-1">
-        <p className="text-[12px] font-semibold text-[#171717] truncate">{name}</p>
-        <p className="text-[10px] text-[#171717]/65 truncate">{subtitle}</p>
-      </div>
-      <button
-        onClick={onSignOut}
-        title="Sign out"
-        aria-label="Sign out"
-        className="shrink-0 text-[10px] uppercase tracking-[0.12em] font-medium text-neutral-600 hover:text-black transition-colors px-2 py-1.5 rounded-sm hover:bg-neutral-100"
-      >
-        Sign out
-      </button>
-    </div>
-  );
-}
 
 
-function BrandMark({
-  brand,
-  logoSrc,
-  collapsed = false,
-  className = "",
-  logoPlaceholder = false,
-}: {
-  brand: string;
-  logoSrc: string | null;
-  collapsed?: boolean;
-  className?: string;
-  /** When true and no logo image, show “Your logo” instead of the business name. */
-  logoPlaceholder?: boolean;
-}) {
-  if (!logoSrc) {
-    if (logoPlaceholder) {
-      return (
-        <span
-          className={`font-medium text-neutral-500 whitespace-nowrap ${
-            collapsed ? "text-[10px] uppercase tracking-wide text-center leading-tight" : "text-[13px]"
-          }`}
-        >
-          {collapsed ? "Logo" : "Your logo"}
-        </span>
-      );
-    }
-    return (
-      <span
-        className={`font-semibold tracking-tight text-[#171717] ${
-          collapsed ? "text-sm" : "text-xl"
-        }`}
-      >
-        {collapsed ? brand.slice(0, 1) : brand}
-      </span>
-    );
-  }
-  return (
-    <img
-      src={logoSrc}
-      alt={brand}
-      title={brand}
-      className={
-        className ||
-        (collapsed
-          ? "h-11 w-11 object-contain object-center mx-auto"
-          : "h-20 w-20 object-contain object-left")
-      }
-    />
-  );
-}
 
-function AdminMobileTabBar({ pathname }: { pathname: string | null }) {
-  return (
-    <nav
-      className="sticky top-14 z-30 border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
-      aria-label="Admin sections"
-    >
-      <div className="flex gap-0.5 overflow-x-auto px-2 pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {PLATFORM_ADMIN_NAV.map((n) => {
-          const active = pathname === n.href || (pathname?.startsWith(`${n.href}/`) ?? false);
-          return (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={`shrink-0 whitespace-nowrap px-3.5 py-2.5 text-[12px] font-medium transition-colors border-b-2 -mb-px ${
-                active
-                  ? "border-neutral-900 text-neutral-900"
-                  : "border-transparent text-neutral-500 hover:text-neutral-800"
-              }`}
-            >
-              {n.label}
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
+type SidebarProps = Omit<ComponentProps<typeof TenantSidebarContent>, "layoutGroup" | "onNavigate">;
 
-function MobileNav({
-  navLinks,
-  user,
-  onSignOut,
-  brand,
-  brandHref,
-  logoSrc,
-  pathname,
-  logoPlaceholder,
-}: {
-  navLinks: (onNavigate?: () => void) => ReactNode;
-  user: AuthUser;
-  onSignOut: () => void;
-  brand: string;
-  brandHref: string;
-  logoSrc: string | null;
-  pathname: string | null;
-  logoPlaceholder: boolean;
-}) {
+/** Phone layout: a slim top bar with the menu button, and the same sidebar in a drawer. */
+function MobileNav({ sidebar }: { sidebar: SidebarProps }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     document.body.style.overflow = drawerOpen ? "hidden" : "";
@@ -229,59 +46,60 @@ function MobileNav({
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
+
   return (
-    // display: contents keeps the sticky header and tab bar scoped to the page,
-    // not to this wrapper; the page itself is rendered once by Shell.
+    // display: contents keeps the sticky header scoped to the page, not to this wrapper.
     <div className="contents md:hidden">
-      <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-3 bg-white/95 backdrop-blur border-b border-neutral-200 no-print">
+      <header className="no-print sticky top-0 z-40 flex h-14 items-center justify-between border-b border-line bg-white/95 px-3 backdrop-blur">
         <button
+          type="button"
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
-          className="-ml-1 w-[44px] h-[44px] flex items-center justify-center rounded-sm text-neutral-700 hover:bg-neutral-100 active:scale-90 transition"
+          aria-expanded={drawerOpen}
+          className="grid size-11 place-items-center rounded-xl text-ink transition-[background-color,scale] hover:bg-[#F4F4F2] active:scale-95"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-            <path d="M2.5 5h15M2.5 10h15M2.5 15h15" />
+            <path d="M3 6h14M3 10h14M3 14h9" />
           </svg>
         </button>
-        <Link href={brandHref} title={brand} className="flex-1 min-w-0 flex justify-center px-2">
-          <BrandMark brand={brand} logoSrc={logoSrc} className="h-14 w-14 object-contain object-center" logoPlaceholder={logoPlaceholder} />
+        <Link href={sidebar.brandHref} aria-label={`${sidebar.brand} home`} className="flex min-w-0 justify-center px-2">
+          {sidebar.logoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element -- business logos can be data URLs
+            <img src={sidebar.logoSrc} alt={sidebar.brand} className="h-9 w-auto max-w-[160px] object-contain" />
+          ) : (
+            <span className="rounded-lg border border-dashed border-[#171717]/20 px-3 py-1.5 text-[13px] font-medium text-[#171717]/60">Your logo</span>
+          )}
         </Link>
-        <span className="w-[44px]" aria-hidden />
+        <span className="size-11" aria-hidden />
       </header>
-      {user.role === "SUPERADMIN" ? <AdminMobileTabBar pathname={pathname} /> : null}
       <AnimatePresence>
         {drawerOpen && (
           <>
             <motion.div
-              className="fixed inset-0 z-50 bg-black/40"
+              className="fixed inset-0 z-50 bg-ink/40"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.2 }}
               onClick={() => setDrawerOpen(false)}
             />
             <motion.aside
-              className="fixed top-0 left-0 bottom-0 z-50 w-[80vw] max-w-[300px] bg-white border-r border-neutral-200 overflow-y-auto"
-              initial={{ x: "-100%" }}
+              aria-label="Menu"
+              className="fixed inset-y-2 left-2 z-50 w-[82vw] max-w-[300px] overflow-hidden rounded-[20px] border border-line bg-white shadow-[0_24px_60px_-20px_rgba(17,17,17,0.35)]"
+              initial={{ x: reduceMotion ? 0 : "-110%" }}
               animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", stiffness: 380, damping: 36 }}
+              exit={{ x: reduceMotion ? 0 : "-110%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 38 }}
             >
-              <div className="flex flex-col justify-between min-h-full py-6 px-4">
-                <div>
-                  <div className="flex items-center justify-between mb-8 min-h-20">
-                    <BrandMark brand={brand} logoSrc={logoSrc} className="h-20 w-20 object-contain object-left" logoPlaceholder={logoPlaceholder} />
-                    <button
-                      onClick={() => setDrawerOpen(false)}
-                      aria-label="Close menu"
-                      className="w-8 h-8 flex items-center justify-center rounded-sm text-neutral-400 hover:text-black hover:bg-neutral-100"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {navLinks(() => setDrawerOpen(false))}
-                </div>
-                <UserBlock user={user} onSignOut={onSignOut} />
-              </div>
+              <TenantSidebarContent {...sidebar} layoutGroup="drawer" onNavigate={() => setDrawerOpen(false)} />
             </motion.aside>
           </>
         )}
@@ -387,49 +205,11 @@ export default function Shell({ children }: { children: ReactNode }) {
     user.role === "SUPERADMIN"
       ? "/images/tijartt-logo.png"
       : businessLogo || null;
-  const useLogoPlaceholder = user.role !== "SUPERADMIN";
 
   const roleNav =
     user.role === "SUPERADMIN"
       ? PLATFORM_ADMIN_NAV
       : pagesFor(user);
-
-  const navLinks = (onNavigate?: () => void) => (
-    <nav className="flex flex-col gap-0.5">
-      {roleNav.map((n) => {
-        const active = pathname === n.href || pathname?.startsWith(`${n.href}/`);
-        return (
-          <Link
-            key={n.href}
-            href={n.href}
-            title={n.label}
-            onClick={onNavigate}
-            className="group relative flex items-center gap-2.5 px-2.5 py-2 text-[13px] rounded-sm transition-colors duration-150 hover:bg-neutral-100"
-          >
-            {active && (
-              <motion.span
-                layoutId="nav-pill"
-                className="absolute inset-0 rounded-md bg-primary"
-                transition={{ type: "spring", stiffness: 420, damping: 34 }}
-              />
-            )}
-            <span className={`relative shrink-0 ${active ? "text-white" : "text-neutral-500 group-hover:text-black"}`}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                {ICONS[n.key]}
-              </svg>
-            </span>
-            <span
-              className={`relative whitespace-nowrap ${
-                active ? "text-white" : "text-neutral-700 group-hover:text-black"
-              }`}
-            >
-              {n.label}
-            </span>
-          </Link>
-        );
-      })}
-    </nav>
-  );
 
   if (isMarketingPage) return <>{children}</>;
   if (pathname === "/login") return null;
@@ -444,42 +224,31 @@ export default function Shell({ children }: { children: ReactNode }) {
     ? skeletonForPath(user.role === "SUPERADMIN" ? pathname ?? "/admin/overview" : roleHome)
     : children;
 
+  if (user.role === "SUPERADMIN") {
+    return (
+      <AdminShell user={user} pathname={pathname} onSignOut={onSignOut}>
+        {mainContent}
+      </AdminShell>
+    );
+  }
+
+  const sidebar: SidebarProps = {
+    items: roleNav.map((n) => ({ key: n.key, href: n.href, label: n.label })),
+    pathname,
+    brand,
+    brandHref: roleHome,
+    logoSrc,
+    userName: displayName(user),
+    userSubtitle: user.role === "SUBADMIN" ? roleLabel(user.role, user.title) : roleLabel(user.role),
+    helpHref: "mailto:contact@tijartt.com",
+    onSignOut,
+  };
+
   return (
-    <div className="min-h-screen">
-      <AppTopbar
-        brand={brand}
-        logoSrc={logoSrc}
-        logoPlaceholder={useLogoPlaceholder}
-        logoClassName={user.role === "SUPERADMIN" ? "h-10 pl-3.5" : undefined}
-        homeHref={roleHome}
-        userName={displayName(user)}
-        userEmail={user.email}
-        settingsHref={roleNav.find((n) => n.key === "settings")?.href}
-        staffHref={roleNav.find((n) => n.key === "staff")?.href}
-        onSignOut={onSignOut}
-      />
-
-      <MobileNav
-        key={pathname}
-        navLinks={navLinks}
-        user={user}
-        onSignOut={onSignOut}
-        brand={brand}
-        brandHref={roleHome}
-        logoSrc={logoSrc}
-        pathname={pathname}
-        logoPlaceholder={useLogoPlaceholder}
-      />
-
-      <div className="md:flex">
-        <AppSidebar
-          items={roleNav.map((n) => ({ key: n.key, href: n.href, label: n.label }))}
-          pathname={pathname}
-          onSignOut={onSignOut}
-          helpHref="mailto:contact@tijartt.com"
-        />
-        <main className="min-w-0 flex-1 p-4 max-md:overflow-x-auto md:pb-8 md:pl-4 md:pr-6 md:pt-2 lg:pl-6 lg:pr-8">{mainContent}</main>
-      </div>
+    <div className="min-h-screen md:flex">
+      <TenantSidebar {...sidebar} />
+      <MobileNav key={pathname} sidebar={sidebar} />
+      <main className="min-w-0 flex-1 p-4 max-md:overflow-x-auto md:py-6 md:pr-6 md:pl-3 lg:pr-8">{mainContent}</main>
     </div>
   );
 }

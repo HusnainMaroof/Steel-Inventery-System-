@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useBusinessHref, useCanOpenPage } from "@/components/BusinessLink";
-import { Page, Stagger, StaggerItem } from "@/components/ui";
+import { CustomSelect, Page, Stagger, StaggerItem } from "@/components/ui";
 import { Skeleton } from "@/components/skeletons";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -301,63 +301,54 @@ export default function DashboardPage() {
 
   return (
     <Page>
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-[26px] sm:text-[30px] font-bold leading-tight tracking-tight text-[#111]">Dashboard</h1>
-          <p className="text-[13px] text-[#171717] mt-1.5">{day}</p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full sm:w-auto min-w-0">
-          <DateRangePicker
-            from={dateRange.from}
-            to={dateRange.to}
-            onChange={setDateRange}
-            onClear={() => setDateRange({ from: null, to: null })}
-            placeholder="Pick dates"
-            ariaLabel="Filter dashboard by date range"
-            className="w-full sm:w-auto"
-            disableFuture
-          />
-          {/* period switcher — uses preset when no custom range is active */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-white border border-neutral-200 w-full sm:w-auto overflow-x-auto">
-            {PERIODS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => {
-                  setPeriod(p.key);
-                  setDateRange({ from: null, to: null });
-                }}
-                className={`flex-1 sm:flex-none min-h-[36px] px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                  !rangeActive && period === p.key
-                    ? "bg-[#171717] text-white"
-                    : "text-[#171717] hover:text-black"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="mb-5">
+        <h1 className="text-[26px] sm:text-[30px] font-bold leading-tight tracking-tight text-[#111]">Dashboard</h1>
+        <p className="mt-1 text-[13px] text-[#171717]/70">{day}</p>
       </div>
 
-      {/* ===== Product picker ===== */}
-      <div className="mb-8 flex flex-wrap items-end gap-x-6 gap-y-3">
-        <div className="w-full sm:w-80">
-          <label htmlFor="product-filter">Data for</label>
-          <select
-            id="product-filter"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            className="w-full min-w-0 bg-white !py-2.5"
-          >
-            <option value="all">All Products — entire depot</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+      {/* ===== Toolbar: what the numbers are for, and for which dates ===== */}
+      <div className="mb-7 flex flex-col gap-2.5 rounded-2xl border border-[#E5E5E5] bg-white p-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <CustomSelect
+          value={productId}
+          onChange={setProductId}
+          ariaLabel="Data for"
+          className="w-full sm:w-72"
+          options={[
+            { value: "all", label: "All products" },
+            ...products.map((p) => ({ value: p.id, label: p.name })),
+          ]}
+        />
+        <div className="hidden h-6 w-px bg-[#E5E5E5] sm:block" aria-hidden="true" />
+        <DateRangePicker
+          from={dateRange.from}
+          to={dateRange.to}
+          onChange={setDateRange}
+          onClear={() => setDateRange({ from: null, to: null })}
+          placeholder="Pick dates"
+          ariaLabel="Filter dashboard by date range"
+          className="w-full sm:w-auto"
+          disableFuture
+        />
+        {/* period switcher — uses preset when no custom range is active */}
+        <div className="flex w-full items-center gap-1 overflow-x-auto rounded-xl bg-[#F4F4F2] p-1 sm:ml-auto sm:w-auto">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              aria-pressed={!rangeActive && period === p.key}
+              onClick={() => {
+                setPeriod(p.key);
+                setDateRange({ from: null, to: null });
+              }}
+              className={`min-h-9 flex-1 whitespace-nowrap rounded-lg px-3.5 text-[13px] font-medium transition-[background-color,color,box-shadow] sm:flex-none ${
+                !rangeActive && period === p.key
+                  ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(17,17,17,0.08),0_4px_10px_-6px_rgba(17,17,17,0.25)]"
+                  : "text-[#171717]/70 hover:text-[#171717]"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
       </div>
 

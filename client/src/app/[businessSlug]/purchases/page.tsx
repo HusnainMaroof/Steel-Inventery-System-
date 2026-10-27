@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useStore, purchaseTotal, steelAmount } from "@/lib/store";
-import { BusyButton, Page, PageTitle, Modal, ConfirmModal, useToggle, EmptyState, RowActionsMenu, InlineFormError } from "@/components/ui";
+import { BusyButton, ConfirmModal, EmptyState, InlineFormError, Modal, Page, PageTitle, RowActionsMenu, SearchBar, useToggle } from "@/components/ui";
 import { userFacingError } from "@/lib/user-error";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { dateInIsoRange } from "@/lib/date-range-filter";
@@ -261,13 +261,8 @@ export default function PurchasesPage() {
   const matchesQuery = (p: Purchase) => {
     if (!query.trim()) return true;
     const q = query.trim().toLowerCase();
-    const catName = catNameOf(p) ?? "";
-    const prodName = productNameOf(p) ?? "";
-    const attrs = p.attributeSnapshot ? Object.values(p.attributeSnapshot).join(" ") : [p.spec, p.quality].filter(Boolean).join(" ");
-    return [supplierName(p.supplierId), prodName, catName, p.item, attrs, p.lotNumber ?? "", p.heatNumber ?? "", p.batchNumber ?? ""]
-      .join(" ")
-      .toLowerCase()
-      .includes(q);
+    // Search looks at the supplier name only.
+    return supplierName(p.supplierId).toLowerCase().includes(q);
   };
   const matchesDate = (p: Purchase) => dateInIsoRange(p.date, dateRange);
   const filteredPurchases = purchases.filter((p) => matchesQuery(p) && matchesDate(p));
@@ -320,13 +315,13 @@ export default function PurchasesPage() {
       />
 
       {/* filters + add */}
-      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-center">
-        <input
+      <div className="mb-5 flex flex-col gap-2 rounded-2xl border border-[#E5E5E5] bg-white p-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <SearchBar
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search supplier, product, brand…"
-          className="w-full min-w-0 sm:flex-1 sm:min-w-[200px]"
-          aria-label="Search purchases"
+          onSearch={setQuery}
+          placeholder="Search by supplier name"
+          ariaLabel="Search purchases by supplier name"
+          className="w-full sm:min-w-[260px] sm:flex-1"
         />
         <DateRangePicker
           from={dateRange.from}
@@ -336,7 +331,7 @@ export default function PurchasesPage() {
           ariaLabel="Filter purchases by date range"
           className="w-full sm:w-auto"
         />
-        <button type="button" className="btn-primary w-full sm:w-auto shrink-0" onClick={openAdd}>
+        <button type="button" className="btn-primary w-full sm:ml-auto sm:w-auto shrink-0" onClick={openAdd}>
           + Add purchase
         </button>
       </div>
@@ -386,29 +381,31 @@ export default function PurchasesPage() {
               </EmptyIconBox>
             }
             title="No purchases match"
-            hint="Try a different search term or pick another date range."
+            hint="Try another supplier name or date range."
           />
         ) : (
           <div className="space-y-8">
-            {purchaseDateGroups.map((g) => (
+            {purchaseDateGroups.map((g, groupIndex) => (
               <div key={g.date}>
                 <div className="mb-3 flex items-center gap-3">
-                  <span className="text-sm font-semibold text-[#171717]">{fmtDate(g.date)}</span>
+                  <span className="text-[15px] font-bold text-[#171717]">{fmtDate(g.date)}</span>
                   <span className="text-[13px] text-[#171717]/70 tabular-nums">
                     {g.rows.length} purchase{g.rows.length === 1 ? "" : "s"} · {fmtMoney(g.dayTotal)}
                   </span>
                   <div className="flex-1 border-b border-[#E5E5E5]" />
                 </div>
 
-                <div className="md:overflow-hidden md:rounded-xl md:border md:border-[#E5E5E5] md:bg-white">
-                <div className="hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_100px_108px_108px_44px] gap-3 px-4 py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs uppercase tracking-wide text-[#171717]/60 font-medium items-center">
-                  <span>Supplier</span>
-                  <span>Product</span>
-                  <span className="text-right">Qty</span>
-                  <span className="text-right">Buy rate</span>
-                  <span className="text-right">Sell rate</span>
-                  <span className="sr-only">Actions</span>
-                </div>
+                <div className="md:overflow-hidden md:rounded-2xl md:border md:border-[#E5E5E5] md:bg-white">
+                {groupIndex === 0 ? (
+                  <div className="hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_110px_120px_120px_44px] gap-3 px-5 py-3 bg-white border-b border-[#E5E5E5] text-[13px] font-semibold text-[#171717] items-center">
+                    <span>Supplier</span>
+                    <span>Product</span>
+                    <span className="text-right">Quantity</span>
+                    <span className="text-right">Buying rate</span>
+                    <span className="text-right">Selling rate</span>
+                    <span className="sr-only">Actions</span>
+                  </div>
+                ) : null}
 
                 <div className="hidden md:flex md:flex-col md:divide-y md:divide-[#E5E5E5]">
                   {g.rows.map((r) => (
@@ -420,16 +417,11 @@ export default function PurchasesPage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") setSelectedId(r.id);
                       }}
-                      className="cursor-pointer transition-colors hover:bg-[#F8F8F7] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+                      className="cursor-pointer transition-colors hover:bg-[#FBFBFA] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
                     >
-                      <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_100px_108px_108px_44px] gap-3 px-4 py-3.5 items-start">
-                        <span className="block min-w-0">
-                          <span className="block text-sm font-medium text-[#171717] truncate">
-                            {supplierName(r.supplierId)}
-                          </span>
-                          <span className="block text-[13px] text-[#171717]/70 tabular-nums mt-0.5">
-                            Total {fmtMoney(steelAmount(r))}
-                          </span>
+                      <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_110px_120px_120px_44px] gap-3 px-5 py-4 items-start">
+                        <span className="block min-w-0 truncate text-[15px] font-semibold text-[#171717]">
+                          {supplierName(r.supplierId)}
                         </span>
                         <span className="min-w-0">
                           <Identity
@@ -449,7 +441,7 @@ export default function PurchasesPage() {
                           {fmtRateWithUnit(r.rate, r.unit)}
                         </span>
                         <span className="text-right text-sm tabular-nums text-[#171717]">
-                          {r.sellRate ? fmtRateWithUnit(r.sellRate, r.unit) : "—"}
+                          {r.sellRate ? fmtRateWithUnit(r.sellRate, r.unit) : "-"}
                         </span>
                         <span className="flex justify-end pt-0.5" onClick={(e) => e.stopPropagation()}>
                           <RowMenu onView={() => setSelectedId(r.id)} onDelete={() => setDeleteTarget(r)} />
@@ -466,15 +458,12 @@ export default function PurchasesPage() {
                       role="button"
                       tabIndex={0}
                       onClick={() => setSelectedId(r.id)}
-                      className="rounded-xl border border-[#E5E5E5] bg-white p-4 active:bg-[#F8F8F7]"
+                      className="rounded-2xl border border-[#E5E5E5] bg-white p-4 active:bg-[#F8F8F7]"
                     >
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#171717] truncate">
+                          <p className="truncate text-[15px] font-semibold text-[#171717]">
                             {supplierName(r.supplierId)}
-                          </p>
-                          <p className="text-[13px] text-[#171717]/70 tabular-nums mt-0.5">
-                            Total {fmtMoney(steelAmount(r))}
                           </p>
                         </div>
                         <RowMenu onView={() => setSelectedId(r.id)} onDelete={() => setDeleteTarget(r)} />
@@ -490,17 +479,17 @@ export default function PurchasesPage() {
                       />
                       <dl className="mt-3 grid grid-cols-3 gap-2 text-sm border-t border-[#E5E5E5] pt-3">
                         <div>
-                          <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Qty</dt>
+                          <dt className="text-[13px] font-semibold text-[#171717]">Quantity</dt>
                           <dd className="font-medium tabular-nums text-[#171717] mt-0.5">{fmtQtyWithUnit(r.qty, r.unit)}</dd>
                         </div>
                         <div>
-                          <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Buy</dt>
+                          <dt className="text-[13px] font-semibold text-[#171717]">Buying rate</dt>
                           <dd className="font-medium tabular-nums text-[#171717] mt-0.5">{fmtRateWithUnit(r.rate, r.unit)}</dd>
                         </div>
                         <div>
-                          <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Sell</dt>
+                          <dt className="text-[13px] font-semibold text-[#171717]">Selling rate</dt>
                           <dd className="font-medium tabular-nums text-[#171717] mt-0.5">
-                            {r.sellRate ? fmtRateWithUnit(r.sellRate, r.unit) : "—"}
+                            {r.sellRate ? fmtRateWithUnit(r.sellRate, r.unit) : "-"}
                           </dd>
                         </div>
                       </dl>
@@ -517,8 +506,8 @@ export default function PurchasesPage() {
       {tab === "dues" && (
         <div>
           {totalDue > 0 && (
-            <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 mb-6 flex flex-wrap justify-between items-center gap-3">
-              <span className="text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Total outstanding to suppliers</span>
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-5 mb-6 flex flex-wrap justify-between items-center gap-3">
+              <span className="text-[14px] font-semibold text-[#171717]">Total dues to suppliers</span>
               <span className="font-bold tabular-nums text-2xl text-destructive">{fmtMoney(totalDue)}</span>
             </div>
           )}
@@ -546,25 +535,27 @@ export default function PurchasesPage() {
                 </EmptyIconBox>
               }
               title="No dues match"
-              hint="Try a different search term or pick another month / year."
+              hint="Try another supplier name or date range."
             />
           ) : (
             <div className="space-y-8">
-              {dueDateGroups.map((g) => (
+              {dueDateGroups.map((g, groupIndex) => (
                 <div key={g.date}>
                   <div className="mb-3 flex items-center gap-3">
-                    <span className="text-sm font-semibold text-[#171717]">{fmtDate(g.date)}</span>
+                    <span className="text-[15px] font-bold text-[#171717]">{fmtDate(g.date)}</span>
                     <div className="flex-1 border-b border-[#E5E5E5]" />
                   </div>
 
-                  <div className="md:overflow-hidden md:rounded-xl md:border md:border-[#E5E5E5] md:bg-white">
-                  <div className="hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_100px_120px_44px] gap-3 px-4 py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs uppercase tracking-wide text-[#171717]/60 font-medium items-center">
-                    <span>Supplier</span>
-                    <span>Product</span>
-                    <span className="text-right">Qty</span>
-                    <span className="text-right">Due</span>
-                    <span className="sr-only">Actions</span>
-                  </div>
+                  <div className="md:overflow-hidden md:rounded-2xl md:border md:border-[#E5E5E5] md:bg-white">
+                  {groupIndex === 0 ? (
+                    <div className="hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_110px_140px_44px] gap-3 px-5 py-3 bg-white border-b border-[#E5E5E5] text-[13px] font-semibold text-[#171717] items-center">
+                      <span>Supplier</span>
+                      <span>Product</span>
+                      <span className="text-right">Quantity</span>
+                      <span className="text-right">Dues amount</span>
+                      <span className="sr-only">Actions</span>
+                    </div>
+                  ) : null}
 
                   <div className="hidden md:flex md:flex-col md:divide-y md:divide-[#E5E5E5]">
                     {g.rows.map((r) => (
@@ -576,10 +567,10 @@ export default function PurchasesPage() {
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") openPay(r.id);
                         }}
-                        className="cursor-pointer transition-colors hover:bg-[#F8F8F7] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+                        className="cursor-pointer transition-colors hover:bg-[#FBFBFA] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
                       >
-                        <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_100px_120px_44px] gap-3 px-4 py-3.5 items-start">
-                          <span className="block min-w-0 text-[13px] font-medium text-black truncate">
+                        <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_110px_140px_44px] gap-3 px-5 py-4 items-start">
+                          <span className="block min-w-0 truncate text-[15px] font-semibold text-[#171717]">
                             {supplierName(r.supplierId)}
                           </span>
                           <span className="min-w-0">
@@ -613,7 +604,7 @@ export default function PurchasesPage() {
 
                   <div className="flex flex-col gap-3 md:hidden">
                     {g.rows.map((r) => (
-                      <div key={r.id} className="rounded-xl border border-neutral-200 bg-white p-3.5 shadow-sm">
+                      <div key={r.id} className="rounded-2xl border border-[#E5E5E5] bg-white p-4">
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-[#171717] truncate">

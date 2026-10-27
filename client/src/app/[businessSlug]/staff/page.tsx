@@ -50,15 +50,15 @@ export default function StaffPage() {
 
   return (
     <Page>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-        <PageTitle
-          title="Staff"
-          sub="Give each person their own login and choose which parts of the app they can use."
-        />
-        <button type="button" className="btn-primary shrink-0" onClick={() => setAddOpen(true)}>
-          + Add staff member
-        </button>
-      </div>
+      <PageTitle
+        title="Staff"
+        meta={staff.length}
+        action={
+          <button type="button" className="btn-primary shrink-0" onClick={() => setAddOpen(true)}>
+            + Add staff member
+          </button>
+        }
+      />
 
       {loadError ? (
         <p role="alert" className="text-sm text-destructive mb-4">
@@ -67,7 +67,7 @@ export default function StaffPage() {
       ) : null}
 
       {staff.length === 0 ? (
-        <div className="border border-[#E5E5E5] bg-white rounded-xl p-8">
+        <div className="border border-[#E5E5E5] bg-white rounded-2xl p-8">
           <EmptyState
             icon={<Users />}
             title="No staff yet"
@@ -80,11 +80,11 @@ export default function StaffPage() {
           />
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="border border-[#E5E5E5] bg-white rounded-2xl overflow-hidden">
           {staff.map((member) => (
             <div
               key={member.id}
-              className="border border-[#E5E5E5] bg-white rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between"
+              className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between first:border-0 border-t border-[#E5E5E5]"
             >
               <div className="min-w-0">
                 <p className="text-base font-semibold text-[#171717] truncate">{member.name}</p>

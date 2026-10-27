@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import gsap from "gsap";
 
@@ -52,7 +52,11 @@ export function CustomSelect({
   ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
   const selected = options.find((o) => o.value === value);
 
   useEffect(() => {
@@ -63,26 +67,77 @@ export function CustomSelect({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    if (!open || highlight < 0) return;
+    listRef.current?.querySelector<HTMLElement>(`[data-index="${highlight}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [open, highlight]);
+
+  const openList = () => {
+    setHighlight(Math.max(0, options.findIndex((o) => o.value === value)));
+    setOpen(true);
+  };
+
+  const choose = (index: number) => {
+    const option = options[index];
+    if (!option) return;
+    onChange(option.value);
+    setOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openList();
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      buttonRef.current?.focus();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((h) => Math.min(options.length - 1, h + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(0, h - 1));
+    } else if (e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      setHighlight(e.key === "Home" ? 0 : options.length - 1);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      choose(highlight);
+    } else if (e.key === "Tab") {
+      setOpen(false);
+    }
+  };
+
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <div ref={ref} className={`relative ${className}`} onKeyDown={onKeyDown}>
       <button
-        onClick={() => setOpen(!open)}
+        ref={buttonRef}
+        type="button"
+        onClick={() => (open ? setOpen(false) : openList())}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`flex min-h-10 items-center justify-between gap-2 w-full px-3 text-sm font-medium bg-white border border-[#E5E5E5] rounded-lg hover:border-[#c9c9c9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors text-left ${
-          compact ? "min-w-[8.5rem]" : "min-w-[180px]"
-        }`}
+        aria-controls={open ? listId : undefined}
+        className={`flex min-h-10 w-full items-center justify-between gap-2 rounded-xl border bg-white px-3.5 text-left text-sm font-medium transition-[border-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+          open ? "border-[#171717]/40 shadow-[0_0_0_3px_rgba(17,17,17,0.06)]" : "border-[#E5E5E5] hover:border-[#171717]/30"
+        } ${compact ? "min-w-[8.5rem]" : "min-w-[180px]"}`}
       >
-        <span className={selected ? "text-black" : "text-neutral-400"}>
+        <span className={`truncate ${selected ? "text-[#171717]" : "text-[#171717]/60"}`}>
           {selected?.label ?? placeholder}
         </span>
         <svg
-          className={`w-3.5 h-3.5 text-neutral-400 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className={`h-4 w-4 shrink-0 text-[#171717]/60 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth={2}
+          aria-hidden="true"
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
@@ -93,28 +148,130 @@ export function CustomSelect({
             initial={{ opacity: 0, y: -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
-            transition={{ duration: 0.15 }}
-            className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden"
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            style={{ transformOrigin: "top" }}
+            className="absolute z-50 mt-1.5 w-full min-w-[220px] overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-1 shadow-[0_16px_40px_-16px_rgba(17,17,17,0.28)]"
           >
-            <div className="max-h-60 overflow-y-auto py-1">
-              {options.map((o) => (
-                <button
-                  key={o.value}
-                  onClick={() => { onChange(o.value); setOpen(false); }}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                    o.value === value
-                      ? "bg-neutral-100 text-black font-medium"
-                      : "text-neutral-600 hover:bg-neutral-50"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
+            <div ref={listRef} id={listId} role="listbox" aria-label={ariaLabel} className="max-h-64 overflow-y-auto">
+              {options.map((o, index) => {
+                const isSelected = o.value === value;
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    data-index={index}
+                    onMouseEnter={() => setHighlight(index)}
+                    onClick={() => choose(index)}
+                    className={`flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm transition-colors ${
+                      index === highlight ? "bg-[#F4F4F2]" : ""
+                    } ${isSelected ? "font-semibold text-[#171717]" : "text-[#171717]/80"}`}
+                  >
+                    <span className="truncate">{o.label}</span>
+                    {isSelected ? (
+                      <svg className="h-4 w-4 shrink-0 text-primary" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/**
+ * Search box that applies only when the user presses Search (or Enter), not
+ * while typing. Repeated presses are debounced so one search runs per burst.
+ * `value` is the applied search, so a page-level "Clear filters" also empties the box.
+ */
+export function SearchBar({
+  value,
+  onSearch,
+  placeholder = "Search",
+  ariaLabel,
+  className = "",
+  debounceMs = 250,
+}: {
+  value: string;
+  onSearch: (query: string) => void;
+  placeholder?: string;
+  ariaLabel?: string;
+  className?: string;
+  debounceMs?: number;
+}) {
+  const [text, setText] = useState(value);
+  const [applied, setApplied] = useState(value);
+  const timer = useRef<number | null>(null);
+
+  // Follow outside changes to the applied value (for example "Clear filters").
+  if (applied !== value) {
+    setApplied(value);
+    setText(value);
+  }
+
+  useEffect(() => () => {
+    if (timer.current) window.clearTimeout(timer.current);
+  }, []);
+
+  const runSearch = (query: string, immediate = false) => {
+    if (timer.current) window.clearTimeout(timer.current);
+    if (immediate) {
+      onSearch(query);
+      return;
+    }
+    timer.current = window.setTimeout(() => onSearch(query), debounceMs);
+  };
+
+  return (
+    <form
+      role="search"
+      className={`flex min-w-0 gap-2 ${className}`}
+      onSubmit={(e) => {
+        e.preventDefault();
+        runSearch(text.trim());
+      }}
+    >
+      <div className="relative min-w-0 flex-1">
+        <svg
+          className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#171717]/60"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={placeholder}
+          aria-label={ariaLabel ?? placeholder}
+          className="!w-full !pl-9 !pr-16"
+        />
+        {text ? (
+          <button
+            type="button"
+            onClick={() => {
+              setText("");
+              runSearch("", true);
+            }}
+            className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-lg px-2 py-1 text-[13px] font-medium text-[#171717]/70 hover:bg-[#F4F4F2] hover:text-[#171717]"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      <button type="submit" className="btn-ghost shrink-0">
+        Search
+      </button>
+    </form>
   );
 }
 
@@ -260,20 +417,26 @@ export function BusyButton({
   );
 }
 
+/**
+ * Page heading. `sub` is kept for old callers but no longer shown (the owner
+ * wants no filler lines under titles); pass `meta` for a short, useful fact
+ * such as the selected period.
+ */
 export function PageTitle({
   title,
-  sub,
+  meta,
   action,
 }: {
   title: string;
   sub?: string;
+  meta?: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-6">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
       <div className="min-w-0">
-        <h1 className="text-[26px] sm:text-[30px] font-bold leading-tight tracking-tight text-[#111]">{title}</h1>
-        {sub && <p className="mt-1.5 text-sm text-[#171717]/70">{sub}</p>}
+        <h1 className="text-[26px] font-bold leading-tight tracking-[-0.025em] text-[#111] sm:text-[30px]">{title}</h1>
+        {meta ? <div className="mt-1.5 text-[13px] font-medium text-[#171717]/70">{meta}</div> : null}
       </div>
       {action}
     </div>

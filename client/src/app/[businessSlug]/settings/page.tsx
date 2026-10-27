@@ -90,22 +90,19 @@ export default function SettingsPage() {
 
   return (
     <Page>
-      <PageTitle title="Settings" sub="Your logo and the details printed on every bill." />
+      <PageTitle title="Settings" meta="Logo and bill details" />
 
-      <section className="border border-[#E5E5E5] bg-white rounded-xl p-5 sm:p-6 mb-6">
-        <h2 className="text-base font-semibold text-[#171717]">Bills & invoices</h2>
-        <p className="text-[13px] text-[#171717]/70 mt-1 mb-4">
-          Your factory logo shows in the menu and on bills. If there is no logo, bills show the factory name instead.
-        </p>
+      <section className="border border-[#E5E5E5] bg-white rounded-2xl p-5 sm:p-6 mb-6">
+        <h2 className="text-[16px] font-bold text-[#171717]">Bills & invoices</h2>
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] gap-6 lg:gap-8 items-start">
           <div className="min-w-0">
             <div className="mb-6">
-              <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 mb-2">
+              <p className="text-[14px] font-semibold text-[#171717] mb-2">
                 Factory logo
               </p>
               <div className="flex flex-wrap items-center gap-4">
-                <div className="h-20 w-40 rounded-lg border border-[#E5E5E5] bg-white flex items-center justify-center p-2">
+                <div className="h-20 w-40 rounded-2xl border border-[#E5E5E5] bg-white flex items-center justify-center p-2">
                   {logoSrcFromPrefs(prefs) ? (
                     <img
                       src={logoSrcFromPrefs(prefs)}
@@ -239,10 +236,10 @@ export default function SettingsPage() {
           </div>
 
           <div className="mt-6 pt-5 border-t border-[#E5E5E5] lg:mt-0 lg:pt-0 lg:border-t-0 lg:sticky lg:top-6">
-            <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 mb-3">
+            <p className="text-[14px] font-semibold text-[#171717] mb-3">
               Bill preview
             </p>
-            <div className="border border-[#E5E5E5] bg-white rounded-lg px-6 py-5">
+            <div className="border border-[#E5E5E5] bg-white rounded-2xl px-6 py-5">
               <InvoiceBrandHeader business={preview} />
               <p className="text-xs text-[#171717]/70 text-center mt-6 pt-3 border-t border-[#E5E5E5]">
                 {preview.invoiceNote || "Thank you for your business."}
@@ -253,26 +250,23 @@ export default function SettingsPage() {
       </section>
 
       {user ? (
-      <section className="border border-[#E5E5E5] bg-white rounded-xl p-5 sm:p-6">
-        <h2 className="text-base font-semibold text-[#171717]">Your login</h2>
-          <p className="text-[13px] text-[#171717]/70 mt-1 mb-4">
-            Sign-in details for this shop.
-          </p>
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[#171717] max-w-2xl">
-            <div>
-              <dt className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">Name</dt>
-              <dd className="mt-0.5 font-medium">{displayName(user)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">Email</dt>
-              <dd className="mt-0.5 font-medium">{user.email}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">Role</dt>
-              <dd className="mt-0.5 font-medium">{roleLabel(user.role)}</dd>
-            </div>
-          </dl>
-        </section>
+      <section className="border border-[#E5E5E5] bg-white rounded-2xl p-5 sm:p-6">
+        <h2 className="text-[16px] font-bold text-[#171717]">Your login</h2>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[#171717] max-w-2xl">
+          <div>
+            <dt className="text-[13px] font-medium text-[#171717]">Name</dt>
+            <dd className="mt-0.5 font-medium">{displayName(user)}</dd>
+          </div>
+          <div>
+            <dt className="text-[13px] font-medium text-[#171717]">Email</dt>
+            <dd className="mt-0.5 font-medium">{user.email}</dd>
+          </div>
+          <div>
+            <dt className="text-[13px] font-medium text-[#171717]">Role</dt>
+            <dd className="mt-0.5 font-medium">{roleLabel(user.role)}</dd>
+          </div>
+        </dl>
+      </section>
       ) : null}
     </Page>
   );

@@ -113,12 +113,11 @@ export default function CustomersPage() {
     <Page>
       <PageTitle
         title="Customers"
-        sub="Balances and payment history for every customer"
         action={<button className="btn-primary" onClick={onOpen}>+ New Customer</button>}
       />
 
       {activeCustomers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="mb-6 flex flex-col gap-2.5 rounded-2xl border border-[#E5E5E5] bg-white p-2 sm:flex-row sm:flex-wrap sm:items-center">
           <CustomSelect
             value={searchMode}
             onChange={(v) => setSearchMode(v as "name" | "phone")}
@@ -128,9 +127,9 @@ export default function CustomersPage() {
             ]}
             ariaLabel="Search by"
             compact
-            className="w-40 shrink-0"
+            className="w-full sm:w-40 shrink-0"
           />
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#171717]/70 pointer-events-none" />
             <input
               type="text"
@@ -139,14 +138,14 @@ export default function CustomersPage() {
               value={searchInput}
               onChange={(e) => onSearchChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { setAppliedSearch(searchInput); setAppliedMode(searchMode); } }}
-              className="!pl-9"
+              className="!w-full !pl-9"
             />
           </div>
-          <button onClick={() => { setAppliedSearch(searchInput); setAppliedMode(searchMode); }} className="btn-ghost whitespace-nowrap">
+          <button onClick={() => { setAppliedSearch(searchInput); setAppliedMode(searchMode); }} className="btn-ghost whitespace-nowrap shrink-0">
             Search
           </button>
           {appliedSearch.trim() !== "" && (
-            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setSearchMode("name"); setAppliedMode("name"); }} className="btn-ghost whitespace-nowrap">
+            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setSearchMode("name"); setAppliedMode("name"); }} className="btn-ghost whitespace-nowrap shrink-0">
               Clear
             </button>
           )}
@@ -161,47 +160,78 @@ export default function CustomersPage() {
           action={<button className="btn-primary" onClick={onOpen}>+ New Customer</button>}
         />
       ) : (
-        <div className="bg-white border border-[#E5E5E5] rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#FAFAF9]">
-                <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Customer</th>
-                <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Shop / Area</th>
-                <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Phone</th>
-                <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr
-                  key={c.id}
-                  className="cursor-pointer hover:bg-[#F8F8F7] transition-colors"
-                  onClick={() => setViewCustomerId(c.id)}
-                >
-                  <td className="py-3 px-4 border-t border-[#E5E5E5]">
-                    <span className="font-medium text-[#171717] truncate block text-sm">{c.name}</span>
-                  </td>
-                  <td className="py-3 px-4 border-t border-[#E5E5E5]">
-                    <span className="text-[#171717]/70 truncate block text-sm">{c.shop || "—"}</span>
-                  </td>
-                  <td className="py-3 px-4 border-t border-[#E5E5E5]">
-                    <span className="text-[#171717]/70 tabular-nums text-sm">{c.phone || "—"}</span>
-                  </td>
-                  <td className="py-3 px-4 border-t border-[#E5E5E5] text-right">
-                    <span onClick={(e) => e.stopPropagation()}>
-                      <RowActionsMenu
-                        items={[
-                          { label: "View history", onClick: () => setViewCustomerId(c.id) },
-                          { label: "Delete", onClick: () => setDeleteTarget(c), danger: true },
-                        ]}
-                        ariaLabel={`Actions for ${c.name}`}
-                      />
-                    </span>
-                  </td>
+        <div className="space-y-8">
+          <div className="md:overflow-hidden md:rounded-2xl md:border md:border-[#E5E5E5] md:bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-white border-b border-[#E5E5E5]">
+                  <th className="text-[13px] font-semibold normal-case tracking-normal text-[#171717] text-left py-3 px-4">Customer</th>
+                  <th className="text-[13px] font-semibold normal-case tracking-normal text-[#171717] text-left py-3 px-4">Shop / Area</th>
+                  <th className="text-[13px] font-semibold normal-case tracking-normal text-[#171717] text-left py-3 px-4">Phone</th>
+                  <th className="text-[13px] font-semibold normal-case tracking-normal text-[#171717] text-right py-3 px-4">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[#E5E5E5]">
+                {rows.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="cursor-pointer hover:bg-[#FBFBFA] transition-colors"
+                    onClick={() => setViewCustomerId(c.id)}
+                  >
+                    <td className="py-3 px-4">
+                      <span className="font-semibold text-[#171717] truncate block text-sm">{c.name}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-[#171717]/70 truncate block text-sm">{c.shop || "—"}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-[#171717]/70 tabular-nums text-sm">{c.phone || "—"}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <RowActionsMenu
+                          items={[
+                            { label: "View history", onClick: () => setViewCustomerId(c.id) },
+                            { label: "Delete", onClick: () => setDeleteTarget(c), danger: true },
+                          ]}
+                          ariaLabel={`Actions for ${c.name}`}
+                        />
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden space-y-3">
+            {rows.map((c) => (
+              <div
+                key={c.id}
+                onClick={() => setViewCustomerId(c.id)}
+                className="cursor-pointer rounded-2xl border border-[#E5E5E5] bg-white p-4 active:bg-[#FBFBFA]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="block font-semibold text-sm text-[#171717] truncate">{c.name}</span>
+                    <span className="block text-[13px] text-[#171717]/70 truncate">{c.shop || "—"}</span>
+                  </div>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <RowActionsMenu
+                      items={[
+                        { label: "View history", onClick: () => setViewCustomerId(c.id) },
+                        { label: "Delete", onClick: () => setDeleteTarget(c), danger: true },
+                      ]}
+                      ariaLabel={`Actions for ${c.name}`}
+                    />
+                  </span>
+                </div>
+                <div className="mt-2 text-right">
+                  <span className="text-[13px] text-[#171717]/70 tabular-nums">{c.phone || "—"}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

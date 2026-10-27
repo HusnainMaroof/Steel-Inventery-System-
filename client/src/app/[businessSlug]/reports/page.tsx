@@ -234,9 +234,9 @@ export default function ReportsPage() {
 
   return (
     <Page>
-      <PageTitle title="Profit & Reports" sub={subLabel} />
+      <PageTitle title="Profit & Reports" meta={subLabel} />
 
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-6 rounded-2xl border border-[#E5E5E5] bg-white p-2">
         <CustomSelect
           className="min-w-[12rem] [&_button]:text-sm [&_button]:min-h-[40px]"
           ariaLabel="Product"
@@ -304,11 +304,11 @@ export default function ReportsPage() {
           }
         />
       ) : hasAny && (serverReport || !reportLoading) ? (
-        <div>
+        <div className="rounded-2xl border border-[#E5E5E5] bg-white">
           <div
             role="tablist"
             aria-label="Report sections"
-            className="flex w-full sm:inline-flex sm:w-auto gap-1 p-1 mb-4 border border-[#E5E5E5] bg-white rounded-lg"
+            className="flex w-full sm:inline-flex sm:w-auto gap-1 p-1 mb-4 border-b border-[#E5E5E5] bg-white rounded-t-2xl"
           >
             {REPORT_TABS.map((t) => (
               <button

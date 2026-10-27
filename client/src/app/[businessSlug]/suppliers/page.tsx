@@ -152,21 +152,20 @@ export default function SuppliersPage() {
     <Page>
       <PageTitle
         title="Mills / Suppliers"
-        sub="Purchases, payments and what you still owe"
         action={<button className="btn-primary" onClick={onOpen}>+ New Supplier</button>}
       />
 
       {activeSuppliers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="mb-6 flex flex-col gap-2.5 rounded-2xl border border-[#E5E5E5] bg-white p-2 sm:flex-row sm:flex-wrap sm:items-center">
           <CustomSelect
             value={searchMode}
             onChange={(v) => setSearchMode(v as "name" | "phone")}
             options={[{ value: "name", label: "Name" }, { value: "phone", label: "Phone" }]}
             ariaLabel="Search by"
             compact
-            className="w-40 shrink-0"
+            className="w-full sm:w-40 shrink-0"
           />
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#171717]/70 pointer-events-none" />
             <input
               type="text"
@@ -175,14 +174,14 @@ export default function SuppliersPage() {
               value={searchInput}
               onChange={(e) => onSearchChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { setAppliedSearch(searchInput); setAppliedMode(searchMode); } }}
-              className="!pl-9"
+              className="!w-full !pl-9"
             />
           </div>
-          <button onClick={() => { setAppliedSearch(searchInput); setAppliedMode(searchMode); }} className="btn-ghost whitespace-nowrap">
+          <button onClick={() => { setAppliedSearch(searchInput); setAppliedMode(searchMode); }} className="btn-ghost whitespace-nowrap shrink-0">
             Search
           </button>
           {(appliedSearch.trim() !== "" || appliedMode !== "name") && (
-            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setSearchMode("name"); setAppliedMode("name"); }} className="btn-ghost whitespace-nowrap">
+            <button onClick={() => { setSearchInput(""); setAppliedSearch(""); setSearchMode("name"); setAppliedMode("name"); }} className="btn-ghost whitespace-nowrap shrink-0">
               Clear
             </button>
           )}
@@ -197,34 +196,34 @@ export default function SuppliersPage() {
           action={<button className="btn-primary" onClick={onOpen}>+ New Supplier</button>}
         />
       ) : (
-        <>
-          <div className="bg-white border border-[#E5E5E5] rounded-xl overflow-hidden">
+        <div className="space-y-8">
+          <div className="md:overflow-hidden md:rounded-2xl md:border md:border-[#E5E5E5] md:bg-white">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-[#FAFAF9]">
-                  <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Supplier</th>
-                  <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Phone</th>
-                  <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-left font-medium py-3 px-4">Mill / Address</th>
-                  <th className="text-xs uppercase tracking-wide text-[#171717]/60 text-right font-medium py-3 px-4">Actions</th>
+                <tr className="bg-white border-b border-[#E5E5E5]">
+                  <th className="text-[13px] font-semibold normal-case tracking-normal text-[#171717] text-left py-3 px-4">Supplier</th>
+                  <th className="text-[13px] font-semibold normal-case tracking-normal text-[#171717] text-left py-3 px-4">Phone</th>
+                  <th className="text-[13px] font-semibold normal-case tracking-normal text-[#171717] text-left py-3 px-4">Mill / Address</th>
+                  <th className="text-[13px] font-semibold normal-case tracking-normal text-[#171717] text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#E5E5E5]">
                 {filteredSuppliers.map((s) => (
                   <tr
                     key={s.id}
-                    className="cursor-pointer hover:bg-[#F8F8F7] transition-colors"
+                    className="cursor-pointer hover:bg-[#FBFBFA] transition-colors"
                     onClick={() => setViewSupplierId(s.id)}
                   >
-                    <td className="py-3 px-4 border-t border-[#E5E5E5]">
-                      <span className="font-medium text-[#171717] truncate block text-sm">{s.name}</span>
+                    <td className="py-3 px-4">
+                      <span className="font-semibold text-[#171717] truncate block text-sm">{s.name}</span>
                     </td>
-                    <td className="py-3 px-4 border-t border-[#E5E5E5]">
+                    <td className="py-3 px-4">
                       <span className="text-[#171717]/70 tabular-nums text-sm">{s.phone || "—"}</span>
                     </td>
-                    <td className="py-3 px-4 border-t border-[#E5E5E5]">
+                    <td className="py-3 px-4">
                       <span className="text-[#171717]/70 truncate block text-sm">{s.mill || "—"}</span>
                     </td>
-                    <td className="py-3 px-4 border-t border-[#E5E5E5] text-right">
+                    <td className="py-3 px-4 text-right">
                       <span onClick={(e) => e.stopPropagation()}>
                         <RowActionsMenu
                           items={[
@@ -240,7 +239,36 @@ export default function SuppliersPage() {
               </tbody>
             </table>
           </div>
-        </>
+
+          <div className="md:hidden space-y-3">
+            {filteredSuppliers.map((s) => (
+              <div
+                key={s.id}
+                onClick={() => setViewSupplierId(s.id)}
+                className="cursor-pointer rounded-2xl border border-[#E5E5E5] bg-white p-4 active:bg-[#FBFBFA]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="block font-semibold text-sm text-[#171717] truncate">{s.name}</span>
+                    <span className="block text-[13px] text-[#171717]/70 truncate">{s.mill || "—"}</span>
+                  </div>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <RowActionsMenu
+                      items={[
+                        { label: "View history", onClick: () => setViewSupplierId(s.id) },
+                        { label: "Delete", onClick: () => setDeleteTarget(s), danger: true },
+                      ]}
+                      ariaLabel={`Actions for ${s.name}`}
+                    />
+                  </span>
+                </div>
+                <div className="mt-2 text-right">
+                  <span className="text-[13px] text-[#171717]/70 tabular-nums">{s.phone || "—"}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
       {/* New Supplier Modal */}
       <Modal open={open} onClose={onClose} title="New Supplier">
@@ -297,10 +325,18 @@ export default function SuppliersPage() {
                   <div key={g.date}>
                     {/* Date header */}
                     <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xs font-bold uppercase tracking-wide text-[#171717]/60">{fmtDate(g.date)}</span>
-                      <span className="text-xs text-[#171717]/30">|</span>
-                      <span className="text-xs text-[#171717]/70 tabular-nums">{g.purchases.length} load{g.purchases.length > 1 ? "s" : ""}</span>
+                      <span className="text-[15px] font-bold text-[#171717]">{fmtDate(g.date)}</span>
+                      <span className="text-[13px] text-[#171717]/70 tabular-nums">{g.purchases.length} load{g.purchases.length > 1 ? "s" : ""}</span>
+                      <span className="text-[13px] text-[#171717]/70">·</span>
+                      <span className="text-[13px] text-[#171717]/70 tabular-nums">{fmtMoney(g.dayTotal)}</span>
+                      {g.dayPaid > 0 && (
+                        <>
+                          <span className="text-[13px] text-[#171717]/70">·</span>
+                          <span className="text-[13px] text-success tabular-nums">{fmtMoney(g.dayPaid)} paid</span>
+                        </>
+                      )}
                     </div>
+                    <div className="h-px bg-[#E5E5E5] mb-4" />
 
                     {/* Items — receipt style */}
                     <div className="space-y-3">
@@ -313,7 +349,7 @@ export default function SuppliersPage() {
                           <div key={p.id} className="border border-[#E5E5E5] bg-white px-4 py-3 space-y-1.5">
                             {/* Row: Item */}
                             <div className="flex items-baseline justify-between gap-4">
-                              <span className="text-xs uppercase tracking-wide text-[#171717]/60">Item</span>
+                              <span className="text-[13px] font-semibold text-[#171717]">Item</span>
                               <span className="text-sm font-medium text-[#171717] text-right">
                                 {p.product && <span className="text-[#171717]/70">{p.product} — </span>}
                                 {p.item}
@@ -324,35 +360,35 @@ export default function SuppliersPage() {
                               const attrLine = attrLineOf(p);
                               return attrLine ? (
                                 <div className="flex items-baseline justify-between gap-4">
-                                  <span className="text-xs uppercase tracking-wide text-[#171717]/60">{p.attributeSnapshot ? "Attributes" : specLabelOf(p.product)}</span>
+                                  <span className="text-[13px] text-[#171717]/70">{p.attributeSnapshot ? "Attributes" : specLabelOf(p.product)}</span>
                                   <span className="text-[13px] text-[#171717]/70 text-right">{attrLine}</span>
                                 </div>
                               ) : null;
                             })()}
                             {/* Row: Quantity */}
                             <div className="flex items-baseline justify-between gap-4">
-                              <span className="text-xs uppercase tracking-wide text-[#171717]/60">Quantity</span>
+                              <span className="text-[13px] text-[#171717]/70">Quantity</span>
                               <span className="text-[13px] text-[#171717]/70 tabular-nums text-right">{fmtQtyWithUnit(p.qty, p.unit)}</span>
                             </div>
                             {/* Row: Unit Price */}
                             <div className="flex items-baseline justify-between gap-4">
-                              <span className="text-xs uppercase tracking-wide text-[#171717]/60">Unit Price</span>
+                              <span className="text-[13px] text-[#171717]/70">Unit Price</span>
                               <span className="text-[13px] text-[#171717]/70 tabular-nums text-right">{fmtMoney(p.rate)}/{p.unit || "unit"}</span>
                             </div>
                             {/* Row: Total */}
                             <div className="flex items-baseline justify-between gap-4 pt-2 border-t border-[#E5E5E5]">
-                              <span className="text-xs uppercase tracking-wide text-[#171717]/60">Total</span>
+                              <span className="text-[13px] font-semibold text-[#171717]">Total</span>
                               <span className="text-[14px] font-bold text-[#171717] tabular-nums">{fmtMoney(payable)}</span>
                             </div>
                             {parentFirstLineIds.has(p.id) && (
                               <>
                                 <div className="flex items-baseline justify-between gap-4">
-                                  <span className="text-xs uppercase tracking-wide text-[#171717]/60">Paid</span>
+                                  <span className="text-[13px] text-[#171717]/70">Paid</span>
                                   <span className="text-[13px] text-success tabular-nums">{fmtMoney(paid)}</span>
                                 </div>
                                 {due > 0 && (
                                   <div className="flex items-baseline justify-between gap-4">
-                                    <span className="text-xs uppercase tracking-wide text-[#171717]/60">Due</span>
+                                    <span className="text-[13px] text-[#171717]/70">Due</span>
                                     <span className="text-[13px] font-bold text-destructive tabular-nums">{fmtMoney(due)}</span>
                                   </div>
                                 )}

@@ -35,7 +35,7 @@ function BatchPrintInner() {
   if (!from && !to) {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
-        <p className="text-neutral-500">Pick a date range from Sales first.</p>
+        <p className="text-[#171717]/70">Pick a date range from Sales first.</p>
       </div>
     );
   }
@@ -43,22 +43,22 @@ function BatchPrintInner() {
   if (list.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8 gap-3">
-        <p className="text-neutral-500">No sales on {title}.</p>
-        <BusinessLink href="/sales?tab=print" className="text-[13px] text-neutral-500 hover:text-black underline-offset-2 hover:underline">
-          ← Back to sales
+        <p className="text-[#171717]/70">No sales on {title}.</p>
+        <BusinessLink href="/sales?tab=print" className="text-[13px] text-[#171717]/70 hover:text-black underline-offset-2 hover:underline">
+          Back to sales
         </BusinessLink>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f8f7] py-4 sm:py-8 px-4 sm:px-6">
+    <div className="min-h-screen bg-[#f8f8f7] px-4 py-4 sm:px-6 sm:py-8 print:bg-white print:p-0">
       <div className="max-w-[210mm] mx-auto flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-6 no-print">
-        <BusinessLink href="/sales?tab=print" className="text-[13px] text-neutral-500 hover:text-black underline-offset-2 hover:underline">
-          ← Back to sales
+        <BusinessLink href="/sales?tab=print" className="text-[13px] text-[#171717]/70 hover:text-black underline-offset-2 hover:underline">
+          Back to sales
         </BusinessLink>
         <div className="flex items-center gap-3">
-          <p className="text-[13px] text-neutral-500">
+          <p className="text-[13px] text-[#171717]/70">
             {title} · {list.length} sale{list.length === 1 ? "" : "s"}
           </p>
           <button type="button" className="btn-primary !py-2.5 !px-5" onClick={() => window.print()}>
@@ -77,7 +77,7 @@ export default function BatchPrintPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center p-8">
-          <p className="text-neutral-500">Preparing sales...</p>
+          <p className="text-[#171717]/70">Preparing sales...</p>
         </div>
       }
     >

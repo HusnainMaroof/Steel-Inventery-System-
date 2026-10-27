@@ -4,7 +4,7 @@ import { useDeferredValue, useState, useMemo } from "react";
 import { saleGrandTotal, useStore } from "@/lib/store";
 import { useBusinessHref } from "@/components/BusinessLink";
 import { Skeleton } from "@/components/skeletons";
-import { ConfirmModal, EmptyState, ErrorState, PaginationBar, RowActionsMenu } from "@/components/ui";
+import { ConfirmModal, CustomSelect, EmptyState, ErrorState, PaginationBar, RowActionsMenu, SearchBar } from "@/components/ui";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { dateInIsoRange } from "@/lib/date-range-filter";
 import { fmtMoney, fmtDate, fmtTime, fmtQtyWithUnit } from "@/lib/format";
@@ -35,33 +35,10 @@ type SaleRow = {
 };
 
 const SALE_GRID =
-  "md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.8fr)_130px_130px_140px_40px] md:gap-4 md:px-4";
+  "md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.9fr)_140px_140px_40px] md:gap-4 md:px-5";
 
 /** how many item lines a row shows before "+N more" */
 const ITEMS_SHOWN = 2;
-
-function StatusCell({ total, paid, due }: { total: number; paid: number; due: number }) {
-  if (due <= 0.005 && total > 0) {
-    return (
-      <span className="inline-flex items-center rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-        Paid
-      </span>
-    );
-  }
-  const partly = paid > 0.005;
-  return (
-    <span className="inline-flex flex-col items-end gap-1">
-      <span
-        className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-          partly ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
-        }`}
-      >
-        {partly ? "Partly paid" : "Unpaid"}
-      </span>
-      <span className="text-sm font-semibold tabular-nums whitespace-nowrap text-destructive">{fmtMoney(due)} due</span>
-    </span>
-  );
-}
 
 type Status = "all" | "paid" | "partial" | "due";
 
@@ -264,16 +241,18 @@ export default function SalesTable({
     const shown = s.items.slice(0, ITEMS_SHOWN);
     const more = s.items.length - shown.length;
     return (
-      <div className="space-y-1">
+      <div className="space-y-2">
         {shown.map((it, i) => {
           const detail = [it.category, ...it.attrs.map((a) => a.value)].filter(Boolean).join(" · ");
           return (
-            <div key={i} className="flex items-baseline justify-between gap-3 min-w-0">
-              <span className="min-w-0 truncate text-sm" title={detail ? `${it.product} · ${detail}` : it.product}>
-                <span className="font-medium text-[#171717]">{it.product}</span>
-                {detail && <span className="text-[13px] text-[#171717]/70"> · {detail}</span>}
-              </span>
-              <span className="shrink-0 text-[13px] font-medium text-[#171717] tabular-nums whitespace-nowrap">{it.qtyText}</span>
+            <div key={i} className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-sm font-semibold text-[#171717]">{it.product}</span>
+                <span className="inline-flex items-center rounded-full bg-[#F4F4F2] px-2 py-0.5 text-[12px] font-semibold tabular-nums whitespace-nowrap text-[#171717]">
+                  {it.qtyText}
+                </span>
+              </div>
+              {detail ? <p className="mt-0.5 truncate text-[13px] text-[#171717]/70" title={detail}>{detail}</p> : null}
             </div>
           );
         })}
@@ -306,45 +285,46 @@ export default function SalesTable({
             </div>
           ) : groups.length === 0 ? (
             <EmptyState
-              emoji="🔍"
+              emoji=""
               title="No sales match your filters"
               hint="Try adjusting the search, status or date to find what you're looking for."
               action={<button onClick={handleClear} className="btn-primary">Clear filters</button>}
             />
           ) : (
             <div className="space-y-8">
-              {groups.map((g) => (
+              {groups.map((g, groupIndex) => (
                 <div key={g.date}>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
-                    <span className="text-sm font-bold text-black">{fmtDate(g.date)}</span>
+                    <span className="text-[15px] font-bold text-[#171717]">{fmtDate(g.date)}</span>
                     <span className="text-[13px] text-[#171717]/70 tabular-nums">
                       {g.sales.length} sale{g.sales.length === 1 ? "" : "s"} · {fmtMoney(g.dayTotal)}
                     </span>
                     <div className="flex-1 min-w-[2rem] border-b border-[#E5E5E5]" />
                   </div>
 
-                  <div className="md:overflow-hidden md:rounded-xl md:border md:border-[#E5E5E5] md:bg-white">
-                    <div
-                      className={`${SALE_GRID} hidden py-2.5 bg-[#FAFAF9] border-b border-[#E5E5E5] text-xs font-medium uppercase tracking-wide text-[#171717]/60 md:grid md:items-center`}
-                    >
-                      <span>Customer</span>
-                      <span>Items</span>
-                      <span className="text-right">Total</span>
-                      <span className="text-right">Paid</span>
-                      <span className="text-right">Status</span>
-                      <span className="sr-only">Actions</span>
-                    </div>
+                  <div className="md:overflow-hidden md:rounded-2xl md:border md:border-[#E5E5E5] md:bg-white">
+                    {groupIndex === 0 ? (
+                      <div
+                        className={`${SALE_GRID} hidden border-b border-[#E5E5E5] bg-white py-3 text-[13px] font-semibold text-[#171717] md:grid md:items-center`}
+                      >
+                        <span>Customer</span>
+                        <span>Items bought</span>
+                        <span className="text-right">Total</span>
+                        <span className="text-right">Paid</span>
+                        <span className="sr-only">Actions</span>
+                      </div>
+                    ) : null}
 
                     <div className="hidden flex-col divide-y divide-[#E5E5E5] md:flex">
                       {g.sales.map((s) => (
                         <div
                           key={s.id}
                           onClick={() => onView(s.id)}
-                          className="cursor-pointer transition-colors hover:bg-[#F8F8F7]"
+                          className="cursor-pointer transition-colors hover:bg-[#FBFBFA]"
                         >
-                          <div className={`${SALE_GRID} items-start py-3.5`}>
+                          <div className={`${SALE_GRID} items-start py-4`}>
                             <div className="min-w-0 self-start">
-                              <span className="block text-sm font-medium text-[#171717] truncate">{s.customerName}</span>
+                              <span className="block truncate text-[15px] font-semibold text-[#171717]">{s.customerName}</span>
                               <span className="block text-[13px] text-[#171717]/70 tabular-nums">
                                 {s.invoiceNo} · {s.time}
                               </span>
@@ -353,11 +333,8 @@ export default function SalesTable({
                             <span className="self-start text-right text-sm font-semibold text-[#171717] tabular-nums whitespace-nowrap">
                               {fmtMoney(s.total)}
                             </span>
-                            <span className="self-start text-right text-sm text-[#171717]/70 tabular-nums whitespace-nowrap">
-                              {s.paid > 0.005 ? fmtMoney(s.paid) : "-"}
-                            </span>
-                            <span className="self-start flex justify-end">
-                              <StatusCell total={s.total} paid={s.paid} due={s.due} />
+                            <span className="self-start text-right text-sm font-medium text-[#171717] tabular-nums whitespace-nowrap">
+                              {fmtMoney(s.paid > 0.005 ? s.paid : 0)}
                             </span>
                             <span className="self-start flex justify-end" onClick={(e) => e.stopPropagation()}>
                               <RowActionsMenu items={menuItems(s)} />
@@ -372,11 +349,11 @@ export default function SalesTable({
                         <div
                           key={s.id}
                           onClick={() => onView(s.id)}
-                          className="cursor-pointer rounded-xl border border-[#E5E5E5] bg-white p-4 active:bg-[#F8F8F7]"
+                          className="cursor-pointer rounded-2xl border border-[#E5E5E5] bg-white p-4 active:bg-[#F8F8F7]"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <span className="block font-semibold text-sm text-[#171717] truncate">{s.customerName}</span>
+                              <span className="block truncate text-[15px] font-semibold text-[#171717]">{s.customerName}</span>
                               <span className="block text-[13px] text-[#171717]/70 tabular-nums">
                                 {s.invoiceNo} · {s.time}
                               </span>
@@ -386,14 +363,19 @@ export default function SalesTable({
                             </span>
                           </div>
                           <div className="my-3">{itemsBlock(s)}</div>
-                          <div className="flex items-end justify-between gap-3 border-t border-[#E5E5E5] pt-3">
+                          <div className="grid grid-cols-2 gap-3 border-t border-[#E5E5E5] pt-3">
                             <div>
-                              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Total</span>
-                              <span className="block font-semibold tabular-nums text-base text-[#171717] whitespace-nowrap">
+                              <span className="block text-[13px] font-semibold text-[#171717]">Total</span>
+                              <span className="mt-0.5 block whitespace-nowrap text-base font-bold tabular-nums text-[#171717]">
                                 {fmtMoney(s.total)}
                               </span>
                             </div>
-                            <StatusCell total={s.total} paid={s.paid} due={s.due} />
+                            <div className="text-right">
+                              <span className="block text-[13px] font-semibold text-[#171717]">Paid</span>
+                              <span className="mt-0.5 block whitespace-nowrap text-base font-medium tabular-nums text-[#171717]">
+                                {fmtMoney(s.paid > 0.005 ? s.paid : 0)}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -459,31 +441,25 @@ export default function SalesTable({
   return (
     <>
       {/* ── one row: search + payment status + date + clear ── */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="relative flex-1 min-w-[200px]">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search customer or product"
-            aria-label="Search customer or product"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); resetPage(); }}
-            className="!w-full !pl-9"
-          />
-        </div>
-        <select
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[#E5E5E5] bg-white p-2">
+        <SearchBar
+          value={search}
+          onSearch={(q) => { setSearch(q); resetPage(); }}
+          placeholder="Search customer or product"
+          className="min-w-[240px] flex-1"
+        />
+        <CustomSelect
           value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value as Status); resetPage(); }}
-          className="!w-auto"
-          aria-label="Filter by payment status"
-        >
-          <option value="all">All sales</option>
-          <option value="paid">Paid</option>
-          <option value="partial">Partially Paid</option>
-          <option value="due">Due</option>
-        </select>
+          onChange={(v) => { setStatusFilter(v as Status); resetPage(); }}
+          ariaLabel="Filter by payment status"
+          compact
+          options={[
+            { value: "all", label: "All sales" },
+            { value: "paid", label: "Paid" },
+            { value: "partial", label: "Partly paid" },
+            { value: "due", label: "Due" },
+          ]}
+        />
         <DateRangePicker
           from={dateRange.from}
           to={dateRange.to}
@@ -499,16 +475,16 @@ export default function SalesTable({
       </div>
 
       {/* ── summary: invoice count + outstanding ── */}
-      <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <span className="block text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Sales</span>
+          <span className="block text-[14px] font-semibold text-[#171717]">Sales</span>
           <span className="block text-2xl font-bold tabular-nums text-black mt-1">
             {filteredCount}
             {hasFilters && <span className="text-sm font-normal text-black/60"> / {catalogTotal}</span>}
           </span>
         </div>
         <div className="text-right">
-          <span className="block text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Outstanding</span>
+          <span className="block text-[14px] font-semibold text-[#171717]">Outstanding</span>
           <span className={`block text-2xl font-bold tabular-nums mt-1 ${totalDue > 0 ? "text-destructive" : "text-[#171717]"}`}>
             {fmtMoney(totalDue)}
           </span>

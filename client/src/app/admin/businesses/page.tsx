@@ -2,12 +2,11 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AddOwnerModal, BusinessListTable, planLabel, businessStatus, type BusinessStatus } from "@/components/admin/admin-ui";
+import { AddOwnerModal, AdminPageHeader, BusinessListTable, planLabel, businessStatus, type BusinessStatus } from "@/components/admin/admin-ui";
 import { AdminBusinessesSkeleton } from "@/components/skeletons";
 import { usePlatformAdminData } from "@/hooks/use-platform-admin-data";
 import { useAuth } from "@/lib/auth";
 import { EmptyState, Page, PaginationBar } from "@/components/ui";
-import { Search, Building } from "lucide-react";
 
 const PAGE_SIZE = 20;
 
@@ -66,17 +65,15 @@ function AdminBusinessesContent() {
 
   return (
     <Page>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Businesses</h1>
-          <p className="text-[#171717]/70 text-sm mt-1">
-            All registered businesses. Open a business to manage its plan, templates and owner login.
-          </p>
-        </div>
-        <button className="btn-primary w-full sm:w-auto shrink-0" onClick={() => setAddOpen(true)}>
-          + Register business owner
-        </button>
-      </div>
+      <AdminPageHeader
+        title="Businesses"
+        meta={`${filtered.length} of ${owners.length} businesses`}
+        actions={
+          <button className="btn-primary shrink-0" onClick={() => setAddOpen(true)}>
+            Register owner
+          </button>
+        }
+      />
 
       {loadError && (
         <p role="alert" className="text-sm text-[#a12b1f] mb-4">{loadError}</p>
@@ -84,20 +81,14 @@ function AdminBusinessesContent() {
 
       {!loading && owners.length === 0 && !loadError ? (
         <EmptyState
-          icon={<Building className="w-8 h-8" />}
+          emoji=""
           title="No businesses yet"
-          hint="Register the first business owner and assign a subscription plan and product templates."
-          action={<button className="btn-primary" onClick={() => setAddOpen(true)}>+ Register business owner</button>}
+          action={<button className="btn-primary" onClick={() => setAddOpen(true)}>Register owner</button>}
         />
       ) : (
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-4">
-            <div className="relative flex-1 min-w-[200px] max-w-md">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#171717]/40"
-                aria-hidden="true"
-              />
+            <div className="flex-1 min-w-[200px] max-w-md">
               <input
                 type="text"
                 value={query}
@@ -107,7 +98,7 @@ function AdminBusinessesContent() {
                 }}
                 placeholder="Search business, link or email"
                 aria-label="Search business, link or email"
-                className="w-full !pl-9"
+                className="w-full"
               />
             </div>
             <select
@@ -124,14 +115,11 @@ function AdminBusinessesContent() {
               <option value="Expired">Expired</option>
               <option value="Login off">Login off</option>
             </select>
-            <p className="ml-auto text-[13px] text-[#171717]/70 tabular-nums">
-              {filtered.length} of {owners.length} businesses
-            </p>
           </div>
 
           {filtered.length === 0 ? (
             <EmptyState
-              icon={<Search className="w-8 h-8" />}
+              emoji=""
               title="No businesses match your filters"
               hint="Try a different search term or status."
               action={<button type="button" className="btn-ghost" onClick={clearFilters}>Clear search</button>}

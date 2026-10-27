@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, Copy, Check } from "lucide-react";
 import {
   applyOwnerTemplatesAction,
   createOwnerAction,
@@ -175,10 +174,11 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
       type="button"
       onClick={copy}
       aria-label={copied ? "Copied" : `Copy ${label}`}
-      className="inline-flex min-h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-[#171717]/70 hover:bg-[#F8F8F7] hover:text-[#171717]"
+      className={`inline-flex min-h-9 items-center rounded-full border px-3 text-[13px] font-medium transition-colors ${
+        copied ? "border-success/30 bg-success/10 text-success" : "border-line text-[#171717] hover:border-[#171717]"
+      }`}
     >
-      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-      <span className="ml-1">{copied ? "Copied" : label}</span>
+      {copied ? "Copied" : label}
     </button>
   );
 }
@@ -187,33 +187,126 @@ function activeSubscriptionPlans(plans: SubscriptionPlanOption[]) {
   return plans.filter((plan) => plan.active).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-export function StatCard({ label, value, hint }: { label: string; value: number; hint?: string }) {
+/** Page title block for every admin page: a strong heading, one short line, actions on the right. */
+export function AdminPageHeader({
+  title,
+  meta,
+  actions,
+  back,
+}: {
+  title: ReactNode;
+  meta?: ReactNode;
+  actions?: ReactNode;
+  back?: { href: string; label: string };
+}) {
   return (
-    <div className="min-w-0 rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
-      <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">{label}</p>
-      <p className="text-2xl sm:text-3xl font-bold mt-1 tabular-nums text-[#171717]">{value}</p>
-      {hint && <p className="text-[13px] text-[#171717]/70 mt-1">{hint}</p>}
+    <header className="mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
+      <div className="min-w-0">
+        {back ? (
+          <Link
+            href={back.href}
+            className="mb-3 inline-flex min-h-8 items-center text-[13px] font-medium text-[#171717]/70 hover:text-ink"
+          >
+            {back.label}
+          </Link>
+        ) : null}
+        <h1 className="truncate text-[28px] leading-[1.15] font-bold tracking-[-0.03em] text-ink sm:text-[32px]">{title}</h1>
+        {meta ? <p className="mt-1.5 text-[14px] text-[#171717]/70">{meta}</p> : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+    </header>
+  );
+}
+
+/** Section title inside an admin page: bold, with an optional link or action on the right. */
+export function AdminSectionTitle({ title, action }: { title: string; action?: ReactNode }) {
+  return (
+    <div className="mb-3 flex items-baseline justify-between gap-3">
+      <h2 className="text-[16px] font-bold tracking-[-0.01em] text-ink">{title}</h2>
+      {action}
     </div>
   );
+}
+
+export type Stat = {
+  label: string;
+  value: number;
+  /** One short line of context under the number. */
+  hint?: string;
+  tone?: "default" | "alert" | "warn" | "good";
+  href?: string;
+};
+
+const toneClass: Record<NonNullable<Stat["tone"]>, string> = {
+  default: "text-ink",
+  alert: "text-destructive",
+  warn: "text-warning",
+  good: "text-success",
+};
+
+/**
+ * A row of numbers in one panel, split by hairlines (no boxes, no icons).
+ * The label reads as the heading; the number is the loudest thing.
+ */
+export function StatGroup({ stats, columns = 4 }: { stats: Stat[]; columns?: 2 | 3 | 4 }) {
+  const cols = columns === 4 ? "grid-cols-2 lg:grid-cols-4" : columns === 3 ? "grid-cols-3" : "grid-cols-2";
+  return (
+    <div className={`grid gap-px overflow-hidden rounded-2xl border border-line bg-line ${cols}`}>
+      {stats.map((stat) => {
+        const body = (
+          <>
+            <p className="text-[14px] font-semibold text-ink">{stat.label}</p>
+            <p className={`mt-3 text-[clamp(26px,3vw,34px)] leading-none font-semibold tracking-[-0.03em] tabular-nums ${toneClass[stat.tone ?? "default"]}`}>
+              {stat.value.toLocaleString("en-IN")}
+            </p>
+            {stat.hint ? <p className="mt-2 text-[13px] text-[#171717]/70">{stat.hint}</p> : null}
+          </>
+        );
+        return stat.href ? (
+          <Link
+            key={stat.label}
+            href={stat.href}
+            className="group bg-white p-5 transition-colors hover:bg-[#FBFBFA] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary sm:p-6"
+          >
+            {body}
+          </Link>
+        ) : (
+          <div key={stat.label} className="bg-white p-5 sm:p-6">
+            {body}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Single stat in the same style as StatGroup, for places that need one. */
+export function StatCard({ label, value, hint }: { label: string; value: number; hint?: string }) {
+  return <StatGroup stats={[{ label, value, hint }]} columns={2} />;
 }
 
 /** Consistent card wrapper used on the business detail page. */
 export function AdminCard({
   title,
+  action,
   children,
   className,
 }: {
   title?: string;
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={`bg-white border border-[#E5E5E5] rounded-xl p-5 ${className ?? ""}`}>
-      {title && (
-        <h2 className="text-[13px] font-semibold text-[#171717] mb-4">{title}</h2>
-      )}
+    <section className={`rounded-2xl border border-line bg-white p-5 sm:p-6 ${className ?? ""}`}>
+      {title ? (
+        <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-line pb-3">
+          <h2 className="text-[16px] font-bold tracking-[-0.01em] text-ink">{title}</h2>
+          {action}
+        </div>
+      ) : null}
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -225,29 +318,23 @@ export function ActivityStatStrip({
 }) {
   if (!activity) {
     return (
-      <AdminCard title="Activity last 30 days">
-        <p className="text-[13px] text-[#171717]/70">No activity data yet.</p>
+      <AdminCard title="Last 30 days">
+        <p className="text-[14px] text-[#171717]/70">No activity yet.</p>
       </AdminCard>
     );
   }
   return (
-    <AdminCard>
-      <div className="flex items-baseline justify-between">
-        <p className="text-xs text-[#171717]/60">Last 30 days</p>
-      </div>
-      <div className="grid grid-cols-3 gap-4 mt-3">
-        {([
-          ["Sales", activity.sales],
-          ["Purchases", activity.purchases],
-          ["Payments", activity.payments],
-        ] as const).map(([label, value]) => (
-          <div key={label} className="text-center">
-            <p className="text-xl font-semibold text-[#171717] tabular-nums">{value}</p>
-            <p className="text-xs text-[#171717]/60 mt-0.5">{label}</p>
-          </div>
-        ))}
-      </div>
-    </AdminCard>
+    <div>
+      <AdminSectionTitle title="Last 30 days" />
+      <StatGroup
+        columns={3}
+        stats={[
+          { label: "Sales", value: activity.sales },
+          { label: "Purchases", value: activity.purchases },
+          { label: "Payments", value: activity.payments },
+        ]}
+      />
+    </div>
   );
 }
 
@@ -298,10 +385,6 @@ export function ActionMenu({
         className="btn-ghost inline-flex items-center gap-1"
       >
         More
-        <ChevronRight
-          className={`w-3 h-3 text-[#171717]/40 transition-transform ${open ? "rotate-90" : ""}`}
-          aria-hidden="true"
-        />
       </button>
       {open &&
         typeof document !== "undefined" &&
@@ -388,7 +471,7 @@ export function BusinessListTable({
 
   return (
     <>
-      <ul className="md:hidden space-y-3">
+      <ul className="space-y-3 lg:hidden">
         {owners.map((owner) => {
           const subActive = isSubscriptionLive(owner.business);
           const href = `/admin/businesses/${owner.id}`;
@@ -396,10 +479,10 @@ export function BusinessListTable({
             <li key={owner.id}>
               <Link
                 href={href}
-                className="bg-white border border-[#E5E5E5] rounded-xl flex items-center gap-3 p-4 hover:bg-[#F8F8F7] cursor-pointer"
+                className="flex cursor-pointer items-center gap-3 rounded-2xl border border-line bg-white p-4 transition-colors hover:bg-[#FBFBFA]"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-[#171717] truncate">{owner.business.name}</p>
+                  <p className="truncate text-[15px] font-bold text-ink">{owner.business.name}</p>
                   <p className="text-[13px] text-[#171717]/70 truncate">/{owner.business.slug}</p>
                   <p className="text-[13px] text-[#171717]/70 mt-1 truncate">{owner.email}</p>
                   <p className="text-[13px] font-medium text-[#171717] mt-1 truncate">{planFor(owner)}</p>
@@ -410,28 +493,27 @@ export function BusinessListTable({
                   subscriptionActive={subActive}
                   subscriptionStatus={owner.business.subscriptionStatus}
                 />
-                <ChevronRight className="w-4 h-4 text-[#171717]/40 shrink-0" aria-hidden="true" />
               </Link>
             </li>
           );
         })}
       </ul>
 
-      <div className="hidden md:block bg-white border border-[#E5E5E5] rounded-xl overflow-hidden">
+      <div className="hidden overflow-hidden rounded-2xl border border-line bg-white lg:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px]">
             <thead>
-              <tr className="bg-[#FAFAF9]">
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-left">
+              <tr className="border-b border-line bg-white">
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink text-left">
                   Business
                 </th>
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-left">
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink text-left">
                   Email
                 </th>
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-left">
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink text-left">
                   Subscription
                 </th>
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide font-medium text-[#171717]/60 text-right">
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink text-right">
                   <span className="sr-only">Open</span>
                 </th>
               </tr>
@@ -443,14 +525,14 @@ export function BusinessListTable({
                 return (
                   <tr
                     key={owner.id}
-                    className="hover:bg-[#F8F8F7] cursor-pointer"
+                    className="group cursor-pointer transition-colors hover:bg-[#FBFBFA]"
                     role="link"
                     tabIndex={0}
                     onClick={() => router.push(href)}
                     onKeyDown={(e) => onRowKey(e, href)}
                   >
                     <td className="px-4 py-3 align-middle">
-                      <p className="text-sm font-semibold text-[#171717] truncate">{owner.business.name}</p>
+                      <p className="truncate text-[15px] font-bold text-ink">{owner.business.name}</p>
                       <p className="text-[13px] text-[#171717]/70 mt-0.5 truncate">/{owner.business.slug}</p>
                     </td>
                     <td className="px-4 py-3 align-middle">
@@ -468,7 +550,7 @@ export function BusinessListTable({
                       </div>
                     </td>
                     <td className="px-4 py-3 align-middle text-right">
-                      <ChevronRight className="w-4 h-4 text-[#171717]/40 inline-block" aria-hidden="true" />
+                      <span className="text-[13px] font-semibold text-ink underline decoration-[#171717]/25 underline-offset-4 group-hover:decoration-[#171717]">Open</span>
                     </td>
                   </tr>
                 );

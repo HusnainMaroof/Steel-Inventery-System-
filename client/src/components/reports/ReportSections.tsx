@@ -61,18 +61,18 @@ function FlowRow({
 function StockBlock({ row }: { row: QtyBlock }) {
   const totalStockValue = row.openingValue + row.purchaseValue;
   return (
-    <div className="border border-[#E5E5E5] bg-white rounded-xl p-4 sm:p-5">
+    <div className="border border-[#E5E5E5] bg-white rounded-2xl p-4 sm:p-5">
       <p className="text-base font-semibold mb-3">{row.productName}</p>
       <div>
         <div className="flex items-baseline justify-between gap-4 pb-1.5 border-b border-[#E5E5E5]">
-          <span className="text-xs uppercase tracking-wide font-medium text-[#171717]/60">
+          <span className="text-[14px] font-semibold text-[#171717]">
             Stock Flow
           </span>
           <span className="flex items-baseline gap-3 sm:gap-4 shrink-0">
-            <span className="w-20 sm:w-28 text-right text-xs uppercase tracking-wide font-medium text-[#171717]/60">
+            <span className="w-20 sm:w-28 text-right text-[13px] font-semibold text-[#171717]">
               Qty{qtyUnitLabel(row.unit) ? ` (${qtyUnitLabel(row.unit)})` : ""}
             </span>
-            <span className="w-24 sm:w-32 text-right text-xs uppercase tracking-wide font-medium text-[#171717]/60">
+            <span className="w-24 sm:w-32 text-right text-[13px] font-semibold text-[#171717]">
               Rs
             </span>
           </span>
@@ -226,7 +226,7 @@ export function MoneySides({ report }: { report: ProfitReport }) {
           </BusinessLink>
         }
       >
-        <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 mb-1">Supplier Due</p>
+        <p className="text-[14px] font-semibold text-[#171717] mb-1">Supplier Due</p>
         <PartyList rows={report.suppliers} empty="Nothing owed to mills." />
         <StatementTotal label="Total Supplier Due" value={report.supplierDue} />
       </Section>
@@ -239,7 +239,7 @@ export function MoneySides({ report }: { report: ProfitReport }) {
           </BusinessLink>
         }
       >
-        <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 mb-1">Customer Due</p>
+        <p className="text-[14px] font-semibold text-[#171717] mb-1">Customer Due</p>
         <PartyList rows={report.customers} empty="No customer dues." />
         <StatementTotal label="Total Customer Due" value={report.customerDue} />
       </Section>
@@ -291,7 +291,7 @@ export function Expenses({
       <div className="max-w-xl">
         {purchaseRows.length > 0 ? (
           <>
-            <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 pt-1">
+            <p className="text-[14px] font-semibold text-[#171717] pt-1">
               Paid on Purchases
             </p>
             {purchaseRows.map((r) => (
@@ -306,7 +306,7 @@ export function Expenses({
 
         {saleRows.length > 0 ? (
           <>
-            <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 pt-5">
+            <p className="text-[14px] font-semibold text-[#171717] pt-5">
               Paid on Sales
             </p>
             {saleRows.map((r) => (
@@ -321,7 +321,7 @@ export function Expenses({
 
         {report.expensesApplied ? (
           <>
-            <p className="text-xs uppercase tracking-wide font-medium text-[#171717]/60 pt-5">
+            <p className="text-[14px] font-semibold text-[#171717] pt-5">
               Other Expenses
             </p>
             {report.expenseRows.map((r) => (
@@ -359,7 +359,7 @@ function StockCheckRow({ row, onRecord }: { row: StockCheckView; onRecord: () =>
   const shortage = row.difference != null && row.difference < -0.0005;
   const over = row.difference != null && row.difference > 0.0005;
   return (
-      <div className={row.productName ? "border border-[#E5E5E5] rounded-xl p-4" : ""}>
+      <div className={row.productName ? "border border-[#E5E5E5] rounded-2xl p-4" : ""}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <p className="font-semibold">{row.productName}</p>
         <button type="button" className="btn-ghost min-h-[44px]" onClick={onRecord}>
@@ -373,7 +373,7 @@ function StockCheckRow({ row, onRecord }: { row: StockCheckView; onRecord: () =>
           text={row.physicalQty == null ? "Not counted yet" : checkQty(row.physicalQty, row.unit)}
         />
         {row.difference != null ? (
-          <div className="flex items-baseline justify-between gap-4 py-2.5 text-sm border-t border-[#171717] mt-1">
+          <div className="flex items-baseline justify-between gap-4 py-2.5 text-sm border-t border-[#E5E5E5] mt-1">
             <span className="font-semibold">
               Difference{shortage ? " — short" : over ? " — over" : ""}
             </span>

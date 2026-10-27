@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { Page, PageTitle, EmptyState, RowActionsMenu } from "@/components/ui";
+import { EmptyState, Page, PageTitle, RowActionsMenu, SearchBar } from "@/components/ui";
 import { DateRangePicker, formatRangeLabel } from "@/components/ui/date-range-picker";
 import { dateInIsoRange, isoDay } from "@/lib/date-range-filter";
 import { useBusinessHref } from "@/components/BusinessLink";
@@ -111,7 +111,7 @@ const PAYMENT_GRID =
 function PaymentDateColumnsHeader() {
   return (
     <div
-      className={`${PAYMENT_GRID} hidden md:grid py-2.5 text-xs uppercase tracking-wide text-[#171717]/60 bg-[#FAFAF9] border-b border-[#E5E5E5] items-center`}
+      className={`${PAYMENT_GRID} hidden md:grid py-2.5 text-[13px] font-semibold normal-case tracking-normal text-[#171717] bg-white border-b border-[#E5E5E5] items-center`}
     >
       <span>Name</span>
       <span>Type</span>
@@ -129,7 +129,6 @@ export default function PaymentsPage() {
   const businessHref = useBusinessHref();
   const { payments, customers, suppliers, sales, purchases } = useStore();
 
-  const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   useEffect(() => {
@@ -252,7 +251,6 @@ export default function PaymentsPage() {
   };
 
   const clearAll = () => {
-    setSearchInput("");
     setAppliedSearch("");
     setTypeFilter("all");
     setDateRange({ from: null, to: null });
@@ -262,10 +260,7 @@ export default function PaymentsPage() {
 
   return (
     <Page>
-      <PageTitle
-        title="Payments"
-        sub="Money received and money paid. Take customer dues on Sales. Pay mill dues on Purchases."
-      />
+      <PageTitle title="Payments" />
 
       {payments.length > 0 && (
         <div className="mb-6">
@@ -281,16 +276,16 @@ export default function PaymentsPage() {
             )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
-              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Received</span>
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+              <span className="block text-[14px] font-semibold text-[#171717]">Received</span>
               <span className="block text-2xl font-bold tabular-nums mt-1 text-success">{fmtMoney(totalReceived)}</span>
             </div>
-            <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
-              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Paid</span>
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+              <span className="block text-[14px] font-semibold text-[#171717]">Paid</span>
               <span className="block text-2xl font-bold tabular-nums mt-1 text-[#171717]">{fmtMoney(totalPaid)}</span>
             </div>
-            <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
-              <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Net</span>
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+              <span className="block text-[14px] font-semibold text-[#171717]">Net</span>
               <span className={`block text-2xl font-bold tabular-nums mt-1 ${totalReceived - totalPaid >= 0 ? "text-success" : "text-destructive"}`}>
                 {fmtMoney(totalReceived - totalPaid)}
               </span>
@@ -300,8 +295,8 @@ export default function PaymentsPage() {
       )}
 
       {payments.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E5E5] bg-white p-1">
+        <div className="mb-6 flex flex-col gap-2.5 rounded-2xl border border-[#E5E5E5] bg-white p-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E5E5] bg-white p-1 w-full sm:w-auto">
             {TYPE_TABS.map((tab) => (
               <button
                 key={tab.key}
@@ -332,24 +327,15 @@ export default function PaymentsPage() {
             onChange={setDateRange}
             placeholder="All dates"
             ariaLabel="Filter payments by date range"
+            className="w-full sm:w-auto"
+            disableFuture
           />
-          <div className="relative min-w-[200px] flex-1">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#171717]/40 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search by name"
-              aria-label="Search by name"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") setAppliedSearch(searchInput); }}
-              className="!w-full !pl-9"
-            />
-          </div>
-          <button onClick={() => setAppliedSearch(searchInput)} className="btn-ghost shrink-0">
-            Search
-          </button>
+          <SearchBar
+            value={appliedSearch}
+            onSearch={setAppliedSearch}
+            placeholder="Search by name"
+            className="min-w-[240px] flex-1"
+          />
         </div>
       )}
 
@@ -365,11 +351,11 @@ export default function PaymentsPage() {
           action={<button onClick={clearAll} className="btn-primary">Clear filters</button>}
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           {groups.map((g) => (
             <div key={g.date}>
               <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-sm font-semibold tracking-tight text-[#171717]">{fmtDate(g.date)}</span>
+                <span className="text-[15px] font-bold text-[#171717]">{fmtDate(g.date)}</span>
                 <span className="text-[13px] text-[#171717]/70 tabular-nums">
                   {g.items.length} payment{g.items.length === 1 ? "" : "s"}
                   {g.dayIn > 0 ? ` · In ${fmtMoney(g.dayIn)}` : ""}
@@ -378,7 +364,7 @@ export default function PaymentsPage() {
                 <div className="flex-1 min-w-[2rem] border-b border-[#E5E5E5]" />
               </div>
 
-              <div className="md:overflow-hidden md:rounded-xl md:border md:border-[#E5E5E5] md:bg-white">
+              <div className="md:overflow-hidden md:rounded-2xl md:border md:border-[#E5E5E5] md:bg-white">
                 <PaymentDateColumnsHeader />
 
                 <div className="flex flex-col gap-3 md:block md:divide-y md:divide-[#E5E5E5]">
@@ -391,7 +377,7 @@ export default function PaymentsPage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") navigatePaymentView(p);
                       }}
-                      className="overflow-hidden rounded-xl border border-[#E5E5E5] bg-white cursor-pointer transition-colors hover:bg-[#F8F8F7] md:rounded-none md:border-0"
+                      className="overflow-hidden rounded-xl border border-[#E5E5E5] bg-white cursor-pointer transition-colors hover:bg-[#FBFBFA] md:rounded-none md:border-0"
                     >
                       <div className={`${PAYMENT_GRID} hidden md:py-3.5 md:items-center`}>
                         <span className="min-w-0 truncate text-sm font-medium text-[#171717]">{p.partyName}</span>

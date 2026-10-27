@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Search } from "lucide-react";
-import { RowActionsMenu } from "@/components/ui";
+import { CheckCircle2 } from "lucide-react";
+import { RowActionsMenu, SearchBar } from "@/components/ui";
 import CustomerHistoryModal from "@/components/customers/CustomerHistoryModal";
 import { Skeleton } from "@/components/skeletons";
 import { useStore, saleGrandTotal } from "@/lib/store";
@@ -81,8 +81,8 @@ export default function CustomerDuesTab({ onReceive }: { onReceive: (saleId: str
 
   return (
     <section className="space-y-6">
-      <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
-        <p className="text-xs uppercase tracking-wide text-[#171717]/60">Total customers owe you</p>
+      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-4 sm:p-5">
+        <p className="text-[14px] font-semibold text-[#171717]">Total customers owe you</p>
         {transactionsReady ? (
           <p className="mt-2 text-2xl font-bold tabular-nums text-destructive">{fmtMoney(totalDue)}</p>
         ) : (
@@ -93,18 +93,14 @@ export default function CustomerDuesTab({ onReceive }: { onReceive: (saleId: str
         </p>
       </div>
 
-      <div className="flex w-full items-center gap-3">
-        <label className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#171717]/50" aria-hidden="true" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search name, shop or phone"
-            aria-label="Search customers by name, shop or phone"
-            className="w-full pl-10"
-          />
-        </label>
+      <div className="flex w-full items-center gap-3 rounded-2xl border border-[#E5E5E5] bg-white p-2">
+        <SearchBar
+          value={search}
+          onSearch={setSearch}
+          placeholder="Search name, shop or phone"
+          ariaLabel="Search customers by name, shop or phone"
+          className="min-w-0 flex-1"
+        />
       </div>
 
       {!transactionsReady ? (
@@ -150,23 +146,23 @@ export default function CustomerDuesTab({ onReceive }: { onReceive: (saleId: str
         </div>
       ) : (
         <>
-          <div className="hidden overflow-x-auto rounded-xl border border-[#E5E5E5] bg-white md:block">
+          <div className="hidden overflow-x-auto rounded-2xl border border-[#E5E5E5] bg-white md:block">
             <table className="w-full min-w-[860px] border-collapse">
               <thead>
-                <tr className="bg-[#FAFAF9]">
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#171717]/60">Customer</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#171717]/60">Unpaid invoices</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#171717]/60">Oldest unpaid</th>
-                  <th className="px-5 py-3 text-right text-xs font-medium uppercase tracking-wide text-[#171717]/60">Amount due</th>
-                  <th className="px-5 py-3 text-right text-xs font-medium uppercase tracking-wide text-[#171717]/60">Actions</th>
+                <tr className="border-b border-[#E5E5E5] bg-white">
+                  <th className="px-5 py-3 text-left text-[13px] font-semibold text-[#171717]">Customer</th>
+                  <th className="px-5 py-3 text-left text-[13px] font-semibold text-[#171717]">Unpaid invoices</th>
+                  <th className="px-5 py-3 text-left text-[13px] font-semibold text-[#171717]">Oldest unpaid</th>
+                  <th className="px-5 py-3 text-right text-[13px] font-semibold text-[#171717]">Amount due</th>
+                  <th className="px-5 py-3 text-right text-[13px] font-semibold text-[#171717]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredDues.map(({ customer, amountDue, unpaidCount, oldestUnpaid, daysAgo }) => (
-                  <tr key={customer.id} className="border-t border-[#E5E5E5] text-sm transition-colors hover:bg-[#F8F8F7]">
+                  <tr key={customer.id} className="border-t border-[#E5E5E5] text-sm transition-colors hover:bg-[#FBFBFA]">
                     <td className="px-5 py-4">
-                      <p className="font-medium text-[#171717]">{customer.name}</p>
-                      <p className="mt-0.5 text-[13px] text-[#171717]/70">{[customer.shop, customer.phone].filter(Boolean).join(" · ") || "No shop or phone"}</p>
+                      <p className="text-[15px] font-semibold text-[#171717]">{customer.name}</p>
+                      <p className="mt-0.5 text-[13px] text-[#171717]/70">{[customer.shop && customer.shop !== customer.name ? customer.shop : null, customer.phone].filter(Boolean).join(" · ") || "No shop or phone"}</p>
                     </td>
                     <td className="px-5 py-4 tabular-nums">{unpaidCount}</td>
                     <td className={`px-5 py-4 ${daysAgo >= 30 ? "text-warning" : "text-[#171717]"}`}>
@@ -187,11 +183,11 @@ export default function CustomerDuesTab({ onReceive }: { onReceive: (saleId: str
 
           <div className="space-y-3 md:hidden">
             {filteredDues.map(({ customer, amountDue, unpaidCount, oldestUnpaid, daysAgo }) => (
-              <article key={customer.id} className="rounded-xl border border-[#E5E5E5] bg-white p-4">
+              <article key={customer.id} className="rounded-2xl border border-[#E5E5E5] bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-sm font-medium text-[#171717]">{customer.name}</h2>
-                    <p className="mt-1 text-[13px] text-[#171717]/70">{[customer.shop, customer.phone].filter(Boolean).join(" · ") || "No shop or phone"}</p>
+                    <p className="mt-1 text-[13px] text-[#171717]/70">{[customer.shop && customer.shop !== customer.name ? customer.shop : null, customer.phone].filter(Boolean).join(" · ") || "No shop or phone"}</p>
                   </div>
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-destructive">{fmtMoney(amountDue)}</span>
                 </div>

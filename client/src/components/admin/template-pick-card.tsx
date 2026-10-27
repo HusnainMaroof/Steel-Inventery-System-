@@ -26,16 +26,16 @@ export function AdminTemplatePickCard({
 
   return (
     <label
-      className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
+      className={`flex items-start gap-3 rounded-2xl border p-4 transition-colors ${
         selected
           ? "border-ink bg-[#F8F8F7]"
-          : "border-[#E5E5E5] bg-white hover:bg-[#F8F8F7]"
+          : "border-line bg-white hover:bg-[#F8F8F7]"
       }`}
     >
       <input type="checkbox" className="mt-0.5" checked={selected} onChange={onChange} />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-[#171717]">{label}</span>
+          <span className="text-[16px] font-bold text-ink">{label}</span>
           {meta ? (
             <span className="rounded bg-[#F0F0EE] px-1.5 py-0.5 text-xs font-medium text-[#171717]/70">
               {meta.trade}

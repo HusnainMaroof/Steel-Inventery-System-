@@ -243,7 +243,6 @@ export default function ProductsPage() {
     <Page>
       <PageTitle
         title="Products"
-        sub="Configure the catalogue — purchases, sales and inventory follow it"
         action={
           view.level === "products" ? (
             <button type="button" className="btn-primary" onClick={() => setProductModal(true)}>
@@ -284,16 +283,31 @@ export default function ProductsPage() {
 
       {view.level === "products" && (
         <>
+          {inactiveProducts.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[#E5E5E5] bg-white p-2">
+              <button
+                type="button"
+                onClick={() => setShowInactive((s) => !s)}
+                aria-expanded={showInactive}
+                className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-[13px] font-medium text-[#171717]/70 transition-colors hover:bg-[#F8F8F7] hover:text-[#171717]"
+              >
+                <span aria-hidden className={`transition-transform ${showInactive ? "rotate-90" : ""}`}>▸</span>
+                {inactiveProducts.length} inactive product{inactiveProducts.length === 1 ? "" : "s"}
+              </button>
+            </div>
+          )}
+
           {activeProducts.length === 0 ? (
             <EmptyState
+              emoji=""
               title="No products yet"
               hint="Add a product from scratch, or start from a template. The same engine then serves steel, cement, paint or anything else."
             />
           ) : (
-            <div className="panel overflow-hidden mb-5">
-<div className="px-4 py-3 border-b border-[#E5E5E5]">
-  <p className="text-xs uppercase tracking-wide text-[#171717]/60">Products</p>
-</div>
+            <div className="mb-5 overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white">
+              <div className="border-b border-[#E5E5E5] bg-white px-5 py-3">
+                <p className="text-[13px] font-semibold normal-case tracking-normal text-[#171717]">Products</p>
+              </div>
               <div className="divide-y divide-[#E5E5E5]">
                 {activeProducts.map((p) => {
                   const nCats = catsOf(p.id).length;
@@ -306,22 +320,22 @@ export default function ProductsPage() {
                       key={p.id}
                       type="button"
                       onClick={() => setView({ level: "product", productId: p.id })}
-                      className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-[#F8F8F7] transition-colors"
+                      className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-[#FBFBFA]"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block text-base font-semibold text-[#171717]">{p.name}</span>
-                        <span className="block text-[13px] text-[#171717]/70 mt-0.5">
+                        <span className="block text-[15px] font-semibold text-[#171717]">{p.name}</span>
+                        <span className="mt-0.5 block text-[13px] text-[#171717]/70">
                           {structure}
                           {p.description ? ` · ${p.description}` : ""}
                           {` · ${unitLabel(p.unit)}`}
                         </span>
                       </span>
-                      <span className="min-w-[40px] min-h-[40px] flex items-center justify-center text-[#171717]/70">{I.chev}</span>
+                      <span className="flex min-h-[40px] min-w-[40px] items-center justify-center text-[#171717]/70">{I.chev}</span>
                     </button>
                   );
                 })}
               </div>
-              <div className="px-5 py-3 border-t border-[#E5E5E5]">
+              <div className="border-t border-[#E5E5E5] px-5 py-3">
                 <button
                   type="button"
                   onClick={() => setProductModal(true)}
@@ -333,31 +347,19 @@ export default function ProductsPage() {
             </div>
           )}
 
-          {inactiveProducts.length > 0 && (
-            <div className="mb-5">
-              <button
-                type="button"
-                onClick={() => setShowInactive((s) => !s)}
-                className="text-[12px] text-[#171717]/70 hover:text-[#171717] flex items-center gap-1.5"
-              >
-                <span className={`transition-transform ${showInactive ? "rotate-90" : ""}`}>▸</span>
-                {inactiveProducts.length} inactive product{inactiveProducts.length === 1 ? "" : "s"}
-              </button>
-              {showInactive && (
-                <div className="panel overflow-hidden mt-2 divide-y divide-[#E5E5E5]">
-                  {inactiveProducts.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setView({ level: "product", productId: p.id })}
-                      className="w-full flex items-center justify-between px-5 py-3 text-left text-[13px] text-[#171717]/70 hover:bg-[#F8F8F7]"
-                    >
-                      <span>{p.name}</span>
-                      <StatusPill active={false} />
-                    </button>
-                  ))}
-                </div>
-              )}
+          {showInactive && inactiveProducts.length > 0 && (
+            <div className="mb-5 divide-y divide-[#E5E5E5] overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white">
+              {inactiveProducts.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setView({ level: "product", productId: p.id })}
+                  className="flex w-full items-center justify-between px-5 py-3 text-left text-[13px] text-[#171717]/70 hover:bg-[#FBFBFA]"
+                >
+                  <span className="font-semibold text-[#171717]">{p.name}</span>
+                  <StatusPill active={false} />
+                </button>
+              ))}
             </div>
           )}
         </>
@@ -577,19 +579,19 @@ function ProductHeader({
   onChangeUnit: (u: string) => void;
 }) {
   return (
-    <div className="panel px-4 py-3 mb-5 flex flex-wrap items-center gap-3">
+    <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-[#E5E5E5] bg-white p-4">
       <div className="min-w-0 flex-1">
-        <p className="text-base font-semibold">{product.name}</p>
-        <p className="text-[13px] text-[#171717]/70 mt-0.5">
+        <p className="text-[16px] font-bold text-[#171717]">{product.name}</p>
+        <p className="mt-0.5 text-[13px] text-[#171717]/70">
           Base unit {unitLabel(product.unit)}
           {product.description ? ` · ${product.description}` : ""}
           {product.active === false && (
-            <span className="ml-2 text-xs uppercase tracking-wider text-destructive">Inactive</span>
+            <span className="ml-2 text-[12px] font-semibold text-destructive">Inactive</span>
           )}
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <label className="mb-0 flex items-center gap-2 normal-case text-xs text-[#171717]/60">
+        <label className="mb-0 flex items-center gap-2 normal-case text-[13px] text-[#171717]/70">
           <span className="text-[#171717]/70">Unit</span>
           <select
             value={product.unit}
@@ -656,16 +658,16 @@ function ProductCategoriesView({
         onChangeUnit={onChangeUnit}
       />
 
-      <div className="panel overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#E5E5E5] flex items-center justify-between">
-            <p className="text-[13px] font-semibold text-[#171717]">Categories</p>
-          <span className="text-xs tabular-nums text-[#171717]/70 bg-[#F8F8F7] border border-[#E5E5E5] rounded px-1.5 py-0.5">
+      <div className="overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white">
+        <div className="flex items-center justify-between border-b border-[#E5E5E5] bg-white px-4 py-3">
+          <p className="text-[16px] font-bold text-[#171717]">Categories</p>
+          <span className="rounded-md border border-[#E5E5E5] bg-white px-1.5 py-0.5 text-[12px] font-semibold tabular-nums text-[#171717]/70">
             {categories.length}
           </span>
         </div>
         {categories.length === 0 ? (
           <div className="px-4 py-10 text-center">
-            <p className="text-[13px] text-[#171717]/70 mb-4">None yet — add whatever this product is split into.</p>
+            <p className="mb-4 text-[13px] text-[#171717]/70">None yet, add whatever this product is split into.</p>
             <button type="button" onClick={onAddCategory} className="btn-primary">Add Category</button>
           </div>
         ) : (
@@ -675,15 +677,15 @@ function ProductCategoriesView({
               return (
                 <div
                   key={c.id}
-                  className={`flex items-center gap-3 px-4 py-3.5 ${c.active ? "" : "opacity-55 bg-[#F8F8F7]/50"}`}
+                  className={`flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[#FBFBFA] ${c.active ? "" : "bg-[#F8F8F7]/50 opacity-55"}`}
                 >
                   <button
                     type="button"
                     onClick={() => onOpenCategory(c.id)}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <span className="block text-sm font-medium text-[#171717]">{c.name}</span>
-                    <span className="block text-[13px] text-[#171717]/70 mt-0.5">
+                    <span className="block text-sm font-semibold text-[#171717]">{c.name}</span>
+                    <span className="mt-0.5 block text-[13px] text-[#171717]/70">
                       {nDefs} {nDefs === 1 ? "Attribute" : "Attributes"}
                       {c.description ? ` · ${c.description}` : ""}
                     </span>
@@ -703,7 +705,7 @@ function ProductCategoriesView({
           </div>
         )}
         {categories.length > 0 && (
-          <div className="px-4 py-3 border-t border-[#E5E5E5]">
+          <div className="border-t border-[#E5E5E5] px-4 py-3">
             <button type="button" onClick={onAddCategory} className="text-sm font-medium text-[#171717] hover:bg-[#F8F8F7]">
               + Add Category
             </button>
@@ -782,17 +784,17 @@ function AttributesConfigureView({
   return (
     <>
       {!hideHeading && (
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-widest text-[#171717]/70">{productName}</p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <h2 className="text-[17px] font-semibold truncate">{heading}</h2>
+            <p className="text-[13px] text-[#171717]/70">{productName}</p>
+            <div className="mt-0.5 flex items-center gap-2">
+              <h2 className="truncate text-[16px] font-bold text-[#171717]">{heading}</h2>
               {inactive && (
-                <span className="text-xs uppercase tracking-wider text-[#171717]/70">deactivated</span>
+                <span className="text-[12px] font-semibold text-[#171717]/70">Deactivated</span>
               )}
               {onRename && <IconBtn onClick={onRename} title="Rename category">{I.edit}</IconBtn>}
             </div>
-            {description && <p className="text-[12px] text-[#171717]/70 mt-0.5">{description}</p>}
+            {description && <p className="mt-0.5 text-[12px] text-[#171717]/70">{description}</p>}
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onAddAttribute} className="btn-primary">
@@ -807,16 +809,16 @@ function AttributesConfigureView({
         </div>
       )}
 
-      <div className="panel overflow-hidden mb-5">
-          <div className="px-4 py-3 border-b border-[#E5E5E5]">
-            <p className="text-[13px] font-semibold text-[#171717]">Attributes</p>
-            <p className="text-[13px] text-[#171717]/70 mt-0.5">
+      <div className="mb-5 overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white">
+        <div className="border-b border-[#E5E5E5] bg-white px-4 py-3">
+          <p className="text-[16px] font-bold text-[#171717]">Attributes</p>
+          <p className="mt-0.5 text-[13px] text-[#171717]/70">
             Drag to change the order on purchase, sale and invoice screens. Identity of stock does not change.
           </p>
         </div>
         {defs.length === 0 ? (
           <div className="px-4 py-10 text-center">
-            <p className="text-[13px] text-[#171717]/70 mb-4">No attributes yet — e.g. Size, Grade, Brand.</p>
+            <p className="mb-4 text-[13px] text-[#171717]/70">No attributes yet, for example Size, Grade, Brand.</p>
             <button type="button" onClick={onAddAttribute} className="btn-primary">
               Add first attribute
             </button>
@@ -850,7 +852,7 @@ function AttributesConfigureView({
           </div>
         )}
         {defs.length > 0 && (
-          <div className="px-4 py-3 border-t border-[#E5E5E5] bg-[#F8F8F7]/50">
+          <div className="border-t border-[#E5E5E5] bg-white px-4 py-3">
             <button type="button" onClick={onAddAttribute} className="text-sm font-medium text-[#171717] hover:bg-[#F8F8F7]">
               + Add Attribute
             </button>
@@ -858,11 +860,11 @@ function AttributesConfigureView({
         )}
       </div>
 
-      <div className="panel overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#E5E5E5]">
-            <p className="text-[13px] font-semibold text-[#171717]">Variants</p>
-            <p className="text-[13px] text-[#171717]/70 mt-0.5">
-            Created automatically when stock is bought or sold — not added here by hand.
+      <div className="overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white">
+        <div className="border-b border-[#E5E5E5] bg-white px-4 py-3">
+          <p className="text-[16px] font-bold text-[#171717]">Variants</p>
+          <p className="mt-0.5 text-[13px] text-[#171717]/70">
+            Created automatically when stock is bought or sold, not added here by hand.
           </p>
         </div>
         {variants.length === 0 ? (
@@ -935,10 +937,10 @@ function AttrCard({
   };
 
   return (
-    <div className={`px-4 py-3 ${def.active ? "" : "opacity-55 bg-[#F8F8F7]/50"}`}>
+    <div className={`px-4 py-3 ${def.active ? "" : "bg-[#F8F8F7]/50 opacity-55"}`}>
       <div className="flex items-start gap-3">
         <span
-          className="mt-1 text-[#171717]/70 cursor-grab active:cursor-grabbing shrink-0"
+          className="mt-1 shrink-0 cursor-grab text-[#171717]/70 active:cursor-grabbing"
           title="Drag to reorder"
           aria-hidden
         >
@@ -946,22 +948,22 @@ function AttrCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <p className="text-sm font-medium leading-tight">
+            <p className="text-sm font-semibold leading-tight text-[#171717]">
               {def.name}
-              {def.required && <span className="text-destructive ml-0.5">*</span>}
+              {def.required && <span className="ml-0.5 text-destructive">*</span>}
             </p>
-            <span className="text-xs uppercase tracking-wider font-medium text-[#171717]/70 bg-[#F8F8F7] border border-[#E5E5E5] rounded px-1.5 py-0.5">
+            <span className="rounded border border-[#E5E5E5] bg-white px-1.5 py-0.5 text-[12px] font-medium normal-case tracking-normal text-[#171717]/70">
               {TYPE_LABEL[def.type]}
               {def.unit ? ` · ${def.unit}` : ""}
               {def.required ? " · Required" : ""}
             </span>
           </div>
-          <p className="text-[13px] text-[#171717]/70 mt-1 leading-snug">
+          <p className="mt-1 text-[13px] leading-snug text-[#171717]/70">
             {def.active
               ? def.type === "select"
                 ? `${activeOptions.length} ${activeOptions.length === 1 ? "option" : "options"}`
                 : TYPE_LABEL[def.type]
-              : "Deactivated — hidden from buying & selling"}
+              : "Deactivated, hidden from buying and selling"}
           </p>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
@@ -1083,11 +1085,11 @@ function VariantRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(v.shortName);
   return (
-    <div className={`px-4 py-3 flex items-start gap-3 ${v.active ? "" : "opacity-55 bg-[#F8F8F7]/50"}`}>
+    <div className={`flex items-start gap-3 px-4 py-3 ${v.active ? "" : "bg-[#F8F8F7]/50 opacity-55"}`}>
       <div className="min-w-0 flex-1">
         {editing ? (
           <form
-            className="flex items-center gap-2 max-w-sm"
+            className="flex max-w-sm items-center gap-2"
             onSubmit={(e) => { e.preventDefault(); onRename(draft); setEditing(false); }}
           >
             <input value={draft} onChange={(e) => setDraft(e.target.value)} className="flex-1" />
@@ -1095,14 +1097,14 @@ function VariantRow({
           </form>
         ) : (
           <>
-            <p className="text-sm font-medium leading-tight">{v.shortName}</p>
-            {attrsLine && <p className="text-[13px] text-[#171717]/70 mt-0.5 leading-snug">{attrsLine}</p>}
-            {used && <p className="text-xs text-[#171717]/70 mt-1">Used in purchases or sales</p>}
+            <p className="text-sm font-semibold leading-tight text-[#171717]">{v.shortName}</p>
+            {attrsLine && <p className="mt-0.5 text-[13px] leading-snug text-[#171717]/70">{attrsLine}</p>}
+            {used && <p className="mt-1 text-[12px] text-[#171717]/70">Used in purchases or sales</p>}
           </>
         )}
       </div>
       {!editing && (
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
           <IconBtn onClick={() => { setDraft(v.shortName); setEditing(true); }} title="Rename">{I.edit}</IconBtn>
           <IconBtn onClick={onToggle} title={v.active ? "Deactivate" : "Reactivate"} danger={!v.active}>
             {v.active ? I.off : I.on}

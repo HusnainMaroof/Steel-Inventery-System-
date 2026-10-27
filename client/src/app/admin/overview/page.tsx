@@ -5,6 +5,7 @@ import { AdminOverviewSkeleton } from "@/components/skeletons";
 import { usePlatformAdminData } from "@/hooks/use-platform-admin-data";
 import { useAuth } from "@/lib/auth";
 import { Page } from "@/components/ui";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 export default function AdminOverviewPage() {
   const { user, ready } = useAuth();
@@ -18,12 +19,7 @@ export default function AdminOverviewPage() {
 
   return (
     <Page>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Overview</h1>
-        <p className="text-[#171717]/70 text-xs mt-1 max-w-2xl">
-          Platform health, plans and every business in one place.
-        </p>
-      </div>
+      <AdminPageHeader title="Overview" meta="Every business on Tijartt, at a glance." />
 
       {loadError ? (
         <p role="alert" className="text-sm text-[#a12b1f] mb-4">

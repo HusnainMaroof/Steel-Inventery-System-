@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import {
   createCatalogTemplateAction,
   type CatalogTemplateAttribute,
@@ -20,12 +19,12 @@ const UNIT_OPTIONS = [
 
 function AttributeBlock({ attribute }: { attribute: CatalogTemplateAttribute }) {
   return (
-    <div className="rounded-md border border-[#E5E5E5] bg-[#FAFAF9] px-3 py-2">
-      <p className="text-[12px] font-medium text-[#171717]">
+    <div className="border-b border-line py-3 last:border-0">
+      <p className="text-[13px] font-medium text-[#171717]">
         {attribute.name}
         {attribute.required ? <span className="text-[#171717]/60 font-normal"> · required</span> : null}
       </p>
-      <p className="text-xs text-[#171717]/70 mt-0.5 capitalize">
+      <p className="text-[13px] text-[#171717]/70 mt-0.5 capitalize">
         {attribute.type}
         {attribute.unit ? ` · ${attribute.unit}` : ""}
       </p>
@@ -34,7 +33,7 @@ function AttributeBlock({ attribute }: { attribute: CatalogTemplateAttribute }) 
           {attribute.options.map((option) => (
             <span
               key={option}
-              className="inline-flex rounded-full bg-white border border-[#E5E5E5] px-2 py-0.5 text-xs text-[#171717]/70"
+              className="inline-flex rounded-full bg-white border border-line px-2 py-0.5 text-xs text-[#171717]/70"
             >
               {option}
             </span>
@@ -63,7 +62,7 @@ export function TemplateCatalogCard({
 
   return (
     <article
-      className="panel overflow-hidden"
+      className="rounded-2xl border border-line bg-white overflow-hidden"
     >
       <button
         type="button"
@@ -73,21 +72,21 @@ export function TemplateCatalogCard({
       >
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-[#171717]">{template.label}</span>
+            <span className="text-[16px] font-bold text-ink">{template.label}</span>
             {meta ? (
-              <span className="text-xs font-medium text-[#171717]/70 bg-[#F0F0EE] px-1.5 py-0.5 rounded">
+              <span className="text-[13px] font-medium text-[#171717]/70 bg-[#F0F0EE] px-1.5 py-0.5 rounded">
                 {meta.trade}
               </span>
             ) : isCustom ? (
-              <span className="text-xs font-medium text-[#171717]/70 bg-[#F0F0EE] px-1.5 py-0.5 rounded">
+              <span className="text-[13px] font-medium text-[#171717]/70 bg-[#F0F0EE] px-1.5 py-0.5 rounded">
                 Custom
               </span>
             ) : null}
-            <span className="text-xs text-[#171717]/60">
+            <span className="text-[13px] text-[#171717]/60">
               {catalogStructureLabel(template.usesCategories)}
             </span>
           </span>
-          <span className="block text-xs text-[#171717]/70 mt-1">
+          <span className="block text-[13px] text-[#171717]/70 mt-1">
             {template.product.name} · {template.product.unit}
             {template.usesCategories && categoryCount
               ? ` · ${categoryCount} categor${categoryCount === 1 ? "y" : "ies"}`
@@ -95,16 +94,16 @@ export function TemplateCatalogCard({
             {attrCount ? ` · ${attrCount} attribute${attrCount === 1 ? "" : "s"}` : ""}
           </span>
           {meta ? (
-            <span className="block text-xs text-[#171717]/70 mt-1 leading-snug">{meta.hint}</span>
+            <span className="block text-[13px] leading-snug text-[#171717]/70 mt-1">{meta.hint}</span>
           ) : null}
         </span>
-        <ChevronDown className={`w-4 h-4 shrink-0 text-[#171717]/60 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+        <span className="shrink-0 text-[13px] font-medium text-ink">{expanded ? "Hide" : "Show"}</span>
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 border-t border-[#E5E5E5]">
+        <div className="px-4 pb-4 border-t border-line">
           {template.product.description ? (
-            <p className="text-[12px] text-[#171717]/70 mt-3">{template.product.description}</p>
+            <p className="text-[13px] text-[#171717]/70 mt-3">{template.product.description}</p>
           ) : null}
 
           {template.usesCategories && template.categories?.length ? (
@@ -115,7 +114,7 @@ export function TemplateCatalogCard({
                   {category.description ? (
                     <p className="text-xs text-[#171717]/70 mt-0.5">{category.description}</p>
                   ) : null}
-                  <div className="grid gap-2 mt-2">
+                  <div className="mt-2">
                     {category.attributes.map((attribute) => (
                       <AttributeBlock key={`${category.name}-${attribute.name}`} attribute={attribute} />
                     ))}
@@ -126,7 +125,7 @@ export function TemplateCatalogCard({
           ) : null}
 
           {!template.usesCategories && template.attributes?.length ? (
-            <div className="grid gap-2 mt-4">
+            <div className="mt-4">
               {template.attributes.map((attribute) => (
                 <AttributeBlock key={attribute.name} attribute={attribute} />
               ))}
@@ -247,7 +246,7 @@ export function AddCatalogTemplateModal({
           <p className="text-sm font-medium mb-2">Attributes / variants</p>
           <div className="space-y-3">
             {attributes.map((row, index) => (
-              <div key={index} className="border border-[#E5E5E5] rounded-lg p-3 space-y-2">
+              <div key={index} className="border border-line rounded-lg p-3 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     value={row.name}

@@ -15,7 +15,8 @@ import Decimal from "decimal.js";
 import { toDecimal } from "../../lib/decimal";
 
 export function rangeInvoiceNo(from: string | null, to: string | null) {
-  if (from && to) return `INV-${from.replaceAll("-", "")}_${to.replaceAll("-", "")}`;
+  if (from && to && from === to) return `INV-${from.replaceAll("-", "")}`;
+  if (from && to) return `INV-${from.replaceAll("-", "")}-${to.replaceAll("-", "")}`;
   if (from) return `INV-FROM-${from.replaceAll("-", "")}`;
   if (to) return `INV-UNTIL-${to.replaceAll("-", "")}`;
   return "INV-ALL";
@@ -93,8 +94,8 @@ export default function PrintPack({
 
   return (
     <div className="w-full">
-      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-[#E5E5E5] bg-white p-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <DateRangePicker
             from={from}
             to={to}
@@ -110,7 +111,7 @@ export default function PrintPack({
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-2 text-sm lg:px-0">
           <span className="tabular-nums text-[#171717]/70">
             <span className="font-semibold text-[#171717]">{filtered.length}</span> sale
             {filtered.length === 1 ? "" : "s"}

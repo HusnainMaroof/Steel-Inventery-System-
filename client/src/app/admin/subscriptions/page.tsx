@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard } from "lucide-react";
 import {
   updateSubscriptionPlanAction,
   type SubscriptionPlanOption,
@@ -13,6 +12,7 @@ import {
 import { AdminSubscriptionsSkeleton } from "@/components/skeletons";
 import { usePlatformAdminData } from "@/hooks/use-platform-admin-data";
 import { useAuth } from "@/lib/auth";
+import { AdminPageHeader, StatGroup } from "@/components/admin/admin-ui";
 import { EmptyState, Page } from "@/components/ui";
 
 export default function AdminSubscriptionsPage() {
@@ -65,29 +65,31 @@ export default function AdminSubscriptionsPage() {
 
   return (
     <Page>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold">Plans</h1>
-          <p className="text-[#171717]/70 text-sm mt-1 max-w-xl">
-            Billing types and the modules each plan unlocks.
-          </p>
-        </div>
-        <button
-          className="btn-primary w-full sm:w-auto"
-          onClick={() => {
-            setEditing(null);
-            setModalOpen(true);
-          }}
-        >
-          + New plan
-        </button>
-      </div>
+      <AdminPageHeader
+        title="Plans"
+        meta="Billing types and the modules each plan opens."
+        actions={
+          <button
+            className="btn-primary w-full sm:w-auto"
+            onClick={() => {
+              setEditing(null);
+              setModalOpen(true);
+            }}
+          >
+            New plan
+          </button>
+        }
+      />
 
-      {/* Summary stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard label="Active plans" value={activeCount} />
-        <StatCard label="Hidden plans" value={hiddenCount} />
-        <StatCard label="Businesses on a plan" value={businessesOnPlan} />
+      <div className="mb-8">
+      <StatGroup
+        columns={3}
+        stats={[
+          { label: "Active plans", value: activeCount },
+          { label: "Hidden plans", value: hiddenCount },
+          { label: "Businesses on a plan", value: businessesOnPlan },
+        ]}
+      />
       </div>
 
       {loadError ? <p role="alert" className="text-sm text-[#a12b1f] mb-4">{loadError}</p> : null}
@@ -95,7 +97,6 @@ export default function AdminSubscriptionsPage() {
 
       {!loadError && sorted.length === 0 ? (
         <EmptyState
-          icon={<CreditCard className="h-6 w-6" />}
           title="No plans yet"
           hint="Create a plan to start registering businesses."
           action={
@@ -106,7 +107,7 @@ export default function AdminSubscriptionsPage() {
                 setModalOpen(true);
               }}
             >
-              + New plan
+              New plan
             </button>
           }
         />
@@ -131,18 +132,5 @@ export default function AdminSubscriptionsPage() {
         onSaved={reload}
       />
     </Page>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-[#E5E5E5] bg-white p-4">
-      <span className="block text-xs uppercase tracking-wide text-[#171717]/60 font-medium">
-        {label}
-      </span>
-      <span className="block text-2xl font-bold tabular-nums text-black mt-1">
-        {value}
-      </span>
-    </div>
   );
 }

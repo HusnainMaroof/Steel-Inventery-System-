@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -27,6 +26,7 @@ import {
   TemplatesModal,
   ActionMenu,
   AdminCard,
+  AdminPageHeader,
   ActivityStatStrip,
   CopyButton,
   SubscriptionExpHint,
@@ -36,7 +36,6 @@ import { useAuth } from "@/lib/auth";
 import { invalidateAdminCache } from "@/lib/admin-cache";
 import { planPagesSummary, sanitizePlanPages } from "@/lib/staff-access";
 import { ConfirmModal, Page } from "@/components/ui";
-import { ChevronLeft, Pencil } from "lucide-react";
 
 type OwnerResult = Awaited<ReturnType<typeof getOwnerAction>>;
 type TemplatesResult = Awaited<ReturnType<typeof listProductTemplatesAction>>;
@@ -177,13 +176,10 @@ export default function AdminBusinessDetailPage() {
   if (loadError || !owner) {
     return (
       <Page>
-        <Link
-          href="/admin/businesses"
-          className="text-[13px] text-[#171717]/70 hover:text-[#171717] mb-4 inline-flex items-center gap-1"
-        >
-          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-          Back to businesses
-        </Link>
+        <AdminPageHeader
+          title="Business not found"
+          back={{ href: "/admin/businesses", label: "All businesses" }}
+        />
         <p role="alert" className="text-sm text-[#a12b1f]">{loadError ?? "Business not found."}</p>
       </Page>
     );
@@ -198,38 +194,21 @@ export default function AdminBusinessDetailPage() {
 
   return (
     <Page>
-      <Link
-        href="/admin/businesses"
-        className="text-[13px] text-[#171717]/70 hover:text-[#171717] mb-4 inline-flex items-center gap-1"
-      >
-        <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-        Back to businesses
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl tracking-tight font-semibold text-[#171717] truncate">
-            {owner.business.name}
-          </h1>
-          <p className="text-[#171717]/70 text-[13px] mt-1 font-mono truncate">/{owner.business.slug}</p>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            <StatusBadge active={owner.active} />
-            <SubBadge active={subActive} status={owner.business.subscriptionStatus} />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-          <button type="button" className="btn-primary flex-1 sm:flex-none" onClick={() => setSubOpen(true)}>
-            Subscription
-          </button>
-          <button type="button" className="btn-ghost flex-1 sm:flex-none" onClick={() => setTemplatesOpen(true)}>
-            Templates
-          </button>
-          <button type="button" className="btn-ghost inline-flex items-center justify-center gap-2 flex-1 sm:flex-none" onClick={() => setEditOpen(true)}>
-            <Pencil className="w-4 h-4" aria-hidden="true" />
-            Edit
-          </button>
-          <div className="shrink-0">
+      <AdminPageHeader
+        title={owner.business.name}
+        meta={`/${owner.business.slug}`}
+        back={{ href: "/admin/businesses", label: "All businesses" }}
+        actions={
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <button type="button" className="btn-primary flex-1 sm:flex-none" onClick={() => setSubOpen(true)}>
+              Subscription
+            </button>
+            <button type="button" className="btn-ghost flex-1 sm:flex-none" onClick={() => setTemplatesOpen(true)}>
+              Templates
+            </button>
+            <button type="button" className="btn-ghost flex-1 sm:flex-none" onClick={() => setEditOpen(true)}>
+              Edit
+            </button>
             <ActionMenu
               items={[
                 { label: "Reset password", onClick: () => setResetOpen(true) },
@@ -260,8 +239,8 @@ export default function AdminBusinessDetailPage() {
               ]}
             />
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {actionError ? <p role="alert" className="text-sm text-[#a12b1f] mb-4">{actionError}</p> : null}
 
@@ -276,6 +255,9 @@ export default function AdminBusinessDetailPage() {
           <p className="text-[13px] text-[#171717]/70 mb-4">
             Credentials shared with the business owner.
           </p>
+          <DetailRow label="Login status">
+            <StatusBadge active={owner.active} />
+          </DetailRow>
           <DetailRow label="Owner name">{owner.name}</DetailRow>
           <DetailRow label="Email">{owner.email}</DetailRow>
           <DetailRow label="Password">
@@ -303,7 +285,7 @@ export default function AdminBusinessDetailPage() {
           <DetailRow label="Registered">{fmtDate(owner.createdAt)}</DetailRow>
           <DetailRow label="Business ID">
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="font-mono text-[13px] text-[#171717] break-all">{owner.business.id}</span>
+              <span className="text-[13px] text-[#171717] break-all">{owner.business.id}</span>
               <CopyButton text={owner.business.id} label="Copy ID" />
             </span>
           </DetailRow>

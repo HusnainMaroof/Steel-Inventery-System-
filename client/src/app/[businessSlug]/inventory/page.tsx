@@ -2,7 +2,7 @@
 import { BusinessLink } from "@/components/BusinessLink";
 import { useState, useMemo } from "react";
 import { useStore, type VariantStockRow } from "@/lib/store";
-import { Page, PageTitle, EmptyState, Modal, RowActionsMenu } from "@/components/ui";
+import { CustomSelect, EmptyState, Modal, Page, PageTitle, RowActionsMenu, SearchBar } from "@/components/ui";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Package, Search, Tag } from "lucide-react";
 import { dateInIsoRange } from "@/lib/date-range-filter";
@@ -209,10 +209,7 @@ export default function InventoryPage() {
 
   return (
     <Page>
-      <PageTitle
-        title="Inventory"
-        sub="What do I have, how much, and exactly which variant"
-      />
+      <PageTitle title="Inventory" />
 
       {/* tab switcher */}
       <div role="tablist" className="flex gap-6 border-b border-[#E5E5E5] mb-6">
@@ -226,77 +223,72 @@ export default function InventoryPage() {
         ))}
       </div>
 
-      {/* one row: search + filters */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-        <div className="relative flex-1 min-w-[200px]">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#171717] pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            placeholder={tab === "stock" ? "Search product, variant, attribute, lot, supplier…" : "Search movements…"}
-            aria-label="Search products"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9"
-          />
-        </div>
-        <select
+      {/* one toolbar: search + filters */}
+      <div className="mb-6 flex flex-col gap-2.5 rounded-2xl border border-[#E5E5E5] bg-white p-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <SearchBar
+          value={search}
+          onSearch={setSearch}
+          placeholder={tab === "stock" ? "Search product, variant, lot or supplier" : "Search movements"}
+          ariaLabel="Search products"
+          className="min-w-[240px] flex-1"
+        />
+        <CustomSelect
           value={productFilter}
-          onChange={(e) => { setProductFilter(e.target.value); setCategoryFilter("all"); }}
-          className="w-auto"
-          aria-label="Filter by product"
-        >
-          <option value="all">All Products</option>
-          {products.filter((p) => p.active !== false).map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+          onChange={(v) => { setProductFilter(v); setCategoryFilter("all"); }}
+          ariaLabel="Filter by product"
+          className="w-full sm:w-56"
+          options={[
+            { value: "all", label: "All Products" },
+            ...products.filter((p) => p.active !== false).map((p) => ({ value: p.id, label: p.name })),
+          ]}
+        />
         {tab === "stock" ? (
           <>
             {showCategoryFilter && (
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-auto"
-              aria-label="Filter by category"
-            >
-              <option value="all">All Categories</option>
-              {categoryOptions.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+              <CustomSelect
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+                ariaLabel="Filter by category"
+                className="w-full sm:w-52"
+                options={[
+                  { value: "all", label: "All Categories" },
+                  ...categoryOptions.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
             )}
-            <select
+            <CustomSelect
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "all" | StockStatus)}
-              className="w-auto"
-              aria-label="Filter by stock status"
-            >
-              <option value="all">All Status</option>
-              <option value="in">In Stock</option>
-              <option value="low">Low Stock</option>
-              <option value="out">Out of Stock</option>
-            </select>
+              onChange={(v) => setStatusFilter(v as "all" | StockStatus)}
+              ariaLabel="Filter by stock status"
+              className="w-full sm:w-44"
+              options={[
+                { value: "all", label: "All Status" },
+                { value: "in", label: "In Stock" },
+                { value: "low", label: "Low Stock" },
+                { value: "out", label: "Out of Stock" },
+              ]}
+            />
           </>
         ) : (
           <>
-            <select
+            <CustomSelect
               value={moveType}
-              onChange={(e) => setMoveType(e.target.value)}
-              className="w-auto"
-              aria-label="Filter by movement type"
-            >
-              <option value="all">All Movement Types</option>
-              <option value="PURCHASE_RECEIPT">Purchase</option>
-              <option value="SALE">Sale</option>
-            </select>
+              onChange={setMoveType}
+              ariaLabel="Filter by movement type"
+              className="w-full sm:w-52"
+              options={[
+                { value: "all", label: "All Movement Types" },
+                { value: "PURCHASE_RECEIPT", label: "Purchase" },
+                { value: "SALE", label: "Sale" },
+              ]}
+            />
             <DateRangePicker
               from={moveRange.from}
               to={moveRange.to}
               onChange={setMoveRange}
               placeholder="All dates"
               ariaLabel="Filter movements by date range"
+              className="w-full sm:w-auto"
             />
           </>
         )}
@@ -319,11 +311,11 @@ export default function InventoryPage() {
         ) : (
           <div className="space-y-6">
             {movementVariant && (
-              <div className="border border-[#E5E5E5] px-4 py-2.5 flex items-center justify-between gap-3 bg-[#F8F8F7]/50">
-                <span className="text-xs font-medium text-[#171717]">
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#E5E5E5] bg-white px-4 py-3">
+                <span className="text-[13px] font-semibold text-[#171717]">
                   Showing movements of one variant
                 </span>
-                <button onClick={() => setMovementVariant(null)} className="text-xs font-medium text-[#171717] hover:opacity-60">
+                <button onClick={() => setMovementVariant(null)} className="text-[13px] font-medium text-[#171717] hover:opacity-60">
                   Clear
                 </button>
               </div>
@@ -331,8 +323,8 @@ export default function InventoryPage() {
             {moveDateGroups.map(([date, items]) => (
               <div key={date}>
                 {/* date group header */}
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="text-sm font-bold text-[#171717]">{fmtDate(date)}</span>
+                <div className="mb-3 flex items-center gap-3">
+                  <span className="text-[15px] font-bold text-[#171717]">{fmtDate(date)}</span>
                   <div className="flex-1 border-b border-[#E5E5E5]" />
                 </div>
 
@@ -349,40 +341,40 @@ export default function InventoryPage() {
                     const refLabel = isIn ? (m.refLabel || "Purchase") : (m.refLabel || "Sale");
                     const refLink = m.purchaseId ? `/purchases/${m.purchaseId}` : m.saleId ? `/sales/${m.saleId}` : null;
                     return (
-                      <div key={m.id} className="hidden md:block border border-[#E5E5E5] bg-white">
-                        <div className="grid grid-cols-[84px_minmax(0,2fr)_98px_minmax(0,1fr)_94px] gap-2 px-3 lg:grid-cols-[100px_minmax(0,2fr)_110px_minmax(0,1fr)_110px] lg:gap-3 lg:px-4 py-2 text-xs uppercase tracking-wide text-[#171717] font-medium border-b border-[#E5E5E5]">
+                      <div key={m.id} className="hidden overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white md:block">
+                        <div className="grid grid-cols-[84px_minmax(0,2fr)_98px_minmax(0,1fr)_94px] gap-2 border-b border-[#E5E5E5] bg-white px-3 py-2 text-[13px] font-semibold normal-case tracking-normal text-[#171717] lg:grid-cols-[100px_minmax(0,2fr)_110px_minmax(0,1fr)_110px] lg:gap-3 lg:px-4">
                           <span>Type</span>
                           <span>Product</span>
                           <span className="text-right">Quantity</span>
                           <span>Reference</span>
                           <span className="text-right">Stock After</span>
                         </div>
-                        <div className="grid grid-cols-[84px_minmax(0,2fr)_98px_minmax(0,1fr)_94px] gap-2 px-3 lg:grid-cols-[100px_minmax(0,2fr)_110px_minmax(0,1fr)_110px] lg:gap-3 lg:px-4 py-3">
+                        <div className="grid grid-cols-[84px_minmax(0,2fr)_98px_minmax(0,1fr)_94px] gap-2 px-3 py-3 transition-colors hover:bg-[#FBFBFA] lg:grid-cols-[100px_minmax(0,2fr)_110px_minmax(0,1fr)_110px] lg:gap-3 lg:px-4">
                           <span className="self-center">
-                            <span className={`text-xs uppercase tracking-wide font-semibold px-2 py-0.5 rounded border ${isIn ? "text-[#171717] bg-[#E5E5E5] border-[#E5E5E5]" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
+                            <span className={`rounded border px-2 py-0.5 text-[12px] font-semibold ${isIn ? "border-[#E5E5E5] bg-[#E5E5E5] text-[#171717]" : "border-destructive/20 bg-destructive/10 text-destructive"}`}>
                               {isIn ? "Purchase" : "Sale"}
                             </span>
                           </span>
                           <div className="min-w-0 self-center">
-                            <span className="block font-medium text-xs text-[#171717] truncate">{prodName ?? "—"}</span>
-                            {cat && <span className="block text-xs text-[#171717] truncate">{cat.name}</span>}
+                            <span className="block truncate text-[13px] font-semibold text-[#171717]">{prodName ?? "—"}</span>
+                            {cat && <span className="block truncate text-[13px] text-[#171717]/70">{cat.name}</span>}
                             {attrs.map((a, i) => (
-                              <span key={i} className="block text-xs text-[#171717] truncate">
+                              <span key={i} className="block truncate text-[13px] text-[#171717]/70">
                                 {a.label}: {a.value}
                               </span>
                             ))}
                           </div>
-                          <span className={`text-right text-xs font-semibold tabular-nums self-center ${m.qty > 0 ? "text-[#171717]" : "text-destructive"}`}>
+                          <span className={`self-center text-right text-[13px] font-semibold tabular-nums ${m.qty > 0 ? "text-[#171717]" : "text-destructive"}`}>
                             {m.qty > 0 ? "+" : "−"}{fmtQtyWithUnit(Math.abs(m.qty), m.unit)}
                           </span>
-                          <span className="text-xs self-center">
+                          <span className="self-center text-[13px]">
                             {refLink ? (
                               <BusinessLink href={refLink} className="font-medium text-[#171717] underline underline-offset-2 hover:opacity-60">{refLabel}</BusinessLink>
                             ) : (
                               <span className="text-[#171717]">{refLabel}</span>
                             )}
                           </span>
-                          <span className="text-right text-xs font-medium tabular-nums text-[#171717] self-center">
+                          <span className="self-center text-right text-[13px] font-medium tabular-nums text-[#171717]">
                             {fmtQtyWithUnit(m.after, m.unit)}
                           </span>
                         </div>
@@ -404,27 +396,27 @@ export default function InventoryPage() {
                     const refLabel = isIn ? (m.refLabel || "Purchase") : (m.refLabel || "Sale");
                     const refLink = m.purchaseId ? `/purchases/${m.purchaseId}` : m.saleId ? `/sales/${m.saleId}` : null;
                     return (
-                      <div key={m.id} className="border border-[#E5E5E5] bg-white px-3 py-3">
+                      <div key={m.id} className="rounded-2xl border border-[#E5E5E5] bg-white p-4">
                         <div className="flex items-center justify-between gap-2">
-                          <span className={`text-xs uppercase tracking-wide font-semibold px-2 py-0.5 rounded border ${isIn ? "text-[#171717] bg-[#E5E5E5] border-[#E5E5E5]" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
+                          <span className={`rounded border px-2 py-0.5 text-[12px] font-semibold ${isIn ? "border-[#E5E5E5] bg-[#E5E5E5] text-[#171717]" : "border-destructive/20 bg-destructive/10 text-destructive"}`}>
                             {isIn ? "Purchase" : "Sale"}
                           </span>
-                          <span className="text-xs tabular-nums text-[#171717]">Stock after: {fmtQtyWithUnit(m.after, m.unit)}</span>
+                          <span className="text-[12px] tabular-nums text-[#171717]/70">Stock after: {fmtQtyWithUnit(m.after, m.unit)}</span>
                         </div>
-                        <div className="min-w-0 mt-1.5">
-                          <span className="block font-medium text-xs text-[#171717] truncate">{prodName ?? "—"}</span>
-                          {cat && <span className="block text-xs text-[#171717] truncate">{cat.name}</span>}
+                        <div className="mt-1.5 min-w-0">
+                          <span className="block truncate text-[13px] font-semibold text-[#171717]">{prodName ?? "—"}</span>
+                          {cat && <span className="block truncate text-[13px] text-[#171717]/70">{cat.name}</span>}
                           {attrs.map((a, i) => (
-                            <span key={i} className="block text-xs text-[#171717] truncate">
+                            <span key={i} className="block truncate text-[13px] text-[#171717]/70">
                               {a.label}: {a.value}
                             </span>
                           ))}
                         </div>
-                        <div className="flex items-center justify-between gap-3 mt-2">
+                        <div className="mt-2 flex items-center justify-between gap-3">
                           <span className={`text-sm font-semibold tabular-nums ${m.qty > 0 ? "text-[#171717]" : "text-destructive"}`}>
                             {m.qty > 0 ? "+" : "−"}{fmtQtyWithUnit(Math.abs(m.qty), m.unit)}
                           </span>
-                          <div className="text-xs">
+                          <div className="text-[13px]">
                             {refLink ? (
                               <BusinessLink href={refLink} className="font-medium text-[#171717] underline underline-offset-2">{refLabel}</BusinessLink>
                             ) : (
@@ -445,17 +437,17 @@ export default function InventoryPage() {
         <>
           {/* top summary — variants count + per-product totals (never one mixed-unit total) */}
           {filtered.length > 0 && (
-            <div className="border border-[#E5E5E5] bg-white rounded-xl p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#E5E5E5] bg-white p-5">
               <div>
-                <span className="block text-xs uppercase tracking-wide text-[#171717]/60">In-stock variants</span>
-                <span className="block text-xl font-semibold tabular-nums text-[#171717] mt-1">{inStockCount}</span>
+                <span className="block text-[14px] font-semibold text-[#171717]">In-stock variants</span>
+                <span className="mt-1 block text-[24px] font-bold tabular-nums text-[#171717]">{inStockCount}</span>
               </div>
               <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
                 {groups.map((g) => (
                   <div key={g.product}>
-                    <span className="block text-xs uppercase tracking-wide text-[#171717]/60">{g.product}</span>
-                    <span className="block text-sm font-semibold tabular-nums text-[#171717] mt-0.5">{fmtQtyWithUnit(g.qty, g.unit)}</span>
-                    <span className="block text-[13px] text-[#171717]/70 tabular-nums">{fmtMoney(g.value)}</span>
+                    <span className="block text-[14px] font-semibold text-[#171717]">{g.product}</span>
+                    <span className="mt-0.5 block text-[15px] font-bold tabular-nums text-[#171717]">{fmtQtyWithUnit(g.qty, g.unit)}</span>
+                    <span className="block text-[13px] tabular-nums text-[#171717]/70">{fmtMoney(g.value)}</span>
                   </div>
                 ))}
               </div>
@@ -481,17 +473,17 @@ export default function InventoryPage() {
               {groups.map((g) => (
                 <div key={g.product}>
                   {/* product group header */}
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-sm font-semibold text-[#171717]">{g.product}</span>
+                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-[15px] font-bold text-[#171717]">{g.product}</span>
                     <span className="text-[13px] text-[#171717]/70">{g.rows.length} variant{g.rows.length > 1 ? "s" : ""}</span>
-                    <div className="flex-1 border-b border-[#E5E5E5]" />
-                    <span className="text-sm font-semibold tabular-nums text-[#171717]">{fmtQtyWithUnit(g.qty, g.unit)}</span>
-                    <span className="text-[13px] text-[#171717]/70 tabular-nums">{fmtMoney(g.value)}</span>
+                    <div className="min-w-[2rem] flex-1 border-b border-[#E5E5E5]" />
+                    <span className="text-[15px] font-bold tabular-nums text-[#171717]">{fmtQtyWithUnit(g.qty, g.unit)}</span>
+                    <span className="text-[13px] tabular-nums text-[#171717]/70">{fmtMoney(g.value)}</span>
                   </div>
 
-                  <div className="border border-[#E5E5E5] bg-white rounded-xl">
+                  <div className="overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white">
                     {/* desktop header */}
-                    <div className="hidden sm:grid grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 px-3 md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4 py-2 text-xs uppercase tracking-wide font-medium text-[#171717]/60 border-b border-[#E5E5E5] bg-[#FAFAF9]">
+                    <div className="hidden grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 border-b border-[#E5E5E5] bg-white px-3 py-2 text-[13px] font-semibold normal-case tracking-normal text-[#171717] sm:grid md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4">
                       <span>Product</span>
                       <span className="text-right">Available Stock</span>
                       <span className="text-right">Stock Value</span>
@@ -517,73 +509,73 @@ export default function InventoryPage() {
                           {/* desktop row */}
                           <div
                             onClick={() => setDetail(r)}
-                            className="hidden sm:grid grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 px-3 md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4 py-3 border-b border-[#E5E5E5] last:border-b-0 cursor-pointer hover:bg-[#F8F8F7] transition-colors"
+                            className="hidden cursor-pointer grid-cols-[minmax(0,2fr)_112px_120px_50px_40px] gap-2 border-b border-[#E5E5E5] px-3 py-3 transition-colors last:border-b-0 hover:bg-[#FBFBFA] sm:grid md:grid-cols-[minmax(0,2fr)_140px_140px_70px_44px] md:gap-3 md:px-4"
                           >
                             {/* variant identity: category header + every attribute, dynamic */}
                             <div className="min-w-0">
                               {r.category ? (
-                                <span className="block text-sm font-medium text-[#171717] truncate">{r.category}</span>
+                                <span className="block truncate text-sm font-semibold text-[#171717]">{r.category}</span>
                               ) : attrs.length === 0 ? (
-                                <span className="block text-sm font-medium text-[#171717] truncate">{r.shortName}</span>
+                                <span className="block truncate text-sm font-semibold text-[#171717]">{r.shortName}</span>
                               ) : null}
                               {attrs.map((a, i) => (
-                                <span key={i} className="block text-[13px] text-[#171717]/70 truncate">
+                                <span key={i} className="block truncate text-[13px] text-[#171717]/70">
                                   {a.label ? `${a.label}: ${a.value}` : a.value}
                                 </span>
                               ))}
                             </div>
                             <div className="self-center text-right">
-                              <span className={`block font-semibold text-sm tabular-nums ${st === "out" ? "text-destructive" : "text-[#171717]"}`}>
+                              <span className={`block text-sm font-semibold tabular-nums ${st === "out" ? "text-destructive" : "text-[#171717]"}`}>
                                 {fmtQtyWithUnit(r.stockQty, r.unit)}
                               </span>
                               <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${st === "in" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                                <span className={`inline-block w-1 h-1 rounded-full ${st === "in" ? "bg-success" : "bg-destructive"}`} />
+                                <span className={`inline-block h-1 w-1 rounded-full ${st === "in" ? "bg-success" : "bg-destructive"}`} />
                                 {STATUS_LABEL[st]}
                               </span>
                             </div>
-                            <span className="self-center text-right text-xs font-medium tabular-nums text-[#171717]">
+                            <span className="self-center text-right text-[13px] font-medium tabular-nums text-[#171717]">
                               {st === "out" ? "—" : fmtMoney(r.stockValue)}
                             </span>
-                            <span className="self-center text-right text-xs tabular-nums text-[#171717]">{lots.length}</span>
-                            <span className="self-center flex justify-end">{menu}</span>
+                            <span className="self-center text-right text-[13px] tabular-nums text-[#171717]">{lots.length}</span>
+                            <span className="flex justify-end self-center">{menu}</span>
                           </div>
 
                           {/* mobile card */}
                           <div
                             onClick={() => setDetail(r)}
-                            className="sm:hidden px-4 py-4 border-b border-[#E5E5E5] last:border-b-0 cursor-pointer active:bg-[#F8F8F7]"
+                            className="cursor-pointer border-b border-[#E5E5E5] px-4 py-4 transition-colors last:border-b-0 active:bg-[#F8F8F7] sm:hidden"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 {r.category ? (
-                                  <span className="block text-sm font-medium text-[#171717] truncate">{r.category}</span>
+                                  <span className="block truncate text-sm font-semibold text-[#171717]">{r.category}</span>
                                 ) : attrs.length === 0 ? (
-                                  <span className="block text-sm font-medium text-[#171717] truncate">{r.shortName}</span>
+                                  <span className="block truncate text-sm font-semibold text-[#171717]">{r.shortName}</span>
                                 ) : null}
                                 {attrs.map((a, i) => (
-                                  <span key={i} className="block text-[13px] text-[#171717]/70 truncate">
+                                  <span key={i} className="block truncate text-[13px] text-[#171717]/70">
                                     {a.label ? `${a.label}: ${a.value}` : a.value}
                                   </span>
                                 ))}
                               </div>
                               {menu}
                             </div>
-                            <div className="flex items-end justify-between gap-3 mt-2.5">
+                            <div className="mt-2.5 flex items-end justify-between gap-3">
                               <div>
-                                <span className={`block font-semibold text-sm tabular-nums ${st === "out" ? "text-destructive" : "text-[#171717]"}`}>
+                                <span className={`block text-sm font-semibold tabular-nums ${st === "out" ? "text-destructive" : "text-[#171717]"}`}>
                                   {fmtQtyWithUnit(r.stockQty, r.unit)}
                                 </span>
                                 <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${st === "in" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                                  <span className={`inline-block w-1 h-1 rounded-full ${st === "in" ? "bg-success" : "bg-destructive"}`} />
+                                  <span className={`inline-block h-1 w-1 rounded-full ${st === "in" ? "bg-success" : "bg-destructive"}`} />
                                   {STATUS_LABEL[st]}
                                 </span>
                               </div>
                               <div className="text-right">
-                                <span className="block text-xs uppercase tracking-wide text-[#171717]/60">Stock Value</span>
-                                <span className="block text-xs font-medium tabular-nums text-[#171717]">
+                                <span className="block text-[12px] font-semibold text-[#171717]/70">Stock Value</span>
+                                <span className="block text-[13px] font-semibold tabular-nums text-[#171717]">
                                   {st === "out" ? "—" : fmtMoney(r.stockValue)}
                                 </span>
-                                <span className="block text-xs tabular-nums text-[#171717] mt-0.5">{lots.length} lot{lots.length === 1 ? "" : "s"}</span>
+                                <span className="mt-0.5 block text-[12px] tabular-nums text-[#171717]/70">{lots.length} lot{lots.length === 1 ? "" : "s"}</span>
                               </div>
                             </div>
                           </div>
@@ -614,59 +606,59 @@ export default function InventoryPage() {
           return (
             <div>
               {/* identity */}
-              <div className="border border-[#E5E5E5] mb-4">
-                <div className="px-4 py-3 border-b border-[#E5E5E5]">
+              <div className="mb-4 overflow-hidden rounded-2xl border border-[#E5E5E5]">
+                <div className="border-b border-[#E5E5E5] px-4 py-3">
                   {attrs.length > 0 ? (
                     attrs.map((a, i) => (
-                      <span key={i} className="block text-xs text-[#171717]">
+                      <span key={i} className="block text-[13px] text-[#171717]">
                         {a.label ? `${a.label}: ${a.value}` : a.value}
                       </span>
                     ))
                   ) : (
-                    <span className="block text-xs text-[#171717]">{r.shortName}</span>
+                    <span className="block text-[13px] text-[#171717]">{r.shortName}</span>
                   )}
                 </div>
-                <div className="flex justify-between items-center px-4 py-3">
-                  <span className="text-xs uppercase tracking-wide font-medium text-[#171717]">Available Stock</span>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[14px] font-semibold text-[#171717]">Available Stock</span>
                   <span className="flex items-baseline gap-3">
                     <span className="text-xl font-bold tabular-nums text-[#171717]">{fmtQtyWithUnit(r.stockQty, r.unit)}</span>
-                    <span className={`text-xs ${st === "in" ? "text-[#171717]" : "text-destructive"}`}>● {STATUS_LABEL[st]}</span>
+                    <span className={`text-[12px] font-medium ${st === "in" ? "text-[#171717]" : "text-destructive"}`}>● {STATUS_LABEL[st]}</span>
                   </span>
                 </div>
-                <div className="flex justify-between items-center px-4 py-3 border-t border-[#E5E5E5]">
-                  <span className="text-xs uppercase tracking-wide font-medium text-[#171717]">Lots</span>
-                  <span className="text-xs font-bold tabular-nums text-[#171717]">{lots.length} active lot{lots.length === 1 ? "" : "s"}</span>
+                <div className="flex items-center justify-between border-t border-[#E5E5E5] px-4 py-3">
+                  <span className="text-[14px] font-semibold text-[#171717]">Lots</span>
+                  <span className="text-[13px] font-bold tabular-nums text-[#171717]">{lots.length} active lot{lots.length === 1 ? "" : "s"}</span>
                 </div>
               </div>
 
               {/* lots */}
-              <p className="text-xs uppercase tracking-wide font-medium text-[#171717] mb-2">Lots</p>
-              <div className="border border-[#E5E5E5] mb-4">
+              <p className="mb-2 text-[16px] font-bold text-[#171717]">Lots</p>
+              <div className="mb-4 overflow-hidden rounded-2xl border border-[#E5E5E5]">
                 {lots.length === 0 ? (
-                  <p className="px-4 py-3 text-xs text-[#171717]">No stock left — all lots of this variant are sold.</p>
+                  <p className="px-4 py-3 text-[13px] text-[#171717]/70">No stock left, all lots of this variant are sold.</p>
                 ) : (
                   lots.map((l) => {
                     const purchased = purchases
                       .filter((p) => purchaseParentId(p) === l.purchaseId)
                       .reduce((sum, p) => sum + p.qty, 0);
                     return (
-                      <div key={l.purchaseId} className="px-4 py-3 border-b border-[#E5E5E5] last:border-b-0">
-                        <div className="flex justify-between items-center gap-3">
-                          <span className="text-xs font-bold text-[#171717] font-mono">
+                      <div key={l.purchaseId} className="border-b border-[#E5E5E5] px-4 py-3 last:border-b-0">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[13px] font-bold text-[#171717]">
                             {l.lotNumber || l.heatNumber || l.batchNumber || "Lot"}
                           </span>
-                          <span className="text-xs font-medium tabular-nums text-[#171717]">{fmtQtyWithUnit(l.remainingQty, l.unit)} left</span>
+                          <span className="text-[13px] font-medium tabular-nums text-[#171717]">{fmtQtyWithUnit(l.remainingQty, l.unit)} left</span>
                         </div>
-                        <div className="flex justify-between items-center gap-3 mt-1 text-xs text-[#171717]">
+                        <div className="mt-1 flex items-center justify-between gap-3 text-[12px] text-[#171717]/70">
                           <span>Supplier: {l.supplierName}</span>
                           <span>{fmtDate(l.purchasedAt)}</span>
                         </div>
-                        <div className="flex justify-between items-center gap-3 mt-0.5 text-xs text-[#171717]">
+                        <div className="mt-0.5 flex items-center justify-between gap-3 text-[12px] text-[#171717]/70">
                           <span>{purchased !== undefined ? `Purchased: ${fmtQtyWithUnit(purchased, l.unit)}` : "—"}</span>
                           <span>Landed: {fmtRateWithUnit(l.landedPerUnit)}</span>
                         </div>
                         {(l.warehouseId || l.locationId) && (
-                          <p className="text-xs text-[#171717] mt-0.5">
+                          <p className="mt-0.5 text-[12px] text-[#171717]/70">
                             {[whName(l.warehouseId), locName(l.locationId)].filter(Boolean).join(" / ")}
                           </p>
                         )}
@@ -677,18 +669,18 @@ export default function InventoryPage() {
               </div>
 
               {/* recent movements */}
-              <p className="text-xs uppercase tracking-wide font-medium text-[#171717] mb-2">Recent Movements</p>
-              <div className="border border-[#E5E5E5]">
+              <p className="mb-2 text-[16px] font-bold text-[#171717]">Recent Movements</p>
+              <div className="overflow-hidden rounded-2xl border border-[#E5E5E5]">
                 {moves.length === 0 ? (
-                  <p className="px-4 py-3 text-xs text-[#171717]">No movements recorded yet.</p>
+                  <p className="px-4 py-3 text-[13px] text-[#171717]/70">No movements recorded yet.</p>
                 ) : (
                   moves.map((m) => (
-                    <div key={m.id} className="flex justify-between items-center gap-3 px-4 py-2.5 border-b border-[#E5E5E5] last:border-b-0">
+                    <div key={m.id} className="flex items-center justify-between gap-3 border-b border-[#E5E5E5] px-4 py-2.5 last:border-b-0">
                       <span className={`text-sm font-semibold tabular-nums ${m.qty > 0 ? "text-[#171717]" : "text-destructive"}`}>
                         {m.qty > 0 ? "+" : "−"}{fmtQtyWithUnit(Math.abs(m.qty), m.unit)}
                       </span>
-                      <span className="text-xs text-[#171717]">{m.type === "PURCHASE_RECEIPT" ? "Purchase" : m.type === "SALE" ? "Sale" : m.type}</span>
-                      <span className="text-xs text-[#171717] tabular-nums">{fmtDate(m.date)}</span>
+                      <span className="text-[13px] text-[#171717]/70">{m.type === "PURCHASE_RECEIPT" ? "Purchase" : m.type === "SALE" ? "Sale" : m.type}</span>
+                      <span className="text-[13px] tabular-nums text-[#171717]/70">{fmtDate(m.date)}</span>
                     </div>
                   ))
                 )}

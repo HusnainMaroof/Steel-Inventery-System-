@@ -78,7 +78,7 @@ export function BillingCycleBadge({
   const meta = billingCycleMeta(cycle);
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-0.5 text-xs font-medium text-[#171717]"
+      className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-xs font-medium text-[#171717]"
     >
       {meta.short}
       {cycle === "CUSTOM_DAYS" && durationDays ? ` · ${durationDays}d` : ""}
@@ -106,7 +106,7 @@ function BillingCyclePicker({
             className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
               active
                 ? "border-[#171717] bg-[#F8F8F7] ring-1 ring-primary/20"
-                : "border-[#E5E5E5] bg-white hover:border-[#c9c9c9]"
+                : "border-line bg-white hover:border-[#c9c9c9]"
             }`}
           >
             <span className="flex items-center justify-between gap-2">
@@ -133,20 +133,20 @@ export function SubscriptionPlanTable({
   return (
     <>
       {/* Desktop table */}
-      <div className="hidden md:block rounded-xl border border-[#E5E5E5] bg-white overflow-hidden">
+      <div className="hidden md:block rounded-2xl border border-line bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-left">
             <thead>
-              <tr className="bg-[#FAFAF9] border-b border-[#E5E5E5]">
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Plan</th>
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Billing</th>
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Modules</th>
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Price</th>
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide text-[#171717]/60 font-medium">Status</th>
-                <th className="px-4 py-2.5 text-xs uppercase tracking-wide text-[#171717]/60 font-medium text-right">Action</th>
+              <tr className="bg-[#FAFAF9] border-b border-line">
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink">Plan</th>
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink">Billing</th>
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink">Modules</th>
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink">Price</th>
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink">Status</th>
+                <th className="px-4 py-3 text-[13px] font-semibold normal-case tracking-normal text-ink text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E5E5E5]">
+            <tbody className="divide-y divide-line">
               {plans.map((plan) => {
                 const m = modulesSummary(plan);
                 return (
@@ -156,7 +156,7 @@ export function SubscriptionPlanTable({
                     className="cursor-pointer hover:bg-[#F8F8F7]"
                   >
                     <td className="px-4 py-3">
-                      <p className="text-sm font-semibold text-[#171717]">{plan.label}</p>
+                      <p className="text-[15px] font-bold text-ink">{plan.label}</p>
                       {plan.description ? (
                         <p className="text-[13px] text-[#171717]/70 mt-0.5">{plan.description}</p>
                       ) : null}
@@ -204,12 +204,12 @@ export function SubscriptionPlanTable({
           return (
             <li
               key={plan.id}
-              className="rounded-xl border border-[#E5E5E5] bg-white p-4 cursor-pointer hover:bg-[#F8F8F7]"
+              className="rounded-2xl border border-line bg-white p-4 cursor-pointer hover:bg-[#F8F8F7]"
               onClick={() => onEdit(plan)}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[#171717]">{plan.label}</p>
+                  <p className="text-[15px] font-bold text-ink">{plan.label}</p>
                   {plan.description ? (
                     <p className="text-[13px] text-[#171717]/70 mt-0.5 leading-snug">{plan.description}</p>
                   ) : null}
@@ -224,7 +224,7 @@ export function SubscriptionPlanTable({
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                 <div>
-                  <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Billing</dt>
+                  <dt className="text-[13px] font-semibold normal-case tracking-normal text-ink">Billing</dt>
                   <dd className="mt-1">
                     <div className="flex items-center gap-2">
                       <BillingCycleBadge cycle={plan.billingCycle} durationDays={plan.durationDays} />
@@ -233,13 +233,13 @@ export function SubscriptionPlanTable({
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Price</dt>
+                  <dt className="text-[13px] font-semibold normal-case tracking-normal text-ink">Price</dt>
                   <dd className="mt-1 text-[#171717] tabular-nums">
                     {plan.price != null && plan.price !== "" ? planPrice(plan) : <span className="text-[#171717]/60">Not set</span>}
                   </dd>
                 </div>
                 <div className="col-span-2">
-                  <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Modules</dt>
+                  <dt className="text-[13px] font-semibold normal-case tracking-normal text-ink">Modules</dt>
                   <dd className="mt-1" title={m.full}>
                     <p className="text-[#171717]">{m.label}</p>
                     {m.missing.length > 0 ? (
@@ -250,7 +250,7 @@ export function SubscriptionPlanTable({
                   </dd>
                 </div>
                 <div className="col-span-2">
-                  <dt className="text-xs uppercase tracking-wide text-[#171717]/60">Status</dt>
+                  <dt className="text-[13px] font-semibold normal-case tracking-normal text-ink">Status</dt>
                   <dd className="mt-1">
                     <StatusPill active={plan.active} />
                   </dd>
@@ -517,7 +517,7 @@ export function SubscriptionPlanModal({
                     className={
                       selected
                         ? "flex w-full items-center justify-center h-10 px-3 rounded-lg bg-ink text-white text-[13px] font-medium"
-                        : "flex w-full items-center justify-center h-10 px-3 rounded-lg border border-[#E5E5E5] bg-white text-[#171717] text-[13px] font-medium hover:bg-[#F8F8F7]"
+                        : "flex w-full items-center justify-center h-10 px-3 rounded-lg border border-line bg-white text-[#171717] text-[13px] font-medium hover:bg-[#F8F8F7]"
                     }
                   >
                     {panelPageLabel(page)}
