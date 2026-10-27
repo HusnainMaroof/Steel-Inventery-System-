@@ -13,7 +13,16 @@
   --color-success: #2e6b2e;
   --color-destructive: #a12b1f;
   --color-warning: #8a5a00;
+  /* Public pages: the dark landing panel (Stock / Payments / Sales), its
+     mint accent (only on the panel) and the green light behind the tiles. */
+  --color-panel: #0b0f0c;
+  --color-mint: #3cdc82;
+  --color-mint-hover: #33c472;
+  --color-glow: #1fae5c;
+  --color-canvas: #f8f8f7;
+  --color-line: #e5e5e5;
 
+  --animate-marquee: marquee 38s linear infinite;
   --animate-rise: rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-fade: fade 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-headline-in: headline-in 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -28,6 +37,15 @@
   --animate-feature-float-left: feature-float-left 4.8s ease-in-out infinite;
   --animate-feature-float-center: feature-float-center 5.5s ease-in-out 0.4s infinite;
   --animate-feature-float-right: feature-float-right 4.2s ease-in-out 0.8s infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-33.333%);
+    }
+  }
 
   @keyframes rise {
     from {
@@ -488,6 +506,10 @@ a {
 /* Marketing visuals are implemented with component-scoped Tailwind classes. */
 
 @media print {
+  html,
+  body {
+    background: #fff !important;
+  }
   body * {
     visibility: hidden;
   }
@@ -561,3 +583,58 @@ a {
   }
 }
 
+
+/* Scroll reveal for public pages (class "reveal"). CSS scroll-driven, so the
+   content is never hidden when the browser lacks support or the user
+   prefers less motion. */
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 10% entry 75%;
+    }
+  }
+}
+
+/* Steps line on public pages: draws from left to right as it scrolls in. */
+@keyframes line-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .steps-line {
+      transform-origin: left;
+      animation: line-in linear both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 45%;
+    }
+  }
+}
+
+/* Progress line under the active sample ledger on the landing page. */
+@keyframes progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}

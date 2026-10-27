@@ -41,7 +41,7 @@ export function RevenueBySource() {
             ))}
           </g>
           <text x="90" y="86" textAnchor="middle" fill="#111" fontSize="15" fontWeight="700">
-            ₹7,93,981
+            Rs 7,93,981
           </text>
           <text x="90" y="106" textAnchor="middle" fill="#171717" opacity="0.62" fontSize="10">
             Total Revenue

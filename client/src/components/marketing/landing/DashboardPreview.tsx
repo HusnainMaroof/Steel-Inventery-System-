@@ -7,7 +7,7 @@ import { RevenueOverview } from "@/components/marketing/landing/RevenueOverview"
 const kpis = [
   {
     label: "Total revenue",
-    value: "₹7,93,981",
+    value: "Rs 7,93,981",
     change: "+12%",
     direction: "up",
     tone: "revenue",
@@ -45,7 +45,7 @@ export function DashboardPreview() {
       className="relative z-[5] mx-auto mt-[18px] w-full rounded-[16px] border border-[rgba(23,23,23,0.2)] bg-white shadow-[0_15px_40px_rgba(0,0,0,0.06),0_35px_80px_rgba(0,0,0,0.12)]"
       id="product"
     >
-      <div className="grid h-[80vh] grid-cols-[172px_minmax(0,1fr)] overflow-hidden rounded-[16px] bg-white max-[1024px]:grid-cols-[156px_minmax(0,1fr)] max-[640px]:grid-cols-1" aria-hidden="true">
+      <div className="grid h-[min(80vh,640px)] grid-cols-[172px_minmax(0,1fr)] max-[640px]:h-auto overflow-hidden rounded-[16px] bg-white max-[1024px]:grid-cols-[156px_minmax(0,1fr)] max-[640px]:grid-cols-1" aria-hidden="true">
         <DashboardSidebar />
         <div className="flex min-h-0 min-w-0 flex-col bg-[#F8F8F7] px-5 pt-4 pb-4">
           <DashboardHeader />
@@ -58,12 +58,12 @@ export function DashboardPreview() {
               01 Jan 2024 – 31 Dec 2024
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-4 gap-3 max-[768px]:grid-cols-2">
+          <div className="mt-4 grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2">
             {kpis.map((kpi) => (
               <DashboardKpi key={kpi.label} {...kpi} />
             ))}
           </div>
-          <div className="mt-3 grid min-h-0 flex-1 grid-cols-[1.45fr_0.8fr] gap-3 max-[768px]:grid-cols-1">
+          <div className="mt-3 grid min-h-0 flex-1 grid-cols-[1.45fr_0.8fr] gap-3 max-[900px]:grid-cols-1">
             <RevenueOverview />
             <RevenueBySource />
           </div>

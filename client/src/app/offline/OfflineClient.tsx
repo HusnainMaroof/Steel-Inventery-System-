@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { TijarattBrand } from "@/components/marketing/PublicChrome";
+import { Panel, btnOnPanel, btnGhostOnPanel, panelEyebrow } from "@/components/marketing/PublicKit";
 import { probeAppHealth } from "@/lib/server-offline";
 
 const OFFLINE_RETRY_INTERVAL_MS = 60_000;
@@ -60,7 +61,7 @@ export function OfflineClient() {
   }, [retry]);
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-primary/10 px-5 py-8 sm:px-6">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-canvas px-5 py-8 sm:px-6">
       <Link
         href="/"
         className="relative z-10 w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary"
@@ -69,46 +70,52 @@ export function OfflineClient() {
         <TijarattBrand />
       </Link>
 
-      <div className="relative z-10 m-auto w-full max-w-[560px] py-12 text-center">
-        <p className="font-mono text-[12px] font-medium tracking-[-0.03em] text-primary">
-          CONNECTION STATUS / OFFLINE
-        </p>
-        <h1 className="mt-4 text-[clamp(42px,7vw,64px)] font-semibold leading-[1.03] tracking-[-0.037em] text-ink">
-          The server is taking a moment.
-        </h1>
-        <p className="mx-auto mt-5 max-w-[480px] text-[15px] leading-[1.63] text-[#171717]/80">
-          Tijartt cannot reach the business server right now. Your records
-          are safe, and this page will retry automatically.
-        </p>
-        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <button
-            type="button"
-            disabled={checking}
-            onClick={() => void retry()}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-primary bg-[#FCFCFB] px-7 text-[14px] font-medium text-primary hover:bg-primary hover:text-white focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
-          >
-            <RefreshCw className={checking ? "animate-spin" : ""} size={15} />
-            {checking ? "Checking…" : "Try again"}
-          </button>
-          <Link
-            href="/"
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#E5E5E5] bg-white/70 px-7 text-[14px] font-medium text-ink hover:border-primary hover:text-primary"
-          >
-            Back to home
-          </Link>
-        </div>
-        <p className="mt-7 text-xs leading-[1.6] text-[#171717]/70">
+      <div className="relative z-10 m-auto w-full max-w-[640px] py-10 text-center">
+        <Panel className="motion-safe:animate-rise">
+          <div className="px-6 py-12 sm:px-12 sm:py-16">
+            <p className={`${panelEyebrow} motion-safe:animate-rise motion-safe:[animation-delay:120ms]`}>
+              Connection status / offline
+            </p>
+            <h1 className="mt-4 text-[clamp(36px,6vw,60px)] font-medium leading-[1.04] tracking-[-0.03em] text-white motion-safe:animate-rise motion-safe:[animation-delay:240ms]">
+              The server is taking a moment.
+            </h1>
+            <p className="mt-5 max-w-[480px] mx-auto text-[15px] leading-[1.63] text-white motion-safe:animate-rise motion-safe:[animation-delay:360ms]">
+              Tijartt cannot reach the business server right now. Your records
+              are safe, and this page will retry automatically.
+            </p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row motion-safe:animate-rise motion-safe:[animation-delay:480ms]">
+              <button
+                type="button"
+                disabled={checking}
+                onClick={() => void retry()}
+                className={`${btnOnPanel} w-full sm:w-auto`}
+              >
+                <RefreshCw className={checking ? "animate-spin" : ""} size={15} />
+                {checking ? "Checking…" : "Try again"}
+              </button>
+              <Link
+                href="/"
+                className={`${btnGhostOnPanel} w-full sm:w-auto`}
+              >
+                Back to home
+              </Link>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="relative z-10 text-center py-8">
+        <p className="text-xs leading-[1.6] text-[#171717]/70">
           Running Tijartt locally? Start{" "}
-          <code className="rounded-md border border-[#E5E5E5] bg-white/70 px-1.5 py-1 font-mono text-xs text-[#171717]/80">
+          <code className="rounded-md border border-line bg-white/70 px-1.5 py-1 font-mono text-xs text-[#171717]/80">
             npm run start:dev
           </code>{" "}
           in the server folder.
         </p>
+        <p className="mt-2 text-[13px] text-[#171717]/70">
+          Retries every 60 seconds.
+        </p>
       </div>
-
-      <p className="relative z-10 text-center font-mono text-xs text-[#171717]/70">
-        AUTOMATIC RETRY RUNS EVERY 60 SECONDS
-      </p>
     </main>
   );
 }

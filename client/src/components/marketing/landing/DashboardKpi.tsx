@@ -23,7 +23,7 @@ export function DashboardKpi({
   return (
     <article className="rounded-[8px] border border-[#E5E5E5] bg-white px-3.5 pt-3.5 pb-3">
       <p className="m-0 text-[12px] font-semibold tracking-[0.08em] text-[rgba(23,23,23,0.62)] uppercase">{label}</p>
-      <p className="mt-2 mb-0 text-[32px] font-semibold tracking-[-0.03em] text-[#111] tabular-nums max-[640px]:text-[24px]">{value}</p>
+      <p className="mt-2 mb-0 text-[32px] font-semibold tracking-[-0.03em] text-[#111] whitespace-nowrap tabular-nums max-[640px]:text-[22px] max-[420px]:text-[19px]">{value}</p>
       <div className="mt-2.5 flex items-end justify-between gap-2">
         <span className={`text-[13px] font-semibold ${direction === "up" ? "text-[#17824A]" : "text-[#D97706]"}`}>{change}</span>
         <svg className="h-7 w-[64px]" viewBox="0 0 54 22" aria-hidden="true">

@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { CookieNotice } from "@/components/marketing/CookieNotice";
 import { TijarattBrand } from "@/components/marketing/PublicChrome";
+import { Panel, TextLink, btnPrimary } from "@/components/marketing/PublicKit";
+import { ScrollFocusImage } from "@/components/motion/ScrollFocusImage";
 import { homeFor, useAuth } from "@/lib/auth";
 import { isServerUnavailableMessage, redirectToOfflinePage } from "@/lib/server-offline";
 
@@ -72,27 +75,26 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="grid min-h-screen bg-[#FCFCFB] lg:grid-cols-[.82fr_1.18fr]">
-      <section className="flex min-h-screen flex-col px-5 py-7 sm:px-10 sm:py-9 lg:px-[clamp(40px,6vw,88px)]">
-        <Link
-          href="/"
-          className="w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary"
-          aria-label="Tijartt home"
-        >
-          <TijarattBrand />
-        </Link>
-        <div className="my-auto w-full max-w-[430px] self-center py-12">
-          <div className="mb-8">
-            <p className="font-mono text-xs font-medium text-primary">
-              SECURE SIGN IN
-            </p>
-            <h1 className="mt-4 text-[40px] font-semibold leading-[1.05] tracking-[-0.037em] text-ink">
-              Welcome back.
-            </h1>
-            <p className="mt-3 text-[14px] leading-[1.6] text-[#171717]/70">
-              Use the email and password provided for your business.
-            </p>
-          </div>
+    <main className="grid min-h-screen bg-canvas lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <section className="flex min-h-screen flex-col px-5 py-5 sm:px-10 lg:px-14">
+        <header className="flex items-center justify-between gap-4">
+          <Link
+            href="/"
+            className="w-fit rounded-xl focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary"
+            aria-label="Tijartt home"
+          >
+            <TijarattBrand />
+          </Link>
+          <TextLink href="/">Back to home</TextLink>
+        </header>
+
+        <div className="my-auto w-full max-w-[400px] self-center py-14">
+          <h1 className="text-[34px] leading-[1.1] font-semibold tracking-[-0.035em] text-ink motion-safe:animate-rise">
+            Sign in
+          </h1>
+          <p className="mt-2 mb-8 text-[15px] leading-[1.55] text-[#171717]/70 motion-safe:animate-rise motion-safe:[animation-delay:100ms]">
+            With the login your business was given.
+          </p>
 
           {error ? (
             <div
@@ -105,7 +107,7 @@ export default function LoginPage() {
 
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <div>
-              <label className="!mb-2 !text-xs !tracking-[.08em] !text-[#171717]/80" htmlFor="email">
+              <label className="!mb-2 !text-[13px] !font-medium !normal-case !tracking-normal !text-[#171717]/80" htmlFor="email">
                 Email
               </label>
               <input
@@ -123,7 +125,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="!mb-2 !text-xs !tracking-[.08em] !text-[#171717]/80" htmlFor="password">
+              <label className="!mb-2 !text-[13px] !font-medium !normal-case !tracking-normal !text-[#171717]/80" htmlFor="password">
                 Password
               </label>
               <div className="relative">
@@ -158,55 +160,47 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={pending}
-              className="mt-1 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-primary bg-primary px-7 text-[14px] font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
+              className={`${btnPrimary} mt-1 w-full disabled:cursor-wait disabled:opacity-60`}
             >
               {pending ? "Signing in…" : "Sign in"}
             </button>
           </form>
+
+          <p className="mt-6 text-[14px] text-[#171717]/70">
+            No account yet? <TextLink href="/contact" className="text-[14px]">Ask the Tijartt team</TextLink>
+          </p>
         </div>
-        <div className="flex items-center justify-between gap-4 text-xs text-[#171717]/70">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 font-medium hover:text-primary"
-          >
-            Back to home
-          </Link>
-          <span>Secure account access</span>
-        </div>
+
+        <footer className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-[13px] text-[#171717]/70">
+          <span>© 2026 Tijartt</span>
+          <span className="flex gap-5">
+            <Link href="/privacy-policy" className="inline-flex min-h-11 items-center hover:text-[#171717]">
+              Privacy
+            </Link>
+            <Link href="/terms-and-conditions" className="inline-flex min-h-11 items-center hover:text-[#171717]">
+              Terms
+            </Link>
+          </span>
+        </footer>
       </section>
 
-      <aside className="relative hidden overflow-hidden bg-primary/10 p-12 lg:flex lg:flex-col lg:justify-center">
-        <div className="relative mx-auto w-full max-w-[580px]">
-          <p className="font-mono text-xs font-medium tracking-[-0.03em] text-primary">
-            YOUR BUSINESS / ONE CLEAR VIEW
-          </p>
-          <h2 className="mt-5 max-w-[520px] text-[clamp(42px,5vw,64px)] font-semibold leading-[1.03] tracking-[-0.037em] text-ink">
-            Pick up exactly where the day left off.
+      <aside className="hidden p-4 lg:block">
+        <Panel className="flex h-full flex-col justify-center gap-12 px-10 py-10 xl:px-16">
+          <ScrollFocusImage
+            src="/images/feature-dashboard.png"
+            alt="Three Tijartt tiles for stock, bills and sales"
+            width={1774}
+            height={887}
+            sizes="560px"
+            priority
+            className="mx-auto w-full max-w-[560px] motion-safe:animate-rise"
+          />
+          <h2 className="text-center text-[clamp(28px,2.6vw,40px)] leading-[1.1] font-semibold tracking-[-0.035em] text-white motion-safe:animate-rise motion-safe:[animation-delay:150ms]">
+            Stock. Dues. Profit.
           </h2>
-          <div className="mt-10 rounded-[32px] border border-white/80 bg-white/55 p-5 shadow-[0_30px_80px_-45px_rgba(17,17,17,.18)] backdrop-blur-[15px]">
-            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-[12px] font-semibold text-ink">Today&apos;s records</span>
-                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">LIVE</span>
-              </div>
-              {[
-                ["Stock received", "24 bags", "var(--color-success)"],
-                ["Invoice recorded", "Rs 18,500", "var(--color-primary)"],
-                ["Payment collected", "Rs 12,000", "var(--color-warning)"],
-              ].map(([label, value, color]) => (
-                <div className="mt-3 flex items-center gap-3 rounded-xl bg-[#FCFCFB] px-3 py-3" key={label}>
-                  <i className="size-1.5 rounded-full" style={{ background: color }} />
-                  <span className="text-xs text-[#171717]/80">{label}</span>
-                  <strong className="ml-auto font-mono text-xs font-medium text-ink">{value}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-          <p className="mt-7 text-[12px] text-[#171717]/70">
-            Access is limited to your authorised business records.
-          </p>
-        </div>
+        </Panel>
       </aside>
+      <CookieNotice />
     </main>
   );
 }
