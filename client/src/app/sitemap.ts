@@ -7,8 +7,9 @@ const pages: { path: string; updated: string; priority: number }[] = [
   { path: "/pricing", updated: "2026-10-29", priority: 0.8 },
   { path: "/about", updated: "2026-10-29", priority: 0.6 },
   { path: "/contact", updated: "2026-10-29", priority: 0.6 },
-  { path: "/privacy-policy", updated: "2026-10-20", priority: 0.3 },
-  { path: "/terms-and-conditions", updated: "2026-10-20", priority: 0.3 },
+  { path: "/privacy-policy", updated: "2026-10-29", priority: 0.3 },
+  { path: "/terms-and-conditions", updated: "2026-10-29", priority: 0.3 },
+  { path: "/data-deletion", updated: "2026-10-29", priority: 0.3 },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

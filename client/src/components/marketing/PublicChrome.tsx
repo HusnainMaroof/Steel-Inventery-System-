@@ -44,6 +44,7 @@ const footerColumns = [
     links: [
       { href: "/privacy-policy", label: "Privacy policy" },
       { href: "/terms-and-conditions", label: "Terms and conditions" },
+      { href: "/data-deletion", label: "Data deletion" },
     ],
   },
 ] as const;

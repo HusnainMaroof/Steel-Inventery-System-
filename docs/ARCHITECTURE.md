@@ -117,7 +117,7 @@ the ledger store.
 Canonical paths are `isKnownAppPath` in `client/src/lib/app-routes.ts`.
 Unknown paths redirect to `/404?from=…`.
 
-**Public:** `/`, `/login`, `/offline`, `/404`, `/pricing`, `/about`, `/contact`, `/privacy-policy`, `/terms-and-conditions`.
+**Public:** `/`, `/login`, `/offline`, `/404`, `/pricing`, `/about`, `/contact`, `/privacy-policy`, `/terms-and-conditions`, `/data-deletion`.
 
 **SEO:** the site URL lives in `client/src/lib/site.ts`. `app/robots.ts` and
 `app/sitemap.ts` generate `/robots.txt` and `/sitemap.xml` (the proxy matcher

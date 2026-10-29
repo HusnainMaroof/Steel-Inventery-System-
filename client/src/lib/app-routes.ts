@@ -5,6 +5,7 @@ export const MARKETING_PATHS = new Set([
   "/contact",
   "/privacy-policy",
   "/terms-and-conditions",
+  "/data-deletion",
   "/refund-policy",
 ]);
 
