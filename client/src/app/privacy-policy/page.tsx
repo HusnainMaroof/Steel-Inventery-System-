@@ -1,19 +1,13 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/marketing/PublicPages";
+import { publicPageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
+  path: "/privacy-policy",
   title: "Privacy Policy",
   description:
     "How Tijartt collects, uses and protects your business records, customer details and account information when you use the service.",
-  alternates: { canonical: "/privacy-policy" },
-  openGraph: {
-    title: "Privacy Policy | Tijartt",
-    description:
-      "How Tijartt collects, uses and protects your business records, customer details and account information when you use the service.",
-    url: "/privacy-policy",
-    images: ["/opengraph-image.png"],
-  },
-};
+});
 
 export default function Page() {
   return (

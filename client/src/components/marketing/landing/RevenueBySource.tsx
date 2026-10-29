@@ -21,7 +21,7 @@ export function RevenueBySource() {
 
   return (
     <article className="flex h-full min-h-0 flex-col rounded-[8px] border border-[#E5E5E5] bg-white p-4">
-      <h3 className="m-0 text-[16px] font-semibold text-[#111]">Revenue by Source</h3>
+      <p className="m-0 text-[16px] font-semibold text-[#111]">Revenue by Source</p>
       <div className="mt-2 grid min-h-0 flex-1 place-items-center [container-type:size]">
         <svg className="aspect-square h-[min(100cqh,100cqw)] w-auto" viewBox="0 0 180 180" aria-hidden="true">
           <g transform="rotate(-90 90 90)">

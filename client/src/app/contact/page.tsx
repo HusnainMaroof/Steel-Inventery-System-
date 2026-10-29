@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PublicPageShell } from "@/components/marketing/PublicChrome";
-import { CONTACT_EMAIL } from "@/lib/site";
+import { CONTACT_EMAIL, publicPageMetadata } from "@/lib/site";
 import {
   btnOnPanel,
   eyebrow,
@@ -11,17 +11,12 @@ import {
   RowList,
 } from "@/components/marketing/PublicKit";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
+  path: "/contact",
   title: "Contact",
-  description: "How to reach the Tijartt team about a new account, pricing, support, or your data.",
-  alternates: { canonical: "/contact" },
-  openGraph: {
-    title: "Contact | Tijartt",
-    description: "How to reach the Tijartt team about a new account, pricing, support, or your data.",
-    url: "/contact",
-    images: ["/opengraph-image.png"],
-  },
-};
+  description:
+    "Contact the Tijartt team about a new account, plan pricing, support or your data. We set up your business account and owner login for you.",
+});
 
 const include = [
   "Your business name.",

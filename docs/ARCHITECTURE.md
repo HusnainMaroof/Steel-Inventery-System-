@@ -117,13 +117,20 @@ the ledger store.
 Canonical paths are `isKnownAppPath` in `client/src/lib/app-routes.ts`.
 Unknown paths redirect to `/404?from=…`.
 
-**Public:** `/`, `/login`, `/offline`, `/404`, `/pricing`, `/privacy-policy`, `/terms-and-conditions`.
+**Public:** `/`, `/login`, `/offline`, `/404`, `/pricing`, `/about`, `/contact`, `/privacy-policy`, `/terms-and-conditions`.
 
 **SEO:** the site URL lives in `client/src/lib/site.ts`. `app/robots.ts` and
 `app/sitemap.ts` generate `/robots.txt` and `/sitemap.xml` (the proxy matcher
-skips both). The root layout sets `metadataBase`, the title template, Open
-Graph and Twitter defaults; each public page sets its own canonical. The home
-page renders Organization, WebSite and SoftwareApplication JSON-LD.
+skips both, plus every `.png` and `.txt`). robots.txt names the AI search
+crawlers (OAI-SearchBot, Claude-SearchBot, PerplexityBot and their user
+fetchers) with the same rules as `*`. Each sitemap entry carries a fixed
+`updated` date: change it when that page's content changes. The root layout
+sets `metadataBase`, the title template, Open Graph and Twitter defaults; each
+public page builds its title, description, canonical and full Open Graph tags
+with `publicPageMetadata()` from `site.ts`. The home page renders
+Organization, WebSite and SoftwareApplication JSON-LD. `public/llms.txt` is a
+plain map of the site for AI tools, and `public/<key>.txt` is the IndexNow key
+file for Bing and Yandex.
 `/login`, `/admin/*` and `/{businessSlug}/*` are `noindex, nofollow` through
 their layouts. `app/icon.png`, `app/apple-icon.png`, `app/opengraph-image.png`
 and `app/twitter-image.png` are file-convention assets.

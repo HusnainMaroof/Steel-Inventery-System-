@@ -1,0 +1,21 @@
+# Tijartt
+
+> Tijartt is inventory, billing and khata software for traders and depots, such as steel, cement, wire, paint and tiles businesses. It records purchases, stock, sales bills, customer dues, supplier payments, expenses and profit in one ledger. It runs in the web browser. Accounts are set up by the Tijartt team.
+
+## Pages
+
+- [Home](https://www.tijartt.com/): What Tijartt does, the modules, and common questions.
+- [Pricing](https://www.tijartt.com/pricing): Monthly, yearly and lifetime plans. Price on request.
+- [About](https://www.tijartt.com/about): Why Tijartt exists and how a business account is set up.
+- [Contact](https://www.tijartt.com/contact): How to reach the team for a new account, pricing or support.
+- [Privacy policy](https://www.tijartt.com/privacy-policy)
+- [Terms and conditions](https://www.tijartt.com/terms-and-conditions)
+
+## Key facts
+
+- Stock is not typed in by hand. It is the total of purchase, sale and adjustment records.
+- Every sale makes a numbered bill. Customer payments settle a chosen bill or the oldest unpaid bills first.
+- Supplier payments settle the oldest unpaid purchases first.
+- Reports: profit, stock, cash and dues for any period, with Excel and PDF export.
+- Staff get their own logins, and the owner picks which pages each one can open.
+- Contact: contact@tijartt.com

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
   title: "Sign in",
+  description: "Sign in to your Tijartt business account.",
   robots: { index: false, follow: false },
 };
 

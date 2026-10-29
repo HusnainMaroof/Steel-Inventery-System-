@@ -1,43 +1,20 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/site";
 
+/** Public pages with the date their content last changed. Update the date when you edit a page. */
+const pages: { path: string; updated: string; priority: number }[] = [
+  { path: "", updated: "2026-10-29", priority: 1 },
+  { path: "/pricing", updated: "2026-10-29", priority: 0.8 },
+  { path: "/about", updated: "2026-10-29", priority: 0.6 },
+  { path: "/contact", updated: "2026-10-29", priority: 0.6 },
+  { path: "/privacy-policy", updated: "2026-10-20", priority: 0.3 },
+  { path: "/terms-and-conditions", updated: "2026-10-20", priority: 0.3 },
+];
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    {
-      url: SITE_URL,
-      lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 1,
-    },
-    {
-      url: `${SITE_URL}/pricing`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.8,
-    },
-    {
-      url: `${SITE_URL}/about`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.6,
-    },
-    {
-      url: `${SITE_URL}/contact`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.6,
-    },
-    {
-      url: `${SITE_URL}/privacy-policy`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.3,
-    },
-    {
-      url: `${SITE_URL}/terms-and-conditions`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.3,
-    },
-  ];
+  return pages.map((page) => ({
+    url: `${SITE_URL}${page.path}`,
+    lastModified: page.updated,
+    priority: page.priority,
+  }));
 }

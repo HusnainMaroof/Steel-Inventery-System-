@@ -5,21 +5,21 @@ import { StoreProvider } from "@/lib/store";
 import { ServerStatusMonitor } from "@/components/ServerStatusMonitor";
 import Shell from "@/components/Shell";
 import { InputGuards } from "@/components/InputGuards";
-import { SITE_NAME, SITE_URL } from "@/lib/site";
+import { OG_IMAGE, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Tijartt | Stock, Sales and Dues Ledger for Traders",
+    default: SITE_TITLE,
     template: "%s | Tijartt",
   },
-  description:
-    "Track stock, purchases, sales, customer dues, supplier payments and profit in one simple ledger. Made for steel, cement, wire, paint and tiles traders.",
+  description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
     locale: "en_US",
+    images: [OG_IMAGE],
   },
   twitter: { card: "summary_large_image" },
 };

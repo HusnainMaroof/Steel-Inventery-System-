@@ -1,19 +1,13 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/marketing/PublicPages";
+import { publicPageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
+  path: "/terms-and-conditions",
   title: "Terms and Conditions",
   description:
     "The terms for using Tijartt, including account security, acceptable use, service availability and how to close your account or export records.",
-  alternates: { canonical: "/terms-and-conditions" },
-  openGraph: {
-    title: "Terms and Conditions | Tijartt",
-    description:
-      "The terms for using Tijartt, including account security, acceptable use, service availability and how to close your account or export records.",
-    url: "/terms-and-conditions",
-    images: ["/opengraph-image.png"],
-  },
-};
+});
 
 export default function Page() {
   return (

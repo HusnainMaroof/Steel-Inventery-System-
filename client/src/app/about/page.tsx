@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ScrollFocusImage } from "@/components/motion/ScrollFocusImage";
 import { PublicPageShell } from "@/components/marketing/PublicChrome";
-import { CONTACT_EMAIL } from "@/lib/site";
+import { CONTACT_EMAIL, publicPageMetadata } from "@/lib/site";
 import {
   reveal,
   Container,
@@ -14,17 +14,12 @@ import {
   Steps,
 } from "@/components/marketing/PublicKit";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
+  path: "/about",
   title: "About",
-  description: "What Tijartt is, why it exists, and how a business account is set up.",
-  alternates: { canonical: "/about" },
-  openGraph: {
-    title: "About | Tijartt",
-    description: "What Tijartt is, why it exists, and how a business account is set up.",
-    url: "/about",
-    images: ["/opengraph-image.png"],
-  },
-};
+  description:
+    "Tijartt is inventory, billing and khata software for steel, cement, wire, paint and tiles traders. See why it exists and how a business account is set up.",
+});
 
 const modules: Array<[string, string]> = [
   ["Dashboard", "The figures that matter, first."],

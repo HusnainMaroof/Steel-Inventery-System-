@@ -17,8 +17,8 @@ export function Hero() {
           <br />
           in one plain record.
         </h1>
-        <p className="mx-auto mt-5 max-w-[44ch] text-[17px] leading-[1.55] text-[#171717]/70 motion-safe:animate-rise motion-safe:[animation-delay:150ms]">
-          Stock, sales, dues and profit. For traders.
+        <p className="mx-auto mt-5 max-w-[52ch] text-[17px] leading-[1.55] text-[#171717]/70 motion-safe:animate-rise motion-safe:[animation-delay:150ms]">
+          Tijartt is inventory, billing and khata software for traders. Keep stock, sales bills, customer dues and profit in one place.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 motion-safe:animate-rise motion-safe:[animation-delay:300ms]">
           <CtaLink href="/contact">Get started</CtaLink>

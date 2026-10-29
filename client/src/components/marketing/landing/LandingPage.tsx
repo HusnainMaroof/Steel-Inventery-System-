@@ -1,6 +1,7 @@
 import { Hero } from "@/components/marketing/landing/Hero";
 import { FeatureSection } from "./FeatureSection";
 import { FeatureHighlights } from "./FeatureHighlights";
+import { FaqSection } from "./FaqSection";
 import { CtaLink, PanelCta, TextLink } from "@/components/marketing/PublicKit";
 
 export function LandingPage() {
@@ -9,6 +10,7 @@ export function LandingPage() {
       <Hero />
       <FeatureSection />
       <FeatureHighlights />
+      <FaqSection />
       <PanelCta
         title="One clear record."
         actions={

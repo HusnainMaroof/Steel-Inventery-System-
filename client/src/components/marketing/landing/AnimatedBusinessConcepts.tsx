@@ -21,13 +21,9 @@ export function AnimatedBusinessConcepts() {
     <span className="relative inline-grid overflow-hidden rounded-[0.18em] bg-mint px-[0.22em] pb-[0.06em] align-baseline text-ink">
       <span className="sr-only">have, owe and earn</span>
       {words.map((item) => (
-        <span key={item} aria-hidden="true" className="invisible [grid-area:1/1]">
-          {item}
-        </span>
+        <span key={item} aria-hidden="true" data-word={item} className="invisible [grid-area:1/1] before:content-[attr(data-word)]" />
       ))}
-      <span key={word} aria-hidden="true" className="[grid-area:1/1] text-center motion-safe:animate-headline-in">
-        {word}
-      </span>
+      <span key={word} aria-hidden="true" data-word={word} className="[grid-area:1/1] text-center motion-safe:animate-headline-in before:content-[attr(data-word)]" />
     </span>
   );
 }

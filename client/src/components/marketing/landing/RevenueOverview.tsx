@@ -1,7 +1,7 @@
 export function RevenueOverview() {
   return (
     <article className="flex h-full min-h-0 flex-col rounded-[8px] border border-[#E5E5E5] bg-white p-4">
-      <h3 className="m-0 text-[16px] font-semibold text-[#111]">Revenue Overview</h3>
+      <p className="m-0 text-[16px] font-semibold text-[#111]">Revenue Overview</p>
       <div className="relative mt-3 min-h-0 flex-1">
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 480 168" preserveAspectRatio="none" aria-hidden="true">
           <line x1="0" y1="36" x2="480" y2="36" stroke="#E5E5E5" strokeWidth="1" vectorEffect="non-scaling-stroke" />

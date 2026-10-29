@@ -57,7 +57,7 @@ export function PricingPage() {
       <main id="main-content">
         <PanelHero
           eyebrow="Pricing"
-          title="Plans"
+          title="Plans and pricing"
           intro="Price on request."
           actions={
             <>
